@@ -1,0 +1,6 @@
+[package]
+name = "onedrive-api"
+version = "0.0.1"
+authors = ["uHOOCCOOHu <hooccooh1896@gmail.com>"]
+
+[dependencies]
