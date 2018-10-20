@@ -16,6 +16,12 @@ impl<'a> From<&'a Drive> for DriveLocation<'a> {
     }
 }
 
+impl<'a> From<&'a DriveId> for DriveLocation<'a> {
+    fn from(id: &'a DriveId) -> Self {
+        DriveLocation::DriveId(&id.0)
+    }
+}
+
 pub enum ItemLocation<'a> {
     ItemId(&'a str),
     Path(&'a str),
@@ -30,6 +36,12 @@ impl<'a> From<&'a str> for ItemLocation<'a> {
 impl<'a> From<&'a DriveItem> for ItemLocation<'a> {
     fn from(item: &'a DriveItem) -> Self {
         ItemLocation::ItemId(&item.id.0)
+    }
+}
+
+impl<'a> From<&'a ItemId> for ItemLocation<'a> {
+    fn from(id: &'a ItemId) -> Self {
+        ItemLocation::ItemId(&id.0)
     }
 }
 
