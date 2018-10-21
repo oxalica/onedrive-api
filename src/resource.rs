@@ -78,19 +78,19 @@ pub struct Drive {
     pub id: DriveId,
     // created_by: IdentitySet,
     // created_date_time: Timestamp,
-    pub description: String,
+    pub description: Option<String>,
     // drive_type: DriveType,
     pub items: Option<Vec<DriveItem>>,
     // last_modified_by: IdeneitySet,
     // last_modified_date_time: Timestamp,
-    pub name: String,
+    pub name: Option<String>,
     // owner: IdentitySet,
     // quota: Quota,
-    pub root: DriveItem,
+    // root: DriveItem,
     // sharepoint_ids: SharepointIds,
     pub special: Option<DriveItem>,
     // system: SystemFacet,
-    pub web_url: Url,
+    pub web_url: Option<Url>,
 }
 
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online

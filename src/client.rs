@@ -1,6 +1,7 @@
 use super::error::*;
 use super::resource::*;
-use reqwest::{Client as RequestClient, Response};
+use reqwest::{Client as RequestClient, Request, Response};
+use url::{PathSegmentsMut, Url};
 
 #[derive(Clone, Debug)]
 pub enum Scope {
@@ -79,7 +80,7 @@ impl LoginClient {
     }
 
     fn get_auth_url(&self, response_type: &str) -> String {
-        ::url::Url::parse_with_params(
+        Url::parse_with_params(
             "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
             &[
                 ("client_id", &self.client_id as &str),
@@ -132,7 +133,7 @@ impl LoginClient {
     }
 
     /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-2-redeem-the-code-for-access-tokens
-    pub fn login_with_code(&self, code: &str, mut client_secret: Option<&str>) -> Result<Client> {
+    pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Client> {
         self.request_authorize(
             self.scope.offline(),
             &[
@@ -149,7 +150,7 @@ impl LoginClient {
     pub fn login_with_refresh_token(
         &self,
         refresh_token: &str,
-        mut client_secret: Option<&str>,
+        client_secret: Option<&str>,
     ) -> Result<Client> {
         assert!(
             self.scope.offline(),
@@ -175,6 +176,47 @@ pub struct Client {
     refresh_token: Option<String>,
 }
 
+fn extend_drive_url_parts(segs: &mut PathSegmentsMut, drive: &DriveLocation) {
+    use self::DriveLocation::*;
+    match drive {
+        CurrentDrive => segs.push("drive"),
+        UserId(id) => segs.extend(&["users", id, "drive"]),
+        GroupId(id) => segs.extend(&["groups", id, "drive"]),
+        SiteId(id) => segs.extend(&["sites", id, "drive"]),
+        DriveId(id) => segs.extend(&["drives", id, "drive"]),
+    };
+}
+
+fn extend_item_url_parts(segs: &mut PathSegmentsMut, item: &ItemLocation) {
+    unimplemented!()
+}
+
+macro_rules! api_url {
+    (@__impl $segs:expr; $(,)*) => {};
+    (@__impl $segs:expr; @drive $e:expr, $($t:tt)*) => {
+        extend_drive_url_parts($segs, $e);
+        api_url!(@__impl $segs; $($t)*);
+    };
+    (@__impl $segs:expr; @item $e:expr, $($t:tt)*) => {
+        extend_item_url_parts($segs, $e);
+        api_url!(@__impl $segs; $($t)*);
+    };
+    (@__impl $segs:expr; $e:expr, $($t:tt)*) => {
+        $segs.push($e);
+        api_url!(@__impl $segs; $($t)*)
+    };
+    ($($t:tt)*) => {
+        {
+            let mut url = Url::parse("https://graph.microsoft.com/v1.0").unwrap();
+            {
+                let mut segs = url.path_segments_mut().unwrap();
+                api_url!(@__impl &mut segs; $($t)* ,); // Trailing comma for matching
+            }
+            url
+        }
+    };
+}
+
 impl Client {
     pub fn new(token: String, refresh_token: Option<String>) -> Self {
         Client {
@@ -193,7 +235,13 @@ impl Client {
     }
 
     pub fn get_drive<'a>(&self, drive: impl Into<DriveLocation<'a>>) -> Result<Drive> {
-        unimplemented!()
+        let resp = self
+            .client
+            .get(api_url![@drive &drive.into()])
+            .bearer_auth(&self.token)
+            .send()?
+            .json()?;
+        Ok(resp)
     }
 
     /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_list_children?view=odsp-graph-online
