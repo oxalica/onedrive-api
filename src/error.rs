@@ -18,8 +18,10 @@ pub enum ErrorKind {
     /// HTTP server error (5xx). Caused by server invernal error.
     ServerError,
 
-    /// Other error from `reqwest` or serializiation.
-    /// Including network error, invalid response format, etc.
+    /// Unexpected response format causing serialization error.
+    SerializeError,
+
+    /// Other error from `reqwest` like transmission error.
     RequestError,
 }
 
@@ -43,6 +45,8 @@ impl From<ExternRequestError> for Error {
             ClientError
         } else if e.is_server_error() {
             ServerError
+        } else if e.is_serialization() {
+            SerializeError
         } else {
             RequestError
         };
