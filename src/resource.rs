@@ -2,6 +2,8 @@ pub type Url = String;
 
 pub type FileSize = u64;
 
+/// The unique identifier for a `Drive`,
+/// which can be get through `Client::get_drive`.
 #[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
 pub struct DriveId(String);
 
@@ -17,6 +19,8 @@ impl AsRef<str> for DriveId {
     }
 }
 
+/// The unique identifier for a drive,
+/// which can be get through `Client::get_drive`.
 #[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
 pub struct ItemId(String);
 
@@ -32,6 +36,11 @@ impl AsRef<str> for ItemId {
     }
 }
 
+/// An eTag for the state of an item.
+/// Used for avoid data transmission when a resource is not modified.
+///
+/// The tag from `DriveItem::c_tag` is for the content of the item,
+/// while the one from `DriveItem::e_tag` is for the entire item (metadata + content).
 #[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
 pub struct Tag(String);
 
@@ -47,6 +56,9 @@ impl AsRef<str> for Tag {
     }
 }
 
+/// The Drive resource.
+///
+/// # See also
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/drive?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +81,9 @@ pub struct Drive {
     pub web_url: Option<Url>,
 }
 
+/// The DriveItem resource.
+///
+/// # See also
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

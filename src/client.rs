@@ -3,6 +3,10 @@ use super::resource::*;
 use reqwest::{Client as RequestClient, RequestBuilder, Response, StatusCode};
 use url::{PathSegmentsMut, Url};
 
+/// Scopes determine what type of access the app is granted when the user is signed in.
+///
+/// # See also
+/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#authentication-scopes
 #[derive(Clone, Debug)]
 pub enum Scope {
     Read { shared: bool, offline: bool },
@@ -62,6 +66,10 @@ impl Scope {
     }
 }
 
+/// Specify a `Drive` resource.
+///
+/// # See also
+/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_get?view=odsp-graph-online
 #[derive(Clone, Debug)]
 pub enum DriveLocation<'a> {
     CurrentDrive,
@@ -83,6 +91,10 @@ impl<'a> From<&'a DriveId> for DriveLocation<'a> {
     }
 }
 
+/// Specify a `DriveItem` resource.
+///
+/// # See also
+/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
 #[derive(Clone, Debug)]
 pub enum ItemLocation<'a> {
     ItemId(&'a str),
@@ -107,16 +119,20 @@ impl<'a> From<&'a ItemId> for ItemLocation<'a> {
     }
 }
 
-pub struct LoginClient {
+/// The client for requests relative to authentication.
+///
+/// # See also
+/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online
+pub struct AuthClient {
     client: RequestClient,
     client_id: String,
     scope: Scope,
     redirect_uri: String,
 }
 
-impl LoginClient {
+impl AuthClient {
     pub fn new(client_id: String, scope: Scope, redirect_uri: String) -> Self {
-        LoginClient {
+        AuthClient {
             client: RequestClient::new(),
             client_id,
             scope,
@@ -137,12 +153,18 @@ impl LoginClient {
         .into_string()
     }
 
-    /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#token-flow
+    /// Get the URL for web browser for token flow authentication.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#token-flow
     pub fn get_token_auth_url(&self) -> String {
         self.get_auth_url("token")
     }
 
-    /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-1-get-an-authorization-code
+    /// Get the URL for web browser for code flow authentication.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-1-get-an-authorization-code
     pub fn get_code_auth_url(&self) -> String {
         self.get_auth_url("code")
     }
@@ -176,7 +198,10 @@ impl LoginClient {
         Ok(Client::new(resp.access_token, resp.refresh_token))
     }
 
-    /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-2-redeem-the-code-for-access-tokens
+    /// Login using a code in code flow authentication.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-2-redeem-the-code-for-access-tokens
     pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Client> {
         self.request_authorize(
             self.scope.offline(),
@@ -190,7 +215,14 @@ impl LoginClient {
         )
     }
 
-    /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-3-get-a-new-access-token-or-refresh-token
+    /// Login using a refresh token.
+    /// This requires offline access.
+    ///
+    /// # Panic
+    /// Panic if the `scope` given in `Client::new` has no `offline_access` scope.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-3-get-a-new-access-token-or-refresh-token
     pub fn login_with_refresh_token(
         &self,
         refresh_token: &str,
@@ -214,6 +246,7 @@ impl LoginClient {
     }
 }
 
+/// The client for requests accessing OneDrive resources.
 pub struct Client {
     client: RequestClient,
     token: String,
@@ -283,6 +316,10 @@ impl Client {
         self.refresh_token.as_ref().map(|s| &**s)
     }
 
+    /// Get the `Drive` resource.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_get?view=odsp-graph-online
     pub fn get_drive<'a>(&self, drive: impl Into<DriveLocation<'a>>) -> Result<Drive> {
         self.client
             .get(api_url![@drive &drive.into()])
@@ -291,7 +328,10 @@ impl Client {
             .parse()
     }
 
-    /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_list_children?view=odsp-graph-online
+    /// List children of a `DriveItem` resource.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_list_children?view=odsp-graph-online
     pub fn list_children<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -335,7 +375,10 @@ impl Client {
         }
     }
 
-    /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
+    /// Get a `DriveItem` resource.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
     pub fn get_item<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -354,7 +397,10 @@ impl Client {
 
     const SMALL_FILE_SIZE: usize = 4 << 20; // 4 MB
 
-    /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online
+    /// Upload a small file.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online
     pub fn upload_small<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
