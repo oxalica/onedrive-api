@@ -1,6 +1,6 @@
 use super::error::*;
 use super::resource::*;
-use reqwest::{Client as RequestClient, Request, Response};
+use reqwest::{Client as RequestClient, RequestBuilder, Response, StatusCode};
 use url::{PathSegmentsMut, Url};
 
 #[derive(Clone, Debug)]
@@ -188,7 +188,12 @@ fn extend_drive_url_parts(segs: &mut PathSegmentsMut, drive: &DriveLocation) {
 }
 
 fn extend_item_url_parts(segs: &mut PathSegmentsMut, item: &ItemLocation) {
-    unimplemented!()
+    use self::ItemLocation::*;
+    match item {
+        ItemId(id) => segs.extend(&["items", id]),
+        Path("/") => segs.push("root"),
+        Path(path) => segs.push(&["root:", path, ":"].join("")),
+    };
 }
 
 macro_rules! api_url {
@@ -240,6 +245,7 @@ impl Client {
             .get(api_url![@drive &drive.into()])
             .bearer_auth(&self.token)
             .send()?
+            .pretty_http_error()?
             .json()?;
         Ok(resp)
     }
@@ -249,17 +255,57 @@ impl Client {
         &self,
         drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
-        match_tag: Option<Tag>,
+        match_tag: Option<&Tag>,
     ) -> Result<Option<Vec<DriveItem>>> {
-        unimplemented!()
+        #[derive(Deserialize)]
+        struct Response {
+            value: Vec<DriveItem>,
+            #[serde(rename = "@odata.nextLink")]
+            next_link: Option<String>,
+        }
+
+        let fetch = |url: &str, match_tag: Option<&Tag>| -> Result<Option<Response>> {
+            let mut resp = self
+                .client
+                .get(url)
+                .bearer_auth(&self.token)
+                .opt_header("if-none-match", match_tag)
+                .send()?
+                .pretty_http_error()?;
+            if resp.status() == StatusCode::NOT_MODIFIED {
+                Ok(None)
+            } else {
+                Ok(Some(resp.json()?))
+            }
+        };
+
+        let url = api_url![
+            @drive &drive.into(),
+            @item &item.into(),
+            "children",
+        ];
+        match fetch(url.as_ref(), match_tag)? {
+            None => Ok(None),
+            Some(Response {
+                mut value,
+                mut next_link,
+            }) => {
+                while let Some(link) = next_link {
+                    let resp = fetch(&link, None)?.unwrap(); // No `match_Tag`
+                    value.extend(resp.value);
+                    next_link = resp.next_link;
+                }
+                Ok(Some(value))
+            }
+        }
     }
 
     /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
     pub fn get_item<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
-        item: impl Into<ItemLocation<'a>>,
-        match_tag: Option<Tag>,
+        _drive: impl Into<DriveLocation<'a>>,
+        _item: impl Into<ItemLocation<'a>>,
+        _match_tag: Option<Tag>,
     ) -> Result<Option<DriveItem>> {
         unimplemented!()
     }
@@ -267,11 +313,24 @@ impl Client {
     /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online
     pub fn upload_small<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
-        item: impl Into<ItemLocation<'a>>,
-        data: &[u8],
+        _drive: impl Into<DriveLocation<'a>>,
+        _item: impl Into<ItemLocation<'a>>,
+        _data: &[u8],
     ) -> Result<DriveItem> {
         unimplemented!()
+    }
+}
+
+trait RequestBuilderExt: Sized {
+    fn opt_header(self, key: impl AsRef<str>, value: Option<impl AsRef<str>>) -> Self;
+}
+
+impl RequestBuilderExt for RequestBuilder {
+    fn opt_header(self, key: impl AsRef<str>, value: Option<impl AsRef<str>>) -> Self {
+        match value {
+            Some(v) => self.header(key.as_ref(), v.as_ref()),
+            None => self,
+        }
     }
 }
 

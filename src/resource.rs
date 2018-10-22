@@ -2,6 +2,7 @@ pub type Url = String;
 
 pub type FileSize = u64;
 
+#[derive(Debug)]
 pub enum DriveLocation<'a> {
     CurrentDrive,
     UserId(&'a str),
@@ -22,6 +23,7 @@ impl<'a> From<&'a DriveId> for DriveLocation<'a> {
     }
 }
 
+#[derive(Debug)]
 pub enum ItemLocation<'a> {
     ItemId(&'a str),
     Path(&'a str),
@@ -54,12 +56,24 @@ impl DriveId {
     }
 }
 
+impl AsRef<str> for DriveId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 #[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
 pub struct ItemId(String);
 
 impl ItemId {
     pub fn new(id: String) -> Self {
         ItemId(id)
+    }
+}
+
+impl AsRef<str> for ItemId {
+    fn as_ref(&self) -> &str {
+        &self.0
     }
 }
 
@@ -72,8 +86,15 @@ impl Tag {
     }
 }
 
+impl AsRef<str> for Tag {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/drive?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Drive {
     pub id: DriveId,
     // created_by: IdentitySet,
@@ -95,6 +116,7 @@ pub struct Drive {
 
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DriveItem {
     // Type specified fields
 
@@ -122,12 +144,12 @@ pub struct DriveItem {
     // shared: Shared,
     // sharepoint_ids: SharepointIds,
     pub size: FileSize,
-    pub web_dav_url: Url,
+    // web_dav_url: Url,
 
     // Relationships
 
     // activities: Vec<ItemActivity>,
-    pub children: Vec<DriveItem>,
+    pub children: Option<Vec<DriveItem>>,
     // permissions: Vec<Permission>,
     // thumbnails: Vec<ThumbnailSet>,
     // versions: Vec<DriveItemVersion>,
@@ -144,5 +166,6 @@ pub struct DriveItem {
     pub web_url: Url,
 
     // Instance annotations
-    pub download_url: Url,
+    #[serde(rename = "@microsoft.graph.downloadUrl")]
+    pub download_url: Option<Url>,
 }
