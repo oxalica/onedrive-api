@@ -62,6 +62,51 @@ impl Scope {
     }
 }
 
+#[derive(Clone, Debug)]
+pub enum DriveLocation<'a> {
+    CurrentDrive,
+    UserId(&'a str),
+    GroupId(&'a str),
+    SiteId(&'a str),
+    DriveId(&'a str),
+}
+
+impl<'a> From<&'a Drive> for DriveLocation<'a> {
+    fn from(drive: &'a Drive) -> Self {
+        From::from(&drive.id)
+    }
+}
+
+impl<'a> From<&'a DriveId> for DriveLocation<'a> {
+    fn from(id: &'a DriveId) -> Self {
+        DriveLocation::DriveId(id.as_ref())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum ItemLocation<'a> {
+    ItemId(&'a str),
+    Path(&'a str),
+}
+
+impl<'a> From<&'a str> for ItemLocation<'a> {
+    fn from(path: &'a str) -> Self {
+        ItemLocation::Path(path)
+    }
+}
+
+impl<'a> From<&'a DriveItem> for ItemLocation<'a> {
+    fn from(item: &'a DriveItem) -> Self {
+        From::from(&item.id)
+    }
+}
+
+impl<'a> From<&'a ItemId> for ItemLocation<'a> {
+    fn from(id: &'a ItemId) -> Self {
+        ItemLocation::ItemId(id.as_ref())
+    }
+}
+
 pub struct LoginClient {
     client: RequestClient,
     client_id: String,
@@ -117,8 +162,7 @@ impl LoginClient {
             .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
             .form(params)
             .send()?
-            .pretty_http_error()?
-            .json()?;
+            .parse()?;
 
         if require_refresh && resp.refresh_token.is_none() {
             // Missing `refresh_token`
@@ -240,14 +284,11 @@ impl Client {
     }
 
     pub fn get_drive<'a>(&self, drive: impl Into<DriveLocation<'a>>) -> Result<Drive> {
-        let resp = self
-            .client
+        self.client
             .get(api_url![@drive &drive.into()])
             .bearer_auth(&self.token)
             .send()?
-            .pretty_http_error()?
-            .json()?;
-        Ok(resp)
+            .parse()
     }
 
     /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_list_children?view=odsp-graph-online
@@ -265,18 +306,12 @@ impl Client {
         }
 
         let fetch = |url: &str, match_tag: Option<&Tag>| -> Result<Option<Response>> {
-            let mut resp = self
-                .client
+            self.client
                 .get(url)
                 .bearer_auth(&self.token)
                 .opt_header("if-none-match", match_tag)
                 .send()?
-                .pretty_http_error()?;
-            if resp.status() == StatusCode::NOT_MODIFIED {
-                Ok(None)
-            } else {
-                Ok(Some(resp.json()?))
-            }
+                .parse_or_none()
         };
 
         let url = api_url![
@@ -303,21 +338,43 @@ impl Client {
     /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
     pub fn get_item<'a>(
         &self,
-        _drive: impl Into<DriveLocation<'a>>,
-        _item: impl Into<ItemLocation<'a>>,
-        _match_tag: Option<Tag>,
+        drive: impl Into<DriveLocation<'a>>,
+        item: impl Into<ItemLocation<'a>>,
+        match_tag: Option<&Tag>,
     ) -> Result<Option<DriveItem>> {
-        unimplemented!()
+        self.client
+            .get(api_url![
+                @drive &drive.into(),
+                @item &item.into(),
+            ]).bearer_auth(&self.token)
+            .opt_header("if-none-match", match_tag)
+            .send()?
+            .parse_or_none()
     }
+
+    const SMALL_FILE_SIZE: usize = 4 << 20; // 4 MB
 
     /// See also: https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online
     pub fn upload_small<'a>(
         &self,
-        _drive: impl Into<DriveLocation<'a>>,
-        _item: impl Into<ItemLocation<'a>>,
-        _data: &[u8],
+        drive: impl Into<DriveLocation<'a>>,
+        item: impl Into<ItemLocation<'a>>,
+        data: &[u8],
     ) -> Result<DriveItem> {
-        unimplemented!()
+        assert!(
+            data.len() <= Self::SMALL_FILE_SIZE,
+            "Uploading large file requires upload session"
+        );
+
+        self.client
+            .put(api_url![
+                @drive &drive.into(),
+                @item &item.into(),
+                "content",
+            ]).bearer_auth(&self.token)
+            .body(data.to_owned())
+            .send()?
+            .parse()
     }
 }
 
@@ -334,12 +391,17 @@ impl RequestBuilderExt for RequestBuilder {
     }
 }
 
+use serde::de::DeserializeOwned;
+
 trait ResponseExt: Sized {
-    fn pretty_http_error(self) -> Result<Self>;
+    fn check_status(self) -> Result<Self>;
+    fn parse<T: DeserializeOwned>(self) -> Result<T>;
+    /// Allow `304 Not Modified`.
+    fn parse_or_none<T: DeserializeOwned>(self) -> Result<Option<T>>;
 }
 
 impl ResponseExt for Response {
-    fn pretty_http_error(mut self) -> Result<Self> {
+    fn check_status(mut self) -> Result<Self> {
         if self.status().is_success() {
             Ok(self)
         } else {
@@ -347,6 +409,18 @@ impl ResponseExt for Response {
             let mut e = Error::from(self.error_for_status().unwrap_err());
             e.response = Some(resp);
             Err(e)
+        }
+    }
+
+    fn parse<T: DeserializeOwned>(self) -> Result<T> {
+        Ok(self.check_status()?.json()?)
+    }
+
+    fn parse_or_none<T: DeserializeOwned>(self) -> Result<Option<T>> {
+        if self.status() == StatusCode::NOT_MODIFIED {
+            Ok(None)
+        } else {
+            self.parse().map(Option::Some)
         }
     }
 }

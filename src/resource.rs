@@ -2,51 +2,6 @@ pub type Url = String;
 
 pub type FileSize = u64;
 
-#[derive(Debug)]
-pub enum DriveLocation<'a> {
-    CurrentDrive,
-    UserId(&'a str),
-    GroupId(&'a str),
-    SiteId(&'a str),
-    DriveId(&'a str),
-}
-
-impl<'a> From<&'a Drive> for DriveLocation<'a> {
-    fn from(drive: &'a Drive) -> Self {
-        DriveLocation::DriveId(&drive.id.0)
-    }
-}
-
-impl<'a> From<&'a DriveId> for DriveLocation<'a> {
-    fn from(id: &'a DriveId) -> Self {
-        DriveLocation::DriveId(&id.0)
-    }
-}
-
-#[derive(Debug)]
-pub enum ItemLocation<'a> {
-    ItemId(&'a str),
-    Path(&'a str),
-}
-
-impl<'a> From<&'a str> for ItemLocation<'a> {
-    fn from(path: &'a str) -> Self {
-        ItemLocation::Path(path)
-    }
-}
-
-impl<'a> From<&'a DriveItem> for ItemLocation<'a> {
-    fn from(item: &'a DriveItem) -> Self {
-        ItemLocation::ItemId(&item.id.0)
-    }
-}
-
-impl<'a> From<&'a ItemId> for ItemLocation<'a> {
-    fn from(id: &'a ItemId) -> Self {
-        ItemLocation::ItemId(&id.0)
-    }
-}
-
 #[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
 pub struct DriveId(String);
 
