@@ -338,7 +338,7 @@ impl Client {
         &self,
         drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
-        match_tag: Option<&Tag>,
+        none_if_match: Option<&Tag>,
     ) -> Result<Option<Vec<DriveItem>>> {
         #[derive(Deserialize)]
         struct Response {
@@ -347,11 +347,11 @@ impl Client {
             next_link: Option<String>,
         }
 
-        let fetch = |url: &str, match_tag: Option<&Tag>| -> Result<Option<Response>> {
+        let fetch = |url: &str, tag: Option<&Tag>| -> Result<Option<Response>> {
             self.client
                 .get(url)
                 .bearer_auth(&self.token)
-                .opt_header("if-none-match", match_tag)
+                .opt_header("if-none-match", tag)
                 .send()?
                 .parse_or_none(StatusCode::NOT_MODIFIED)
         };
@@ -361,7 +361,7 @@ impl Client {
             @item &item.into(),
             "children",
         ];
-        match fetch(url.as_ref(), match_tag)? {
+        match fetch(url.as_ref(), none_if_match)? {
             None => Ok(None),
             Some(Response {
                 mut value,
@@ -385,14 +385,14 @@ impl Client {
         &self,
         drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
-        match_tag: Option<&Tag>,
+        none_if_match: Option<&Tag>,
     ) -> Result<Option<DriveItem>> {
         self.client
             .get(api_url![
                 @drive &drive.into(),
                 @item &item.into(),
             ]).bearer_auth(&self.token)
-            .opt_header("if-none-match", match_tag)
+            .opt_header("if-none-match", none_if_match)
             .send()?
             .parse_or_none(StatusCode::NOT_MODIFIED)
     }
