@@ -1,6 +1,8 @@
 use super::error::*;
 use super::resource::*;
-use reqwest::{Client as RequestClient, RequestBuilder, Response, StatusCode};
+use reqwest::{header, Client as RequestClient, RequestBuilder, Response, StatusCode};
+use serde::de;
+use std::ops::Range;
 use url::{PathSegmentsMut, Url};
 
 /// Scopes determine what type of access the app is granted when the user is signed in.
@@ -351,7 +353,7 @@ impl Client {
                 .bearer_auth(&self.token)
                 .opt_header("if-none-match", match_tag)
                 .send()?
-                .parse_or_none()
+                .parse_or_none(StatusCode::NOT_MODIFIED)
         };
 
         let url = api_url![
@@ -392,7 +394,7 @@ impl Client {
             ]).bearer_auth(&self.token)
             .opt_header("if-none-match", match_tag)
             .send()?
-            .parse_or_none()
+            .parse_or_none(StatusCode::NOT_MODIFIED)
     }
 
     const SMALL_FILE_SIZE: usize = 4 << 20; // 4 MB
@@ -422,6 +424,168 @@ impl Client {
             .send()?
             .parse()
     }
+
+    pub fn new_upload_session<'a>(
+        &self,
+        drive: impl Into<DriveLocation<'a>>,
+        item: impl Into<ItemLocation<'a>>,
+        overwrite: bool,
+        none_if_match: Option<&Tag>,
+    ) -> Result<Option<UploadSession>> {
+        #[derive(Serialize)]
+        struct Item {
+            #[serde(rename = "@microsoft.graph.conflictBehavior")]
+            conflict_behavior: &'static str,
+        }
+
+        #[derive(Serialize)]
+        struct Request {
+            item: Item,
+        }
+
+        self.client
+            .post(api_url![
+                @drive &drive.into(),
+                @item &item.into(),
+                "createUploadSession",
+            ]).opt_header("if-match", none_if_match)
+            .bearer_auth(&self.token)
+            .json(&Request {
+                item: Item {
+                    conflict_behavior: if overwrite { "overwrite" } else { "fail" },
+                },
+            }).send()?
+            .parse_or_none(StatusCode::PRECONDITION_FAILED)
+    }
+
+    pub fn get_upload_session<'a>(&self, upload_url: &str) -> Result<UploadSession> {
+        #[derive(Debug, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct UploadSessionResponse {
+            upload_url: Option<String>,
+            next_expected_ranges: Vec<ExpectRange>,
+            // expiration_date_time: Timestamp,
+        }
+
+        let resp = self
+            .client
+            .get(upload_url)
+            .send()?
+            .parse::<UploadSessionResponse>()?;
+
+        Ok(UploadSession {
+            upload_url: resp.upload_url.unwrap_or_else(|| upload_url.to_owned()),
+            next_expected_ranges: resp.next_expected_ranges,
+        })
+    }
+
+    pub fn delete_upload_session<'a>(&self, sess: &UploadSession) -> Result<()> {
+        self.client
+            .delete(&sess.upload_url)
+            .send()?
+            .check_status()?;
+        Ok(())
+    }
+
+    const SESSION_UPLOAD_MAX_FILE_SIZE: usize = 60 << 20; // 60 MiB
+
+    pub fn upload_to_session(
+        &self,
+        session: &UploadSession,
+        data: &[u8],
+        remote_range: Range<usize>,
+        total_size: usize,
+    ) -> Result<Option<DriveItem>> {
+        assert!(
+            remote_range.start <= remote_range.end && remote_range.end <= total_size,
+            "Invalid range",
+        );
+        assert_eq!(
+            data.len(),
+            remote_range.end - remote_range.start,
+            "Length mismatch"
+        );
+        assert!(
+            data.len() < Self::SESSION_UPLOAD_MAX_FILE_SIZE,
+            "Data too long"
+        );
+
+        self.client
+            .put(&session.upload_url)
+            // No auth token
+            .header(header::CONTENT_RANGE, format!("bytes {}-{}/{}", remote_range.start, remote_range.end - 1, total_size))
+            .body(data.to_owned())
+            .send()?
+            .parse_or_none(StatusCode::ACCEPTED)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadSession {
+    upload_url: String,
+    next_expected_ranges: Vec<ExpectRange>,
+    // expiration_date_time: Timestamp,
+}
+
+impl UploadSession {
+    pub fn get_url(&self) -> &str {
+        &self.upload_url
+    }
+
+    pub fn get_next_expected_ranges(&self) -> &[ExpectRange] {
+        &self.next_expected_ranges
+    }
+}
+
+#[derive(Debug)]
+pub struct ExpectRange {
+    pub start: usize,
+    pub end: Option<usize>,
+}
+
+impl<'de> de::Deserialize<'de> for ExpectRange {
+    fn deserialize<D: de::Deserializer<'de>>(
+        deserializer: D,
+    ) -> ::std::result::Result<Self, D::Error> {
+        struct Visitor;
+
+        impl<'de> de::Visitor<'de> for Visitor {
+            type Value = ExpectRange;
+
+            fn expecting(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                write!(f, "Expect Range")
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> ::std::result::Result<Self::Value, E> {
+                let parse = || -> Option<ExpectRange> {
+                    let mut it = v.split('-');
+                    let l = it.next()?;
+                    let r = it.next()?;
+                    if it.next().is_some() {
+                        return None;
+                    }
+                    Some(ExpectRange {
+                        start: l.parse().ok()?,
+                        end: if r.is_empty() {
+                            None
+                        } else {
+                            Some(r.parse::<usize>().ok()?.checked_add(1)?)
+                        },
+                    })
+                };
+                match parse() {
+                    Some(v) => Ok(v),
+                    None => Err(E::invalid_value(
+                        de::Unexpected::Str(v),
+                        &"`{usize}-` or `{usize}-{usize}`",
+                    )),
+                }
+            }
+        }
+
+        deserializer.deserialize_str(Visitor)
+    }
 }
 
 trait RequestBuilderExt: Sized {
@@ -437,13 +601,11 @@ impl RequestBuilderExt for RequestBuilder {
     }
 }
 
-use serde::de::DeserializeOwned;
-
 trait ResponseExt: Sized {
     fn check_status(self) -> Result<Self>;
-    fn parse<T: DeserializeOwned>(self) -> Result<T>;
+    fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
     /// Allow `304 Not Modified`.
-    fn parse_or_none<T: DeserializeOwned>(self) -> Result<Option<T>>;
+    fn parse_or_none<T: de::DeserializeOwned>(self, status: StatusCode) -> Result<Option<T>>;
 }
 
 impl ResponseExt for Response {
@@ -458,12 +620,12 @@ impl ResponseExt for Response {
         }
     }
 
-    fn parse<T: DeserializeOwned>(self) -> Result<T> {
+    fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
         Ok(self.check_status()?.json()?)
     }
 
-    fn parse_or_none<T: DeserializeOwned>(self) -> Result<Option<T>> {
-        if self.status() == StatusCode::NOT_MODIFIED {
+    fn parse_or_none<T: de::DeserializeOwned>(self, status: StatusCode) -> Result<Option<T>> {
+        if self.status() == status {
             Ok(None)
         } else {
             self.parse().map(Option::Some)
