@@ -31,40 +31,23 @@ impl Scope {
     fn to_scope_string(&self) -> &'static str {
         use self::Scope::*;
 
+        let mut s = match self {
+            Read { .. } => "offline_access files.read.all",
+            ReadWrite { .. } => "offline_access files.readwrite.all",
+        };
+
         match self {
-            &Read {
-                shared: false,
-                offline: false,
-            } => "files.read",
-            &Read {
-                shared: false,
-                offline: true,
-            } => "files.read offline_access",
-            &Read {
-                shared: true,
-                offline: false,
-            } => "files.read.all",
-            &Read {
-                shared: true,
-                offline: true,
-            } => "files.read.all offline_access",
-            &ReadWrite {
-                shared: false,
-                offline: false,
-            } => "files.readwrite",
-            &ReadWrite {
-                shared: false,
-                offline: true,
-            } => "files.readwrite offline_access",
-            &ReadWrite {
-                shared: true,
-                offline: false,
-            } => "files.readwrite.all",
-            &ReadWrite {
-                shared: true,
-                offline: true,
-            } => "files.readwrite.all offline_access",
+            Read { offline, shared } | ReadWrite { offline, shared } => {
+                if !offline {
+                    s = &s["offline_access ".len()..];
+                }
+                if !shared {
+                    s = &s[..s.len() - ".all".len()];
+                }
+            }
         }
+
+        s
     }
 }
 
@@ -151,7 +134,8 @@ impl AuthClient {
                 ("redirect_uri", &self.redirect_uri),
                 ("response_type", response_type),
             ],
-        ).unwrap()
+        )
+        .unwrap()
         .into_string()
     }
 
@@ -391,7 +375,8 @@ impl Client {
             .get(api_url![
                 @drive &drive.into(),
                 @item &item.into(),
-            ]).bearer_auth(&self.token)
+            ])
+            .bearer_auth(&self.token)
             .opt_header("if-none-match", none_if_match)
             .send()?
             .parse_or_none(StatusCode::NOT_MODIFIED)
@@ -419,7 +404,8 @@ impl Client {
                 @drive &drive.into(),
                 @item &item.into(),
                 "content",
-            ]).bearer_auth(&self.token)
+            ])
+            .bearer_auth(&self.token)
             .body(data.to_owned())
             .send()?
             .parse()
@@ -448,17 +434,19 @@ impl Client {
                 @drive &drive.into(),
                 @item &item.into(),
                 "createUploadSession",
-            ]).opt_header("if-match", none_if_match)
+            ])
+            .opt_header("if-match", none_if_match)
             .bearer_auth(&self.token)
             .json(&Request {
                 item: Item {
                     conflict_behavior: if overwrite { "overwrite" } else { "fail" },
                 },
-            }).send()?
+            })
+            .send()?
             .parse_or_none(StatusCode::PRECONDITION_FAILED)
     }
 
-    pub fn get_upload_session<'a>(&self, upload_url: &str) -> Result<UploadSession> {
+    pub fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct UploadSessionResponse {
@@ -479,7 +467,7 @@ impl Client {
         })
     }
 
-    pub fn delete_upload_session<'a>(&self, sess: &UploadSession) -> Result<()> {
+    pub fn delete_upload_session(&self, sess: &UploadSession) -> Result<()> {
         self.client
             .delete(&sess.upload_url)
             .send()?
@@ -513,7 +501,15 @@ impl Client {
         self.client
             .put(&session.upload_url)
             // No auth token
-            .header(header::CONTENT_RANGE, format!("bytes {}-{}/{}", remote_range.start, remote_range.end - 1, total_size))
+            .header(
+                header::CONTENT_RANGE,
+                format!(
+                    "bytes {}-{}/{}",
+                    remote_range.start,
+                    remote_range.end - 1,
+                    total_size
+                ),
+            )
             .body(data.to_owned())
             .send()?
             .parse_or_none(StatusCode::ACCEPTED)
@@ -604,7 +600,7 @@ impl RequestBuilderExt for RequestBuilder {
 trait ResponseExt: Sized {
     fn check_status(self) -> Result<Self>;
     fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
-    /// Allow `304 Not Modified`.
+    /// Allow `status` as None. For code like `304 Not Modified`.
     fn parse_or_none<T: de::DeserializeOwned>(self, status: StatusCode) -> Result<Option<T>>;
 }
 
@@ -629,6 +625,79 @@ impl ResponseExt for Response {
             Ok(None)
         } else {
             self.parse().map(Option::Some)
+        }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_scope_string() {
+        use self::Scope::*;
+
+        let scopes = [
+            (
+                Read {
+                    offline: false,
+                    shared: false,
+                },
+                "files.read",
+            ),
+            (
+                Read {
+                    offline: false,
+                    shared: true,
+                },
+                "files.read.all",
+            ),
+            (
+                Read {
+                    offline: true,
+                    shared: false,
+                },
+                "offline_access files.read",
+            ),
+            (
+                Read {
+                    offline: true,
+                    shared: true,
+                },
+                "offline_access files.read.all",
+            ),
+            (
+                ReadWrite {
+                    offline: false,
+                    shared: false,
+                },
+                "files.readwrite",
+            ),
+            (
+                ReadWrite {
+                    offline: false,
+                    shared: true,
+                },
+                "files.readwrite.all",
+            ),
+            (
+                ReadWrite {
+                    offline: true,
+                    shared: false,
+                },
+                "offline_access files.readwrite",
+            ),
+            (
+                ReadWrite {
+                    offline: true,
+                    shared: true,
+                },
+                "offline_access files.readwrite.all",
+            ),
+        ];
+
+        for (scope, s) in &scopes {
+            assert_eq!(scope.to_scope_string(), *s);
         }
     }
 }
