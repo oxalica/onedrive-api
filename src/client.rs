@@ -281,6 +281,12 @@ macro_rules! api_url {
     };
 }
 
+macro_rules! api_path {
+    ($($t:tt)*) => {
+        api_url![@"path://"; $($t)*].path()
+    };
+}
+
 impl Client {
     pub fn new(token: String, refresh_token: Option<String>) -> Self {
         Client {
@@ -369,6 +375,40 @@ impl Client {
             .opt_header("if-none-match", none_if_match)
             .send()?
             .parse_or_none(StatusCode::NOT_MODIFIED)
+    }
+
+    /// Create a new folder.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_post_children?view=odsp-graph-online
+    pub fn create_folder<'a>(
+        &self,
+        drive: impl Into<DriveLocation<'a>>,
+        parent_item: impl Into<ItemLocation<'a>>,
+        name: &str,
+    ) -> Result<Option<DriveItem>> {
+        #[derive(Serialize)]
+        struct Folder {}
+
+        #[derive(Serialize)]
+        struct Request<'a> {
+            name: &'a str,
+            folder: Folder,
+            /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online#instance-attributes
+            #[serde(rename = "@microsoft.graph.conflictBehavior")]
+            conflict_behavior: &'a str,
+        }
+
+        self.client
+            .post(api_url![&drive.into(), &parent_item.into(), "children"])
+            .bearer_auth(&self.token)
+            .json(&Request {
+                name,
+                folder: Folder {},
+                conflict_behavior: "fail", // TODO
+            })
+            .send()?
+            .parse_or_none(StatusCode::CONFLICT)
     }
 
     const SMALL_FILE_SIZE: usize = 4 << 20; // 4 MB
@@ -511,6 +551,94 @@ impl Client {
             .send()?
             .parse_or_none(StatusCode::ACCEPTED)
     }
+
+    /// Copy a DriveItem.
+    ///
+    /// # Notes
+    /// It returns `Ok(())` when the copy action is accepted, but is not guarented to be finished
+    /// before it returns.
+    ///
+    /// If the target path already exists, the file copied will be renamed silently.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_copy?view=odsp-graph-online
+    pub fn copy<'a>(
+        &self,
+        source_drive: impl Into<DriveLocation<'a>>,
+        source_item: impl Into<ItemLocation<'a>>,
+        dest_drive: impl Into<DriveLocation<'a>>,
+        dest_folder: impl Into<ItemLocation<'a>>,
+        dest_name: &str,
+    ) -> Result<()> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Request<'a> {
+            parent_reference: ItemReference<'a>,
+            name: &'a str,
+        }
+
+        self.client
+            .post(api_url![&source_drive.into(), &source_item.into(), "copy"])
+            .bearer_auth(&self.token)
+            .json(&Request {
+                parent_reference: ItemReference {
+                    path: api_path![&dest_drive.into(), &dest_folder.into()],
+                },
+                name: dest_name,
+            })
+            .send()?
+            .parse_no_content() // TODO: Handle async copy
+    }
+
+    pub fn move_<'a>(
+        &self,
+        source_drive: impl Into<DriveLocation<'a>>,
+        source_item: impl Into<ItemLocation<'a>>,
+        dest_drive: impl Into<DriveLocation<'a>>,
+        dest_folder: impl Into<ItemLocation<'a>>,
+        dest_name: Option<&str>,
+        none_if_not_match: Option<&Tag>,
+    ) -> Result<Option<DriveItem>> {
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Request<'a> {
+            parent_reference: ItemReference<'a>,
+            name: Option<&'a str>,
+        }
+
+        self.client
+            .patch(api_url![&source_drive.into(), &source_item.into()])
+            .bearer_auth(&self.token)
+            .opt_header("if-match", none_if_not_match)
+            .json(&Request {
+                parent_reference: ItemReference {
+                    path: api_path![&dest_drive.into(), &dest_folder.into()],
+                },
+                name: dest_name,
+            })
+            .send()?
+            .parse_or_none(StatusCode::PRECONDITION_FAILED)
+    }
+
+    pub fn delete<'a>(
+        &self,
+        drive: impl Into<DriveLocation<'a>>,
+        item: impl Into<ItemLocation<'a>>,
+        none_if_not_match: Option<&Tag>,
+    ) -> Result<()> {
+        self.client
+            .delete(api_url![&drive.into(), &item.into()])
+            .bearer_auth(&self.token)
+            .opt_header("if-match", none_if_not_match)
+            .send()?
+            .parse_no_content()
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ItemReference<'a> {
+    path: &'a str,
 }
 
 #[derive(Debug, Deserialize)]
@@ -714,12 +842,12 @@ mod test {
 
         let mock_drive_id = DriveId::new("1234".to_owned());
         assert_eq!(
-            api_url![@"path://"; &DriveLocation::DriveId(&mock_drive_id)].path(),
+            api_path![&DriveLocation::DriveId(&mock_drive_id)],
             "/drives/1234",
         );
 
         assert_eq!(
-            api_url![@"path://"; &ItemLocation::Path("/dir/file name")].path(),
+            api_path![&ItemLocation::Path("/dir/file name")],
             "/root:%2Fdir%2Ffile%20name:",
         );
     }
