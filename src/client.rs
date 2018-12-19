@@ -108,7 +108,7 @@ impl ApiPathComponent for DriveLocation<'_> {
             UserId(id) => buf.extend(&["users", id, "drive"]),
             GroupId(id) => buf.extend(&["groups", id, "drive"]),
             SiteId(id) => buf.extend(&["sites", id, "drive"]),
-            DriveId(id) => buf.extend(&["drives", id.as_ref(), "drive"]),
+            DriveId(id) => buf.extend(&["drives", id.as_ref()]),
         };
     }
 }
@@ -396,6 +396,10 @@ impl Client {
             .parse()
     }
 
+    /// Create an upload session to upload a large file.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#create-an-upload-session
     pub fn new_upload_session<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -427,6 +431,10 @@ impl Client {
             .parse_or_none(StatusCode::PRECONDITION_FAILED)
     }
 
+    /// Get the state of an in-progress upload session to resume uploading.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#cancel-the-upload-session
     pub fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -449,16 +457,23 @@ impl Client {
         })
     }
 
+    /// Cancel an upload session.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#cancel-the-upload-session
     pub fn delete_upload_session(&self, sess: &UploadSession) -> Result<()> {
         self.client
             .delete(&sess.upload_url)
             .send()?
-            .check_status()?;
-        Ok(())
+            .parse_no_content()
     }
 
     const SESSION_UPLOAD_MAX_FILE_SIZE: usize = 60 << 20; // 60 MiB
 
+    /// Upload bytes to a upload session.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#upload-bytes-to-the-upload-session
     pub fn upload_to_session(
         &self,
         session: &UploadSession,
@@ -583,6 +598,7 @@ impl RequestBuilderExt for RequestBuilder {
 trait ResponseExt: Sized {
     fn check_status(self) -> Result<Self>;
     fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
+    fn parse_no_content(self) -> Result<()>;
     /// Allow `status` as None. For code like `304 Not Modified`.
     fn parse_or_none<T: de::DeserializeOwned>(self, status: StatusCode) -> Result<Option<T>>;
 }
@@ -601,6 +617,11 @@ impl ResponseExt for Response {
 
     fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
         Ok(self.check_status()?.json()?)
+    }
+
+    fn parse_no_content(self) -> Result<()> {
+        self.check_status()?;
+        Ok(())
     }
 
     fn parse_or_none<T: de::DeserializeOwned>(self, status: StatusCode) -> Result<Option<T>> {
@@ -694,7 +715,7 @@ mod test {
         let mock_drive_id = DriveId::new("1234".to_owned());
         assert_eq!(
             api_url![@"path://"; &DriveLocation::DriveId(&mock_drive_id)].path(),
-            "/drives/1234/drive",
+            "/drives/1234",
         );
 
         assert_eq!(
