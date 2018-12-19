@@ -130,7 +130,6 @@ impl ApiPathComponent for str {
     }
 }
 
-
 /// The client for requests relative to authentication.
 ///
 /// # See also
@@ -337,11 +336,7 @@ impl Client {
                 .parse_or_none(StatusCode::NOT_MODIFIED)
         };
 
-        let url = api_url![
-            &drive.into(),
-            &item.into(),
-            "children",
-        ];
+        let url = api_url![&drive.into(), &item.into(), "children"];
         match fetch(url.as_ref(), none_if_match)? {
             None => Ok(None),
             Some(Response {
@@ -369,10 +364,7 @@ impl Client {
         none_if_match: Option<&Tag>,
     ) -> Result<Option<DriveItem>> {
         self.client
-            .get(api_url![
-                &drive.into(),
-                &item.into(),
-            ])
+            .get(api_url![&drive.into(), &item.into()])
             .bearer_auth(&self.token)
             .opt_header("if-none-match", none_if_match)
             .send()?
@@ -397,11 +389,7 @@ impl Client {
         );
 
         self.client
-            .put(api_url![
-                &drive.into(),
-                &item.into(),
-                "content",
-            ])
+            .put(api_url![&drive.into(), &item.into(), "content"])
             .bearer_auth(&self.token)
             .body(data.to_owned())
             .send()?
@@ -427,11 +415,7 @@ impl Client {
         }
 
         self.client
-            .post(api_url![
-                &drive.into(),
-                &item.into(),
-                "createUploadSession",
-            ])
+            .post(api_url![&drive.into(), &item.into(), "createUploadSession"])
             .opt_header("if-match", none_if_match)
             .bearer_auth(&self.token)
             .json(&Request {
@@ -446,7 +430,8 @@ impl Client {
     pub fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
-        struct UploadSessionResponse { // TODO: Incompleted
+        struct UploadSessionResponse {
+            // TODO: Incompleted
             upload_url: Option<String>,
             next_expected_ranges: Vec<ExpectRange>,
             // expiration_date_time: Timestamp,
@@ -515,7 +500,8 @@ impl Client {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UploadSession { // TODO: Incompleted
+pub struct UploadSession {
+    // TODO: Incompleted
     upload_url: String,
     next_expected_ranges: Vec<ExpectRange>,
     // expiration_date_time: Timestamp,

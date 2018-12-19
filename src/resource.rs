@@ -45,7 +45,8 @@ define_string_wrapper! {
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/drive?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Drive { // TODO: Incomplete
+pub struct Drive {
+    // TODO: Incomplete
     pub id: DriveId,
     // created_by: IdentitySet,
     // created_date_time: Timestamp,
@@ -70,7 +71,8 @@ pub struct Drive { // TODO: Incomplete
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DriveItem { // TODO: Incomplete
+pub struct DriveItem {
+    // TODO: Incomplete
     // Type specified fields
 
     // audio: Audio,
