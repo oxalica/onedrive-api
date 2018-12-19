@@ -2,58 +2,41 @@ pub type Url = String;
 
 pub type FileSize = u64;
 
-/// The unique identifier for a `Drive`,
-/// which can be get through `Client::get_drive`.
-#[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
-pub struct DriveId(String);
+macro_rules! define_string_wrapper {
+    ($($(#[$meta:meta])* $vis:vis $name:ident;)*) => { $(
+        $(#[$meta])*
+        #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+        $vis struct $name(String);
 
-impl DriveId {
-    pub fn new(id: String) -> Self {
-        DriveId(id)
-    }
+        impl $name {
+            pub fn new(id: String) -> Self {
+                $name(id)
+            }
+        }
+
+        impl AsRef<str> for $name {
+            fn as_ref(&self) -> &str {
+                &self.0
+            }
+        }
+    )* };
 }
 
-impl AsRef<str> for DriveId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
+define_string_wrapper! {
+    /// The unique identifier for a `Drive`,
+    /// which can be get through `Client::get_drive`.
+    pub DriveId;
 
-/// The unique identifier for a drive,
-/// which can be get through `Client::get_drive`.
-#[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
-pub struct ItemId(String);
+    /// The unique identifier for a drive,
+    /// which can be get through `Client::get_drive`.
+    pub ItemId;
 
-impl ItemId {
-    pub fn new(id: String) -> Self {
-        ItemId(id)
-    }
-}
-
-impl AsRef<str> for ItemId {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
-}
-
-/// An eTag for the state of an item.
-/// Used for avoid data transmission when a resource is not modified.
-///
-/// The tag from `DriveItem::c_tag` is for the content of the item,
-/// while the one from `DriveItem::e_tag` is for the entire item (metadata + content).
-#[derive(Debug, Deserialize, Eq, Hash, PartialEq)]
-pub struct Tag(String);
-
-impl Tag {
-    pub fn new(tag: String) -> Self {
-        Tag(tag)
-    }
-}
-
-impl AsRef<str> for Tag {
-    fn as_ref(&self) -> &str {
-        &self.0
-    }
+    /// An eTag for the state of an item.
+    /// Used for avoid data transmission when a resource is not modified.
+    ///
+    /// The tag from `DriveItem::c_tag` is for the content of the item,
+    /// while the one from `DriveItem::e_tag` is for the entire item (metadata + content).
+    pub Tag;
 }
 
 /// The Drive resource.
@@ -62,7 +45,7 @@ impl AsRef<str> for Tag {
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/drive?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Drive {
+pub struct Drive { // TODO: Incomplete
     pub id: DriveId,
     // created_by: IdentitySet,
     // created_date_time: Timestamp,
@@ -87,7 +70,7 @@ pub struct Drive {
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct DriveItem {
+pub struct DriveItem { // TODO: Incomplete
     // Type specified fields
 
     // audio: Audio,

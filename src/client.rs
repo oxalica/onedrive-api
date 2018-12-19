@@ -61,18 +61,12 @@ pub enum DriveLocation<'a> {
     UserId(&'a str),
     GroupId(&'a str),
     SiteId(&'a str),
-    DriveId(&'a str),
-}
-
-impl<'a> From<&'a Drive> for DriveLocation<'a> {
-    fn from(drive: &'a Drive) -> Self {
-        From::from(&drive.id)
-    }
+    DriveId(&'a DriveId),
 }
 
 impl<'a> From<&'a DriveId> for DriveLocation<'a> {
     fn from(id: &'a DriveId) -> Self {
-        DriveLocation::DriveId(id.as_ref())
+        DriveLocation::DriveId(id)
     }
 }
 
@@ -82,8 +76,12 @@ impl<'a> From<&'a DriveId> for DriveLocation<'a> {
 /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
 #[derive(Clone, Debug)]
 pub enum ItemLocation<'a> {
-    ItemId(&'a str),
-    Path(&'a str),
+    ItemId(&'a ItemId),
+    /// A UNIX-like path for absolute path on a drive.
+    ///
+    /// The trailing `/` is always optional, no matter whether it is an folder,
+    /// so that the root can be also represented as an empty string.
+    Path(&'a str), // TODO: Check
 }
 
 impl<'a> From<&'a str> for ItemLocation<'a> {
@@ -92,17 +90,46 @@ impl<'a> From<&'a str> for ItemLocation<'a> {
     }
 }
 
-impl<'a> From<&'a DriveItem> for ItemLocation<'a> {
-    fn from(item: &'a DriveItem) -> Self {
-        From::from(&item.id)
+impl<'a> From<&'a ItemId> for ItemLocation<'a> {
+    fn from(id: &'a ItemId) -> Self {
+        ItemLocation::ItemId(id)
     }
 }
 
-impl<'a> From<&'a ItemId> for ItemLocation<'a> {
-    fn from(id: &'a ItemId) -> Self {
-        ItemLocation::ItemId(id.as_ref())
+trait ApiPathComponent {
+    fn extend_into(&self, buf: &mut PathSegmentsMut);
+}
+
+impl ApiPathComponent for DriveLocation<'_> {
+    fn extend_into(&self, buf: &mut PathSegmentsMut) {
+        use self::DriveLocation::*;
+        match *self {
+            CurrentDrive => buf.push("drive"),
+            UserId(id) => buf.extend(&["users", id, "drive"]),
+            GroupId(id) => buf.extend(&["groups", id, "drive"]),
+            SiteId(id) => buf.extend(&["sites", id, "drive"]),
+            DriveId(id) => buf.extend(&["drives", id.as_ref(), "drive"]),
+        };
     }
 }
+
+impl ApiPathComponent for ItemLocation<'_> {
+    fn extend_into(&self, buf: &mut PathSegmentsMut) {
+        use self::ItemLocation::*;
+        match *self {
+            ItemId(id) => buf.extend(&["items", id.as_ref()]),
+            Path("/") => buf.push("root"),
+            Path(path) => buf.push(&["root:", path, ":"].join("")),
+        };
+    }
+}
+
+impl ApiPathComponent for str {
+    fn extend_into(&self, buf: &mut PathSegmentsMut) {
+        buf.push(self);
+    }
+}
+
 
 /// The client for requests relative to authentication.
 ///
@@ -239,49 +266,19 @@ pub struct Client {
     refresh_token: Option<String>,
 }
 
-fn extend_drive_url_parts(segs: &mut PathSegmentsMut, drive: &DriveLocation) {
-    use self::DriveLocation::*;
-    match drive {
-        CurrentDrive => segs.push("drive"),
-        UserId(id) => segs.extend(&["users", id, "drive"]),
-        GroupId(id) => segs.extend(&["groups", id, "drive"]),
-        SiteId(id) => segs.extend(&["sites", id, "drive"]),
-        DriveId(id) => segs.extend(&["drives", id, "drive"]),
-    };
-}
-
-fn extend_item_url_parts(segs: &mut PathSegmentsMut, item: &ItemLocation) {
-    use self::ItemLocation::*;
-    match item {
-        ItemId(id) => segs.extend(&["items", id]),
-        Path("/") => segs.push("root"),
-        Path(path) => segs.push(&["root:", path, ":"].join("")),
-    };
-}
-
 macro_rules! api_url {
-    (@__impl $segs:expr; $(,)*) => {};
-    (@__impl $segs:expr; @drive $e:expr, $($t:tt)*) => {
-        extend_drive_url_parts($segs, $e);
-        api_url!(@__impl $segs; $($t)*);
-    };
-    (@__impl $segs:expr; @item $e:expr, $($t:tt)*) => {
-        extend_item_url_parts($segs, $e);
-        api_url!(@__impl $segs; $($t)*);
-    };
-    (@__impl $segs:expr; $e:expr, $($t:tt)*) => {
-        $segs.push($e);
-        api_url!(@__impl $segs; $($t)*)
-    };
-    ($($t:tt)*) => {
+    (@$init:expr; $($seg:expr),* $(,)*) => {
         {
-            let mut url = Url::parse("https://graph.microsoft.com/v1.0").unwrap();
+            let mut url = Url::parse($init).unwrap();
             {
-                let mut segs = url.path_segments_mut().unwrap();
-                api_url!(@__impl &mut segs; $($t)* ,); // Trailing comma for matching
-            }
+                let mut buf = url.path_segments_mut().unwrap();
+                $(ApiPathComponent::extend_into($seg, &mut buf);)*
+            } // End borrowing of `url`
             url
         }
+    };
+    ($($t:tt)*) => {
+        api_url!(@"https://graph.microsoft.com/v1.0"; $($t)*)
     };
 }
 
@@ -308,7 +305,7 @@ impl Client {
     /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_get?view=odsp-graph-online
     pub fn get_drive<'a>(&self, drive: impl Into<DriveLocation<'a>>) -> Result<Drive> {
         self.client
-            .get(api_url![@drive &drive.into()])
+            .get(api_url![&drive.into()])
             .bearer_auth(&self.token)
             .send()?
             .parse()
@@ -341,8 +338,8 @@ impl Client {
         };
 
         let url = api_url![
-            @drive &drive.into(),
-            @item &item.into(),
+            &drive.into(),
+            &item.into(),
             "children",
         ];
         match fetch(url.as_ref(), none_if_match)? {
@@ -373,8 +370,8 @@ impl Client {
     ) -> Result<Option<DriveItem>> {
         self.client
             .get(api_url![
-                @drive &drive.into(),
-                @item &item.into(),
+                &drive.into(),
+                &item.into(),
             ])
             .bearer_auth(&self.token)
             .opt_header("if-none-match", none_if_match)
@@ -401,8 +398,8 @@ impl Client {
 
         self.client
             .put(api_url![
-                @drive &drive.into(),
-                @item &item.into(),
+                &drive.into(),
+                &item.into(),
                 "content",
             ])
             .bearer_auth(&self.token)
@@ -431,8 +428,8 @@ impl Client {
 
         self.client
             .post(api_url![
-                @drive &drive.into(),
-                @item &item.into(),
+                &drive.into(),
+                &item.into(),
                 "createUploadSession",
             ])
             .opt_header("if-match", none_if_match)
@@ -449,7 +446,7 @@ impl Client {
     pub fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
-        struct UploadSessionResponse {
+        struct UploadSessionResponse { // TODO: Incompleted
             upload_url: Option<String>,
             next_expected_ranges: Vec<ExpectRange>,
             // expiration_date_time: Timestamp,
@@ -518,7 +515,7 @@ impl Client {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UploadSession {
+pub struct UploadSession { // TODO: Incompleted
     upload_url: String,
     next_expected_ranges: Vec<ExpectRange>,
     // expiration_date_time: Timestamp,
@@ -699,5 +696,24 @@ mod test {
         for (scope, s) in &scopes {
             assert_eq!(scope.to_scope_string(), *s);
         }
+    }
+
+    #[test]
+    fn test_api_url() {
+        assert_eq!(
+            api_url!["a", &DriveLocation::CurrentDrive, "b"].path(),
+            "/v1.0/a/drive/b",
+        );
+
+        let mock_drive_id = DriveId::new("1234".to_owned());
+        assert_eq!(
+            api_url![@"path://"; &DriveLocation::DriveId(&mock_drive_id)].path(),
+            "/drives/1234/drive",
+        );
+
+        assert_eq!(
+            api_url![@"path://"; &ItemLocation::Path("/dir/file name")].path(),
+            "/root:%2Fdir%2Ffile%20name:",
+        );
     }
 }
