@@ -39,10 +39,13 @@ define_string_wrapper! {
     pub Tag;
 }
 
-/// The Drive resource.
+/// Drive resource type
+///
+/// The drive resource is the top level object representing a user's OneDrive
+/// or a document library in SharePoint.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/drive?view=odsp-graph-online
+/// https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Drive {
@@ -65,10 +68,13 @@ pub struct Drive {
     pub web_url: Option<Url>,
 }
 
-/// The DriveItem resource.
+/// DriveItem resource type
+///
+/// The `DriveItem` resource represents a file, folder, or other item stored in a drive.
+/// All file system objects in OneDrive and SharePoint are returned as `DriveItem` resources.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online
+/// https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DriveItem {
@@ -125,12 +131,24 @@ pub struct DriveItem {
     pub download_url: Option<Url>,
 }
 
+/// Deleted facet
+///
+/// The `Deleted` resource indicates that the item has been deleted.
+///
+/// # See also
+/// https://docs.microsoft.com/en-us/graph/api/resources/deleted?view=graph-rest-1.0
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Deleted {
     pub state: String,
 }
 
+/// ItemReference resource type
+///
+/// The `ItemReference` resource provides information necessary to address a `DriveItem` via the API.
+///
+/// # See also
+/// https://docs.microsoft.com/en-us/graph/api/resources/itemreference?view=graph-rest-1.0
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemReference {

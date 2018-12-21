@@ -1,14 +1,15 @@
-use super::error::*;
-use super::resource::*;
+use self::Error::UnexpectedResponse;
+use crate::error::*;
+use crate::resource::*;
 use reqwest::{header, Client as RequestClient, RequestBuilder, Response, StatusCode};
 use serde::de;
 use std::ops::Range;
 use url::{PathSegmentsMut, Url};
 
-/// Scopes determine what type of access the app is granted when the user is signed in.
+/// A list of the Microsoft Graph permissions that you want the user to consent to.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#authentication-scopes
+/// https://docs.microsoft.com/en-us/graph/permissions-reference#files-permissions
 #[derive(Clone, Debug)]
 pub enum Scope {
     Read { shared: bool, offline: bool },
@@ -54,10 +55,10 @@ impl Scope {
 /// Specify a `Drive` resource.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_get?view=odsp-graph-online
+/// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
 #[derive(Clone, Debug)]
 pub enum DriveLocation<'a> {
-    CurrentDrive,
+    CurrentDrive, // FIXME: Should be `MyDrive`
     UserId(&'a str),
     GroupId(&'a str),
     SiteId(&'a str),
@@ -73,7 +74,8 @@ impl<'a> From<&'a DriveId> for DriveLocation<'a> {
 /// Specify a `DriveItem` resource.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
+/// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
+// TODO: It is always together with DriveLocation, and can be implemented with `ItemReference`.
 #[derive(Clone, Debug)]
 pub enum ItemLocation<'a> {
     ItemId(&'a ItemId),
@@ -133,7 +135,7 @@ impl ApiPathComponent for str {
 /// The client for requests relative to authentication.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online
+/// https://docs.microsoft.com/en-us/graph/auth-overview?view=graph-rest-1.0
 pub struct AuthClient {
     client: RequestClient,
     client_id: String,
@@ -167,8 +169,7 @@ impl AuthClient {
 
     /// Get the URL for web browser for token flow authentication.
     ///
-    /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#token-flow
+    /// TODO: Documentation
     pub fn get_token_auth_url(&self) -> String {
         self.get_auth_url("token")
     }
@@ -176,7 +177,7 @@ impl AuthClient {
     /// Get the URL for web browser for code flow authentication.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-1-get-an-authorization-code
+    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request
     pub fn get_code_auth_url(&self) -> String {
         self.get_auth_url("code")
     }
@@ -199,12 +200,9 @@ impl AuthClient {
             .parse()?;
 
         if require_refresh && resp.refresh_token.is_none() {
-            // Missing `refresh_token`
-            Err(Error {
-                kind: ErrorKind::RequestError,
-                source: None,
-                response: None,
-            })?;
+            return Err(UnexpectedResponse {
+                reason: "Missing field `refresh_token`",
+            });
         }
 
         Ok(Client::new(resp.access_token, resp.refresh_token))
@@ -213,7 +211,7 @@ impl AuthClient {
     /// Login using a code in code flow authentication.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-2-redeem-the-code-for-access-tokens
+    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token
     pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Client> {
         self.request_authorize(
             self.scope.offline(),
@@ -234,7 +232,7 @@ impl AuthClient {
     /// Panic if the `scope` given in `Client::new` has no `offline_access` scope.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/getting-started/graph-oauth?view=odsp-graph-online#step-3-get-a-new-access-token-or-refresh-token
+    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token
     pub fn login_with_refresh_token(
         &self,
         refresh_token: &str,
@@ -304,10 +302,12 @@ impl Client {
         self.refresh_token.as_ref().map(|s| &**s)
     }
 
-    /// Get the `Drive` resource.
+    /// Get `Drive`
+    ///
+    /// Retrieve the properties and relationships of a `Drive` resource.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/drive_get?view=odsp-graph-online
+    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
     pub fn get_drive<'a>(&self, drive: impl Into<DriveLocation<'a>>) -> Result<Drive> {
         self.client
             .get(api_url![&drive.into()])
@@ -316,10 +316,12 @@ impl Client {
             .parse()
     }
 
-    /// List children of a `DriveItem` resource.
+    /// List children of a `DriveItem`
+    ///
+    /// Return a collection of `DriveItem`s in the children relationship of a `DriveItem`.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_list_children?view=odsp-graph-online
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0
     pub fn list_children<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -359,10 +361,12 @@ impl Client {
         }
     }
 
-    /// Get a `DriveItem` resource.
+    /// Get a DriveItem resource
+    ///
+    /// Retrieve the metadata for a `DriveItem` in a `Drive` by file system path or ID.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_get?view=odsp-graph-online
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
     pub fn get_item<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -377,10 +381,12 @@ impl Client {
             .parse_or_none(StatusCode::NOT_MODIFIED)
     }
 
-    /// Create a new folder.
+    /// Create a new folder in a drive
+    ///
+    /// Create a new folder or `DriveItem` in a `Drive` with a specified parent item or path.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_post_children?view=odsp-graph-online
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0
     pub fn create_folder<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -394,7 +400,7 @@ impl Client {
         struct Request<'a> {
             name: &'a str,
             folder: Folder,
-            /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/driveitem?view=odsp-graph-online#instance-attributes
+            /// https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
             conflict_behavior: &'a str,
         }
@@ -411,12 +417,16 @@ impl Client {
             .parse_or_none(StatusCode::CONFLICT)
     }
 
-    const SMALL_FILE_SIZE: usize = 4 << 20; // 4 MB
+    const SMALL_FILE_SIZE: usize = 4_000_000; // 4 MB
 
-    /// Upload a small file.
+    /// Upload or replace the contents of a `DriveItem`
+    ///
+    /// The simple upload API allows you to provide the contents of a new file or
+    /// update the contents of an existing file in a single API call. This method
+    /// only supports files up to 4MB in size.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0
     pub fn upload_small<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -436,10 +446,14 @@ impl Client {
             .parse()
     }
 
-    /// Create an upload session to upload a large file.
+    /// Create an upload session
+    ///
+    /// Create an upload session to allow your app to upload files up to the maximum file size.
+    /// An upload session allows your app to upload ranges of the file in sequential API requests,
+    /// which allows the transfer to be resumed if a connection is dropped while the upload is in progress.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#create-an-upload-session
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session
     pub fn new_upload_session<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -471,10 +485,12 @@ impl Client {
             .parse_or_none(StatusCode::PRECONDITION_FAILED)
     }
 
-    /// Get the state of an in-progress upload session to resume uploading.
+    /// Resuming an in-progress upload
+    ///
+    /// Query the status of the upload to find out which byte ranges have been received previously.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#cancel-the-upload-session
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#resuming-an-in-progress-upload
     pub fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -497,10 +513,18 @@ impl Client {
         })
     }
 
-    /// Cancel an upload session.
+    /// Cancel the upload session
+    ///
+    /// This cleans up the temporary file holding the data previously uploaded.
+    /// This should be used in scenarios where the upload is aborted, for example,
+    /// if the user cancels the transfer.
+    ///
+    /// Temporary files and their accompanying upload session are automatically
+    /// cleaned up after the expirationDateTime has passed. Temporary files may
+    /// not be deleted immedately after the expiration time has elapsed.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#cancel-the-upload-session
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session
     pub fn delete_upload_session(&self, sess: &UploadSession) -> Result<()> {
         self.client
             .delete(&sess.upload_url)
@@ -510,10 +534,20 @@ impl Client {
 
     const SESSION_UPLOAD_MAX_FILE_SIZE: usize = 60 << 20; // 60 MiB
 
-    /// Upload bytes to a upload session.
+    /// Upload bytes to the upload session
+    ///
+    /// You can upload the entire file, or split the file into multiple byte ranges,
+    /// as long as the maximum bytes in any given request is less than 60 MiB.
+    /// The fragments of the file must be uploaded sequentially in order. Uploading
+    /// fragments out of order will result in an error.
+    ///
+    /// Note: If your app splits a file into multiple byte ranges, the size of each
+    /// byte range MUST be a multiple of 320 KiB (327,680 bytes). Using a fragment
+    /// size that does not divide evenly by 320 KiB will result in errors committing
+    /// some files.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_createuploadsession?view=odsp-graph-online#upload-bytes-to-the-upload-session
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session
     pub fn upload_to_session(
         &self,
         session: &UploadSession,
@@ -554,14 +588,11 @@ impl Client {
 
     /// Copy a DriveItem.
     ///
-    /// # Notes
-    /// It returns `Ok(())` when the copy action is accepted, but is not guarented to be finished
-    /// before it returns.
-    ///
-    /// If the target path already exists, the file copied will be renamed silently.
+    /// Asynchronously creates a copy of an driveItem (including any children),
+    /// under a new parent item or with a new name.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_copy?view=odsp-graph-online
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0
     pub fn copy<'a>(
         &self,
         source_drive: impl Into<DriveLocation<'a>>,
@@ -590,11 +621,21 @@ impl Client {
             .parse_no_content() // TODO: Handle async copy
     }
 
+    /// Move a DriveItem to a new folder
+    ///
+    /// This is a special case of the Update method. Your app can combine
+    /// moving an item to a new container and updating other properties of
+    /// the item into a single request.
+    ///
+    /// Note: Items cannot be moved between Drives using this request.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0
     pub fn move_<'a>(
         &self,
         source_drive: impl Into<DriveLocation<'a>>,
         source_item: impl Into<ItemLocation<'a>>,
-        dest_drive: impl Into<DriveLocation<'a>>,
+        dest_drive: impl Into<DriveLocation<'a>>, // TODO: Must be same as `source_drive`
         dest_folder: impl Into<ItemLocation<'a>>,
         dest_name: Option<&str>,
         none_if_not_match: Option<&Tag>,
@@ -620,6 +661,14 @@ impl Client {
             .parse_or_none(StatusCode::PRECONDITION_FAILED)
     }
 
+    /// Delete a DriveItem
+    ///
+    /// Delete a `DriveItem` by using its ID or path. Note that deleting items using
+    /// this method will move the items to the recycle bin instead of permanently
+    /// deleting the item.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0
     pub fn delete<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
@@ -634,20 +683,26 @@ impl Client {
             .parse_no_content()
     }
 
-    /// Track changes for a `Drive` from `previous_state` to now.
-    /// If `previous_state` is `None`, it returns all current states.
+    /// Track changes for a Drive
     ///
-    /// It also returns a `SyncState` standing for the current state,
-    /// which may be used next time calling it again.
+    /// This method allows your app to track changes to a drive and its children over time.
+    /// Deleted items are returned with the deleted facet. Items with this property set
+    /// should be removed from your local state.
+    ///
+    /// Note: you should only delete a folder locally if it is empty after syncing all the changes.
+    ///
+    /// # Return
+    /// The changes from `previous_state` (None for oldest empty state) to now, and
+    /// a token for current state.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_delta?view=odsp-graph-online
-    pub fn sync_changes<'a>(
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
+    pub fn track_changes<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
         folder: impl Into<ItemLocation<'a>>,
-        previous_state: Option<&SyncState>,
-    ) -> Result<(Vec<DriveItem>, SyncState)> {
+        previous_state: Option<&TrackStateToken>,
+    ) -> Result<(Vec<DriveItem>, TrackStateToken)> {
         use std::borrow::Cow;
 
         let mut url = match previous_state {
@@ -667,20 +722,24 @@ impl Client {
             match resp.next_link {
                 Some(next) => url = Cow::Owned(next),
                 None => {
-                    let delta_link = resp.delta_link.ok_or_else(|| {
-                        Error::new_serialize_error("Excepting `delta_link` in `sync_changes`")
+                    let delta_link = resp.delta_link.ok_or_else(|| UnexpectedResponse {
+                        reason: "Missing field `delta_link`",
                     })?;
-                    return Ok((changes, SyncState::new(delta_link)));
+                    return Ok((changes, TrackStateToken::new(delta_link)));
                 }
             }
         }
     }
 
-    pub fn get_latest_sync_state<'a>(
+    /// Get the state token for the current state.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
+    pub fn get_latest_track_state<'a>(
         &self,
         drive: impl Into<DriveLocation<'a>>,
         folder: impl Into<ItemLocation<'a>>,
-    ) -> Result<SyncState> {
+    ) -> Result<TrackStateToken> {
         let resp = self
             .client
             .get(api_url![&drive.into(), &folder.into(), "delta"])
@@ -688,10 +747,10 @@ impl Client {
             .bearer_auth(&self.token)
             .send()?
             .parse::<DeltaResponse>()?;
-        let delta_link = resp.delta_link.ok_or_else(|| {
-            Error::new_serialize_error("Excepting `delta_link` in `get_latest_sync_state`")
+        let delta_link = resp.delta_link.ok_or_else(|| UnexpectedResponse {
+            reason: "Missing field `delta_link`",
         })?;
-        Ok(SyncState::new(delta_link))
+        Ok(TrackStateToken::new(delta_link))
     }
 }
 
@@ -710,15 +769,16 @@ struct DeltaResponse {
     delta_link: Option<String>,
 }
 
-/// The state used for tracking changes in `Client::sync_changes`.
+/// Representing a state of a drive or folder. Used in `Client::track_changes`.
 #[derive(Debug)]
-pub struct SyncState {
+pub struct TrackStateToken {
+    // TODO: Extract and store the token only
     delta_link: String,
 }
 
-impl SyncState {
+impl TrackStateToken {
     pub fn new(delta_link: String) -> Self {
-        SyncState { delta_link }
+        TrackStateToken { delta_link }
     }
 
     pub fn get_delta_link(&self) -> &str {
@@ -818,14 +878,16 @@ trait ResponseExt: Sized {
 
 impl ResponseExt for Response {
     fn check_status(mut self) -> Result<Self> {
-        if self.status().is_success() {
-            Ok(self)
-        } else {
-            let resp = self.text()?;
-            let mut e = Error::from(self.error_for_status().unwrap_err());
-            e.response = Some(resp);
-            Err(e)
+        let status_code = self.status();
+        if status_code.is_success() {
+            return Ok(self);
         }
+
+        let body = self.text()?; // Throw network error
+        Err(Error::RequestError {
+            source: self.error_for_status().unwrap_err(), // Checked
+            response: Some(body),
+        })
     }
 
     fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
