@@ -90,7 +90,7 @@ pub struct DriveItem {
 
     // Drive item
     // c_tag: Option<Tag>,
-    // deleted: Deleted,
+    pub deleted: Option<Deleted>,
     pub description: Option<String>,
     // pub file_system_info: FileSystemInfo,
     // publication: Option<PublicationFacet>,
@@ -98,7 +98,7 @@ pub struct DriveItem {
     // search_result: Option<SearchResult>,
     // shared: Shared,
     // sharepoint_ids: SharepointIds,
-    pub size: FileSize,
+    pub size: Option<FileSize>,
     // web_dav_url: Url,
 
     // Relationships
@@ -117,10 +117,30 @@ pub struct DriveItem {
     // last_modified_by: IdentitySet,
     // last_modified_date_time: Timestamp,
     pub name: String,
-    // parent_reference: ItemReference,
+    pub parent_reference: Option<ItemReference>,
     pub web_url: Url,
 
     // Instance annotations
     #[serde(rename = "@microsoft.graph.downloadUrl")]
     pub download_url: Option<Url>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Deleted {
+    pub state: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemReference {
+    pub drive_id: DriveId,
+    // drive_type: DriveType,
+    pub id: ItemId,
+    // list_id: String,
+    pub name: Option<String>,
+    pub path: Option<String>,
+    // shared_id: String,
+    // sharepoint_ids: SharepointIds,
+    // site_id: String,
 }

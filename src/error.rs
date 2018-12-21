@@ -25,6 +25,17 @@ pub enum ErrorKind {
     RequestError,
 }
 
+impl Error {
+    pub(crate) fn new_serialize_error(reason: &'static str) -> Self {
+        let _ = reason; // TODO
+        Error {
+            kind: ErrorKind::SerializeError,
+            source: None,
+            response: None,
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self.kind)

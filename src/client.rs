@@ -633,12 +633,97 @@ impl Client {
             .send()?
             .parse_no_content()
     }
+
+    /// Track changes for a `Drive` from `previous_state` to now.
+    /// If `previous_state` is `None`, it returns all current states.
+    ///
+    /// It also returns a `SyncState` standing for the current state,
+    /// which may be used next time calling it again.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_delta?view=odsp-graph-online
+    pub fn sync_changes<'a>(
+        &self,
+        drive: impl Into<DriveLocation<'a>>,
+        folder: impl Into<ItemLocation<'a>>,
+        previous_state: Option<&SyncState>,
+    ) -> Result<(Vec<DriveItem>, SyncState)> {
+        use std::borrow::Cow;
+
+        let mut url = match previous_state {
+            Some(state) => Cow::Borrowed(state.get_delta_link()), // Including param `token`
+            None => Cow::Owned(api_url![&drive.into(), &folder.into(), "delta"].into_string()),
+        };
+
+        let mut changes = vec![];
+        loop {
+            let resp = self
+                .client
+                .get(url.as_ref())
+                .bearer_auth(&self.token)
+                .send()?
+                .parse::<DeltaResponse>()?;
+            changes.extend(resp.value);
+            match resp.next_link {
+                Some(next) => url = Cow::Owned(next),
+                None => {
+                    let delta_link = resp.delta_link.ok_or_else(|| {
+                        Error::new_serialize_error("Excepting `delta_link` in `sync_changes`")
+                    })?;
+                    return Ok((changes, SyncState::new(delta_link)));
+                }
+            }
+        }
+    }
+
+    pub fn get_latest_sync_state<'a>(
+        &self,
+        drive: impl Into<DriveLocation<'a>>,
+        folder: impl Into<ItemLocation<'a>>,
+    ) -> Result<SyncState> {
+        let resp = self
+            .client
+            .get(api_url![&drive.into(), &folder.into(), "delta"])
+            .form(&[("token", "latest")])
+            .bearer_auth(&self.token)
+            .send()?
+            .parse::<DeltaResponse>()?;
+        let delta_link = resp.delta_link.ok_or_else(|| {
+            Error::new_serialize_error("Excepting `delta_link` in `get_latest_sync_state`")
+        })?;
+        Ok(SyncState::new(delta_link))
+    }
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ItemReference<'a> {
     path: &'a str,
+}
+
+#[derive(Deserialize)]
+struct DeltaResponse {
+    value: Vec<DriveItem>,
+    #[serde(rename = "@odata.nextLink")]
+    next_link: Option<String>,
+    #[serde(rename = "@odata.deltaLink")]
+    delta_link: Option<String>,
+}
+
+/// The state used for tracking changes in `Client::sync_changes`.
+#[derive(Debug)]
+pub struct SyncState {
+    delta_link: String,
+}
+
+impl SyncState {
+    pub fn new(delta_link: String) -> Self {
+        SyncState { delta_link }
+    }
+
+    pub fn get_delta_link(&self) -> &str {
+        &self.delta_link
+    }
 }
 
 #[derive(Debug, Deserialize)]
