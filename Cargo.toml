@@ -7,10 +7,10 @@ license = "MIT"
 categories = ["api-bindings"]
 keywords = ["onedrive", "http", "client", "api"]
 description = "OneDrive REST API Client"
+edition = "2018"
 
 [dependencies]
 reqwest = "^0.9"
-serde = "^1.0"
-serde_derive = "^1.0"
+serde = { version = "^1.0", features = ["derive"] }
 serde_json = "^1.0"
 url = "^1.7"

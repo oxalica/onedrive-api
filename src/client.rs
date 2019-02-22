@@ -2,7 +2,7 @@ use self::Error::UnexpectedResponse;
 use crate::error::*;
 use crate::resource::*;
 use reqwest::{header, Client as RequestClient, RequestBuilder, Response, StatusCode};
-use serde::de;
+use serde::{de, Deserialize, Serialize};
 use std::ops::Range;
 use url::{PathSegmentsMut, Url};
 

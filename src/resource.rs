@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 pub type Url = String;
 
 pub type FileSize = u64;
