@@ -9,6 +9,11 @@ keywords = ["onedrive", "http", "client", "api"]
 description = "OneDrive REST API Client"
 edition = "2018"
 
+[dev-dependencies]
+env_logger = "^0.6"
+lazy_static = "^1.2"
+log = "^0.4"
+
 [dependencies]
 reqwest = "^0.9"
 serde = { version = "^1.0", features = ["derive"] }

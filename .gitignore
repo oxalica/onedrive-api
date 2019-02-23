@@ -3,3 +3,4 @@
 Cargo.lock
 /.vscode
 /src/main.rs
+/tests/login_setting.json

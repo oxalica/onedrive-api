@@ -1,0 +1,13 @@
+// The test will try to login in the order: code - token - refresh_token.
+//
+// If all failed, it will output a code-authorize-URL.
+// Using browsers to authorize through the URL, get the `code` and fill it here.
+//
+{
+  "client_id": "/* The client id of your app. */",
+  "client_secret": null, // Optional client secret (string). Usually it is not required.
+  "redirect_uri": "/* Redirect uri. Should match the one you set in your app configuration. */",
+  "refresh_token": null, // Optional refresh token (string).
+  "token": null, // Optional token (string). If expired, it will be updated through refresh_token (if not null).
+  "code": null // Optional onetime authorize code (string). Only used for the first time getting the token and refresh token.
+}
