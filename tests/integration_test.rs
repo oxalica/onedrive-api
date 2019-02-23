@@ -9,7 +9,7 @@
 extern crate onedrive_api; // Hint for RLS
 
 use lazy_static::lazy_static;
-use log::{error, info};
+use log::{info, warn};
 use onedrive_api::*;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -51,7 +51,12 @@ fn login_client(setting: &mut LoginSetting) -> Client {
         match auth_client.login_with_code(&code, setting.client_secret.as_ref().map(|s| &**s)) {
             Ok(client) => {
                 setting.token = Some(client.get_token().to_owned());
-                setting.refresh_token = Some(client.get_refresh_token().unwrap().to_owned());
+                setting.refresh_token = Some(
+                    client
+                        .get_refresh_token()
+                        .expect("Cannot get refresh token")
+                        .to_owned(),
+                );
                 return client;
             }
             Err(err) => panic!("Failed to login with code: {:?}", err),
@@ -63,7 +68,7 @@ fn login_client(setting: &mut LoginSetting) -> Client {
         let client = Client::new(token.to_owned(), None);
         match client.get_drive(DriveLocation::CurrentDrive) {
             Ok(_) => return client,
-            Err(err) => error!("Failed: {:?}", err),
+            Err(err) => warn!("Failed: {:?}", err),
         }
     }
 
@@ -77,7 +82,7 @@ fn login_client(setting: &mut LoginSetting) -> Client {
                 setting.refresh_token = client.get_refresh_token().map(str::to_owned);
                 return client;
             }
-            Err(err) => error!("Failed: {:?}", err),
+            Err(err) => warn!("Failed: {:?}", err),
         }
     }
 
@@ -102,10 +107,111 @@ lazy_static! {
 fn test_get_drive() {
     let client: &Client = &THE_CLIENT;
 
-    let drive = client.get_drive(DriveLocation::CurrentDrive).unwrap();
+    let drive = client
+        .get_drive(DriveLocation::CurrentDrive)
+        .expect("Cannot get drive #1");
     let drive_id = drive.id;
     assert!(!drive_id.as_ref().is_empty());
 
-    let drive_from_id = client.get_drive(DriveLocation::DriveId(&drive_id)).unwrap();
+    let drive_from_id = client
+        .get_drive(DriveLocation::DriveId(&drive_id))
+        .expect("Cannot get drive #2");
     assert_eq!(drive_from_id.id, drive_id);
+}
+
+#[test]
+fn test_file_operations() {
+    use self::error::Error;
+    use self::DriveLocation::CurrentDrive as Me;
+
+    let client: &Client = &THE_CLIENT;
+
+    let folder_item = client
+        .create_folder(Me, "/", "test_folder")
+        .expect("Failed to create folder")
+        .expect("Folder already exists");
+
+    let file1 = client
+        .upload_small(Me, ItemLocation::Path("/test_folder/1.txt"), b"hello")
+        .expect("Failed to upload small file");
+
+    let file2 = client
+        .move_(
+            Me,
+            ItemLocation::ItemId(&file1.id),
+            Me,
+            ItemLocation::ItemId(&folder_item.id),
+            Some("2.txt"),
+            None,
+        )
+        .expect("Failed to move file")
+        .expect("Moving file returns unexpected None");
+
+    assert!(client
+        .get_item(
+            Me,
+            ItemLocation::Path("/test_folder/2.txt"),
+            Some(&file2.e_tag), // The file is not changed. Should return `None`.
+        )
+        .expect("Failed to get file2")
+        .is_none());
+
+    let children = client
+        .list_children(Me, ItemLocation::ItemId(&folder_item.id), None)
+        .expect("Failed to list children")
+        .expect("Listing children returns expected None");
+
+    assert_eq!(children.len(), 1);
+    assert_eq!(children[0].id, file2.id);
+    assert_eq!(children[0].e_tag, file2.e_tag);
+
+    let upload_session = client
+        .new_upload_session(Me, ItemLocation::Path("/test_folder/3.txt"), false, None)
+        .expect("Failed to create upload session")
+        .expect("Creating upload session returns expected None");
+    assert!(
+        client
+            .upload_to_session(&upload_session, b"1234", 0..4, 6)
+            .expect("Failed to upload part 1 to session")
+            .is_none() // Not done
+    );
+    let upload_session2 = client
+        .get_upload_session(upload_session.get_url())
+        .expect("Failed to get upload session");
+    let file3 = client
+        .upload_to_session(&upload_session2, b"56", 4..6, 6)
+        .expect("Failed to upload to session #1")
+        .expect("Uploading to session #1 returns expected None");
+
+    // This contains more fields.
+    let file3 = client
+        .get_item(Me, ItemLocation::ItemId(&file3.id), None)
+        .expect("Failed to get file3")
+        .expect("Getting file3 returns unexpected None");
+
+    let file3_url = file3.download_url.expect("File3 has no download_url");
+    let file3_content = reqwest::get(&file3_url)
+        .expect("Failed to GET file3")
+        .error_for_status()
+        .expect("Error GETing file3")
+        .text()
+        .expect("Error downloading file3");
+    assert_eq!(file3_content, "123456");
+
+    client
+        .delete(Me, ItemLocation::ItemId(&folder_item.id), None)
+        .expect("Failed to delete");
+
+    let err = client
+        .get_item(Me, ItemLocation::ItemId(&folder_item.id), None)
+        .expect_err("File should be already deleted");
+
+    assert!(match &err {
+        Error::RequestError {
+            response: Some(_), ..
+        } => true,
+        _ => false,
+    });
+    assert_eq!(err.should_retry(), false);
+    assert_eq!(err.status(), Some(reqwest::StatusCode::NOT_FOUND));
 }
