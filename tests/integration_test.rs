@@ -64,7 +64,7 @@ fn get_token(setting: &mut LoginSetting) -> String {
 
     if let Some(token) = &setting.token {
         info!("Login with token...");
-        let client = DriveClient::new(token.to_owned(), DriveLocation::CurrentDrive);
+        let client = DriveClient::new(token.to_owned(), DriveLocation::me());
         match client.get_drive() {
             Ok(_) => return token.to_owned(),
             Err(err) => warn!("Failed: {:?}", err),
@@ -109,13 +109,13 @@ lazy_static! {
 #[test]
 #[ignore]
 fn test_get_drive() {
-    let client = DriveClient::new(TOKEN.clone(), DriveLocation::CurrentDrive);
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
 
     let drive = client.get_drive().expect("Cannot get drive #1");
     let drive_id = drive.id;
     assert!(!drive_id.as_ref().is_empty());
 
-    let drive_from_id = DriveClient::new(TOKEN.clone(), DriveLocation::DriveId(drive_id.clone()))
+    let drive_from_id = DriveClient::new(TOKEN.clone(), drive_id.clone())
         .get_drive()
         .expect("Cannot get drive #2");
     assert_eq!(drive_from_id.id, drive_id);
@@ -126,22 +126,24 @@ fn test_get_drive() {
 fn test_file_operations() {
     use self::error::Error;
 
-    let client = DriveClient::new(TOKEN.clone(), DriveLocation::CurrentDrive);
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
 
     let folder_item = client
-        .create_folder("/", "test_folder")
+        .create_folder(ItemLocation::root(), FileName::new("test_folder").unwrap())
         .expect("Failed to create folder")
         .expect("Folder already exists");
 
+    let file1_path = ItemLocation::from_path("/test_folder/1.txt").unwrap();
     let file1 = client
-        .upload_small(ItemLocation::Path("/test_folder/1.txt"), b"hello")
+        .upload_small(file1_path, b"hello")
         .expect("Failed to upload small file");
 
+    let file2_path = ItemLocation::from_path("/test_folder/2.txt").unwrap();
     let file2 = client
         .move_(
-            ItemLocation::ItemId(&file1.id),
-            ItemLocation::ItemId(&folder_item.id),
-            Some("2.txt"),
+            &file1.id,
+            &folder_item.id,
+            Some(FileName::new("2.txt").unwrap()),
             None,
         )
         .expect("Failed to move file")
@@ -149,14 +151,14 @@ fn test_file_operations() {
 
     assert!(client
         .get_item(
-            ItemLocation::Path("/test_folder/2.txt"),
+            file2_path,
             Some(&file2.e_tag), // The file is not changed. Should return `None`.
         )
         .expect("Failed to get file2")
         .is_none());
 
     let children = client
-        .list_children(ItemLocation::ItemId(&folder_item.id), None)
+        .list_children(&folder_item.id, None)
         .expect("Failed to list children")
         .expect("Listing children returns expected None");
 
@@ -164,8 +166,9 @@ fn test_file_operations() {
     assert_eq!(children[0].id, file2.id);
     assert_eq!(children[0].e_tag, file2.e_tag);
 
+    let file3_path = ItemLocation::from_path("/test_folder/3.txt").unwrap();
     let upload_session = client
-        .new_upload_session(ItemLocation::Path("/test_folder/3.txt"), false, None)
+        .new_upload_session(file3_path, false, None)
         .expect("Failed to create upload session")
         .expect("Creating upload session returns expected None");
     assert!(
@@ -184,7 +187,7 @@ fn test_file_operations() {
 
     // This contains more fields.
     let file3 = client
-        .get_item(ItemLocation::ItemId(&file3.id), None)
+        .get_item(&file3.id, None)
         .expect("Failed to get file3")
         .expect("Getting file3 returns unexpected None");
 
@@ -198,11 +201,11 @@ fn test_file_operations() {
     assert_eq!(file3_content, "123456");
 
     client
-        .delete(ItemLocation::ItemId(&folder_item.id), None)
+        .delete(&folder_item.id, None)
         .expect("Failed to delete");
 
     let err = client
-        .get_item(ItemLocation::ItemId(&folder_item.id), None)
+        .get_item(&folder_item.id, None)
         .expect_err("File should be already deleted");
 
     assert!(match &err {

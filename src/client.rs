@@ -57,37 +57,165 @@ impl Scope {
 /// # See also
 /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
 #[derive(Clone, Debug)]
-pub enum DriveLocation {
-    CurrentDrive,
-    UserId(String),
-    GroupId(String),
-    SiteId(String),
-    DriveId(DriveId),
+pub struct DriveLocation {
+    inner: DriveLocationEnum,
 }
 
-/// Specify a `DriveItem` resource.
+#[derive(Clone, Debug)]
+enum DriveLocationEnum {
+    Me,
+    User(String),
+    Group(String),
+    Site(String),
+    Id(DriveId),
+}
+
+impl DriveLocation {
+    /// Get current user's OneDrive
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-current-users-onedrive
+    pub fn me() -> Self {
+        Self {
+            inner: DriveLocationEnum::Me,
+        }
+    }
+
+    /// Get a user's OneDrive
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-users-onedrive
+    pub fn from_user(id_or_principal_name: String) -> Self {
+        Self {
+            inner: DriveLocationEnum::User(id_or_principal_name),
+        }
+    }
+
+    /// Get the document library associated with a group
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-associated-with-a-group
+    pub fn from_group(group_id: String) -> Self {
+        Self {
+            inner: DriveLocationEnum::Group(group_id),
+        }
+    }
+
+    /// Get the document library for a site
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-for-a-site
+    pub fn from_site(site_id: String) -> Self {
+        Self {
+            inner: DriveLocationEnum::Site(site_id),
+        }
+    }
+
+    /// Get a drive by ID
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-drive-by-id
+    pub fn from_id(drive_id: DriveId) -> Self {
+        Self {
+            inner: DriveLocationEnum::Id(drive_id),
+        }
+    }
+}
+
+impl From<DriveId> for DriveLocation {
+    fn from(id: DriveId) -> Self {
+        Self::from_id(id)
+    }
+}
+
+/// Reference to a `DriveItem` in a drive.
+/// It does not contains the drive information.
 ///
 /// # See also
 /// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
-#[derive(Clone, Debug)]
-pub enum ItemLocation<'a> {
-    ItemId(&'a ItemId),
-    /// A UNIX-like path for absolute path on a drive.
-    ///
-    /// The trailing `/` is always optional, no matter whether it is an folder,
-    /// so that the root can be also represented as an empty string.
-    Path(&'a str), // TODO: Check
+#[derive(Clone, Copy, Debug)]
+pub struct ItemLocation<'a> {
+    inner: ItemLocationEnum<'a>,
 }
 
-impl<'a> From<&'a str> for ItemLocation<'a> {
-    fn from(path: &'a str) -> Self {
-        ItemLocation::Path(path)
+#[derive(Clone, Copy, Debug)]
+pub enum ItemLocationEnum<'a> {
+    Path(&'a str),
+    Id(&'a str),
+}
+
+impl<'a> ItemLocation<'a> {
+    /// A UNIX-like `/`-started absolute path to a file or directory in the drive,
+    /// and the trailing `/` is optional.
+    ///
+    /// # Note
+    /// If `path` contains invalid characters, it returns None.
+    ///
+    /// Special name on Windows like `CON` or `NUL` is tested to be permitted in API,
+    /// but may still cause errors on Windows or OneDrive Online.
+    /// These names will pass the check, but STRONGLY NOT recommended.
+    ///
+    /// # See also
+    /// https://support.office.com/en-us/article/Invalid-file-names-and-file-types-in-OneDrive-OneDrive-for-Business-and-SharePoint-64883a5d-228e-48f5-b3d2-eb39e07630fa#invalidcharacters
+    pub fn from_path(path: &'a str) -> Option<Self> {
+        if path == "/" {
+            Some(Self::root())
+        } else if path.starts_with('/')
+            && path[1..]
+                .split_terminator('/')
+                .all(|comp| !comp.is_empty() && FileName::new(comp).is_some())
+        {
+            Some(Self {
+                inner: ItemLocationEnum::Path(path),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Item id from other API.
+    pub fn from_id(item_id: &'a ItemId) -> Self {
+        Self {
+            inner: ItemLocationEnum::Id(item_id.as_ref()),
+        }
+    }
+
+    /// The root directory item.
+    pub fn root() -> Self {
+        Self {
+            inner: ItemLocationEnum::Path("/"),
+        }
     }
 }
 
 impl<'a> From<&'a ItemId> for ItemLocation<'a> {
     fn from(id: &'a ItemId) -> Self {
-        ItemLocation::ItemId(id)
+        Self::from_id(id)
+    }
+}
+
+#[derive(Debug)]
+pub struct FileName(str);
+
+impl FileName {
+    /// Check and wrap the name for a file or a directory in OneDrive.
+    ///
+    /// Returns None if contains invalid characters.
+    ///
+    /// # See also
+    /// [ItemLocation::from_path](ItemLocation::from_path)
+    pub fn new(name: &str) -> Option<&Self> {
+        const INVALID_CHARS: &str = r#""*:<>?/\|"#;
+
+        if !name.is_empty() && !name.contains(|c| INVALID_CHARS.contains(c)) {
+            Some(unsafe { &*(name as *const str as *const Self) })
+        } else {
+            None
+        }
+    }
+
+    pub fn as_str(&self) -> &str {
+        unsafe { &*(self as *const Self as *const str) }
     }
 }
 
@@ -97,24 +225,24 @@ trait ApiPathComponent {
 
 impl ApiPathComponent for DriveLocation {
     fn extend_into(&self, buf: &mut PathSegmentsMut) {
-        use self::DriveLocation::*;
-        match self {
-            CurrentDrive => buf.push("drive"),
-            UserId(id) => buf.extend(&["users", id, "drive"]),
-            GroupId(id) => buf.extend(&["groups", id, "drive"]),
-            SiteId(id) => buf.extend(&["sites", id, "drive"]),
-            DriveId(id) => buf.extend(&["drives", id.as_ref()]),
+        use self::DriveLocationEnum::*;
+        match &self.inner {
+            Me => buf.push("drive"),
+            User(id) => buf.extend(&["users", id, "drive"]),
+            Group(id) => buf.extend(&["groups", id, "drive"]),
+            Site(id) => buf.extend(&["sites", id, "drive"]),
+            Id(id) => buf.extend(&["drives", id.as_ref()]),
         };
     }
 }
 
 impl ApiPathComponent for ItemLocation<'_> {
     fn extend_into(&self, buf: &mut PathSegmentsMut) {
-        use self::ItemLocation::*;
-        match *self {
-            ItemId(id) => buf.extend(&["items", id.as_ref()]),
+        use self::ItemLocationEnum::*;
+        match &self.inner {
             Path("/") => buf.push("root"),
             Path(path) => buf.push(&["root:", path, ":"].join("")),
+            Id(id) => buf.extend(&["items", id]),
         };
     }
 }
@@ -387,7 +515,7 @@ impl DriveClient {
     pub fn create_folder<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
-        name: &str,
+        name: &FileName,
     ) -> Result<Option<DriveItem>> {
         #[derive(Serialize)]
         struct Folder {}
@@ -405,7 +533,7 @@ impl DriveClient {
             .post(api_url![&self.drive, &parent_item.into(), "children"])
             .bearer_auth(&self.token)
             .json(&Request {
-                name,
+                name: name.as_str(),
                 folder: Folder {},
                 conflict_behavior: "fail", // TODO
             })
@@ -445,9 +573,11 @@ impl DriveClient {
 
     /// Create an upload session
     ///
-    /// Create an upload session to allow your app to upload files up to the maximum file size.
-    /// An upload session allows your app to upload ranges of the file in sequential API requests,
-    /// which allows the transfer to be resumed if a connection is dropped while the upload is in progress.
+    /// Create an upload session to allow your app to upload files up to
+    /// the maximum file size. An upload session allows your app to
+    /// upload ranges of the file in sequential API requests, which allows
+    /// the transfer to be resumed if a connection is dropped
+    /// while the upload is in progress.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session
@@ -483,7 +613,8 @@ impl DriveClient {
 
     /// Resuming an in-progress upload
     ///
-    /// Query the status of the upload to find out which byte ranges have been received previously.
+    /// Query the status of the upload to find out which byte ranges
+    /// have been received previously.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#resuming-an-in-progress-upload
@@ -595,11 +726,11 @@ impl DriveClient {
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0
-    pub fn copy<'a>(
+    pub fn copy<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
-        dest_folder: impl Into<ItemLocation<'a>>,
-        dest_name: &str,
+        dest_folder: impl Into<ItemLocation<'b>>,
+        dest_name: &FileName,
     ) -> Result<()> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -615,7 +746,7 @@ impl DriveClient {
                 parent_reference: ItemReference {
                     path: api_path![&self.drive, &dest_folder.into()],
                 },
-                name: dest_name,
+                name: dest_name.as_str(),
             })
             .send()?
             .parse_no_content() // TODO: Handle async copy
@@ -631,11 +762,11 @@ impl DriveClient {
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0
-    pub fn move_<'a>(
+    pub fn move_<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
-        dest_directory: impl Into<ItemLocation<'a>>,
-        dest_name: Option<&str>,
+        dest_directory: impl Into<ItemLocation<'b>>,
+        dest_name: Option<&FileName>,
         if_match: Option<&Tag>,
     ) -> Result<Option<DriveItem>> {
         #[derive(Serialize)]
@@ -653,7 +784,7 @@ impl DriveClient {
                 parent_reference: ItemReference {
                     path: api_path![&self.drive, &dest_directory.into()],
                 },
-                name: dest_name,
+                name: dest_name.map(FileName::as_str),
             })
             .send()?
             .parse_or_none(StatusCode::PRECONDITION_FAILED)
@@ -686,7 +817,8 @@ impl DriveClient {
     /// Deleted items are returned with the deleted facet. Items with this property set
     /// should be removed from your local state.
     ///
-    /// Note: you should only delete a folder locally if it is empty after syncing all the changes.
+    /// Note: you should only delete a folder locally if it is empty after
+    /// syncing all the changes.
     ///
     /// # Return
     /// The changes from `previous_state` (None for oldest empty state) to now, and
@@ -978,19 +1110,76 @@ mod test {
     #[test]
     fn test_api_url() {
         assert_eq!(
-            api_url!["a", &DriveLocation::CurrentDrive, "b"].path(),
+            api_url!["a", &DriveLocation::me(), "b"].path(),
             "/v1.0/a/drive/b",
         );
 
         let mock_drive_id = DriveId::new("1234".to_owned());
         assert_eq!(
-            api_path![&DriveLocation::DriveId(mock_drive_id)],
+            api_path![&DriveLocation::from_id(mock_drive_id)],
             "/drives/1234",
         );
 
         assert_eq!(
-            api_path![&ItemLocation::Path("/dir/file name")],
+            api_path![&ItemLocation::from_path("/dir/file name").unwrap()],
             "/root:%2Fdir%2Ffile%20name:",
         );
+    }
+
+    #[test]
+    fn test_path_name_check() {
+        let invalid_names = ["", ".*?", "a|b", "a<b>b", ":run", "/", "\\"];
+        let valid_names = [
+            "QAQ",
+            "0",
+            ".",
+            "a-a：", // Unicode colon "\u{ff1a}"
+            "魔理沙",
+        ];
+
+        let check_name = |s: &str| FileName::new(s).is_some();
+        let check_path = |s: &str| ItemLocation::from_path(s).is_some();
+
+        for s in &valid_names {
+            assert!(check_name(s), "{}", s);
+            let path = format!("/{}", s);
+            assert!(check_path(&path), "{}", path);
+
+            for s2 in &valid_names {
+                let mut path = format!("/{}/{}", s, s2);
+                assert!(check_path(&path), "{}", path);
+                path.push('/'); // Trailing
+                assert!(check_path(&path), "{}", path);
+            }
+        }
+
+        for s in &invalid_names {
+            assert!(!check_name(s), "{}", s);
+
+            // `/` and `/xx/` is valid and is tested below.
+            if s.is_empty() {
+                continue;
+            }
+
+            let path = format!("/{}", s);
+            assert!(!check_path(&path), "{}", path);
+
+            for s2 in &valid_names {
+                let path = format!("/{}/{}", s2, s);
+                assert!(!check_path(&path), "{}", path);
+            }
+        }
+
+        assert!(check_path("/"));
+        assert!(check_path("/a"));
+        assert!(check_path("/a/"));
+        assert!(check_path("/a/b"));
+        assert!(check_path("/a/b/"));
+
+        assert!(!check_path(""));
+        assert!(!check_path("/a/b//"));
+        assert!(!check_path("a"));
+        assert!(!check_path("a/"));
+        assert!(!check_path("//"));
     }
 }
