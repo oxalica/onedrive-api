@@ -36,7 +36,7 @@ fn open_setting_file() -> fs::File {
 }
 
 // NOTE: This supports code auth only.
-fn login_client(setting: &mut LoginSetting) -> Client {
+fn get_token(setting: &mut LoginSetting) -> String {
     let auth_client = AuthClient::new(
         setting.client_id.clone(),
         Scope::ReadWrite {
@@ -49,15 +49,14 @@ fn login_client(setting: &mut LoginSetting) -> Client {
     if let Some(code) = setting.code.take() {
         info!("Login with code...");
         match auth_client.login_with_code(&code, setting.client_secret.as_ref().map(|s| &**s)) {
-            Ok(client) => {
-                setting.token = Some(client.get_token().to_owned());
-                setting.refresh_token = Some(
-                    client
-                        .get_refresh_token()
-                        .expect("Cannot get refresh token")
-                        .to_owned(),
-                );
-                return client;
+            Ok(Token {
+                token,
+                refresh_token,
+                ..
+            }) => {
+                setting.token = Some(token.clone());
+                setting.refresh_token = Some(refresh_token.expect("Cannot get refresh token"));
+                return token;
             }
             Err(err) => panic!("Failed to login with code: {:?}", err),
         }
@@ -65,9 +64,9 @@ fn login_client(setting: &mut LoginSetting) -> Client {
 
     if let Some(token) = &setting.token {
         info!("Login with token...");
-        let client = Client::new(token.to_owned(), None);
-        match client.get_drive(DriveLocation::CurrentDrive) {
-            Ok(_) => return client,
+        let client = DriveClient::new(token.to_owned(), DriveLocation::CurrentDrive);
+        match client.get_drive() {
+            Ok(_) => return token.to_owned(),
             Err(err) => warn!("Failed: {:?}", err),
         }
     }
@@ -77,10 +76,14 @@ fn login_client(setting: &mut LoginSetting) -> Client {
         match auth_client
             .login_with_refresh_token(&refresh_token, setting.client_secret.as_ref().map(|s| &**s))
         {
-            Ok(client) => {
-                setting.token = Some(client.get_token().to_owned());
-                setting.refresh_token = client.get_refresh_token().map(str::to_owned);
-                return client;
+            Ok(Token {
+                token,
+                refresh_token,
+                ..
+            }) => {
+                setting.token = Some(token.clone());
+                setting.refresh_token = refresh_token;
+                return token;
             }
             Err(err) => warn!("Failed: {:?}", err),
         }
@@ -90,13 +93,13 @@ fn login_client(setting: &mut LoginSetting) -> Client {
 }
 
 lazy_static! {
-    static ref THE_CLIENT: Client = {
+    static ref TOKEN: String = {
         env_logger::init();
 
         let mut f = open_setting_file();
         let mut setting: LoginSetting =
             serde_json::from_reader(&f).expect("Invalid JSON of login setting");
-        let client = login_client(&mut setting);
+        let client = get_token(&mut setting);
         f.seek(SeekFrom::Start(0)).expect("Failed to seek");
         serde_json::to_writer_pretty(&mut f, &setting).expect("Failed to updating login setting");
         client
@@ -104,42 +107,39 @@ lazy_static! {
 }
 
 #[test]
+#[ignore]
 fn test_get_drive() {
-    let client: &Client = &THE_CLIENT;
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::CurrentDrive);
 
-    let drive = client
-        .get_drive(DriveLocation::CurrentDrive)
-        .expect("Cannot get drive #1");
+    let drive = client.get_drive().expect("Cannot get drive #1");
     let drive_id = drive.id;
     assert!(!drive_id.as_ref().is_empty());
 
-    let drive_from_id = client
-        .get_drive(DriveLocation::DriveId(&drive_id))
+    let drive_from_id = DriveClient::new(TOKEN.clone(), DriveLocation::DriveId(drive_id.clone()))
+        .get_drive()
         .expect("Cannot get drive #2");
     assert_eq!(drive_from_id.id, drive_id);
 }
 
 #[test]
+#[ignore]
 fn test_file_operations() {
     use self::error::Error;
-    use self::DriveLocation::CurrentDrive as Me;
 
-    let client: &Client = &THE_CLIENT;
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::CurrentDrive);
 
     let folder_item = client
-        .create_folder(Me, "/", "test_folder")
+        .create_folder("/", "test_folder")
         .expect("Failed to create folder")
         .expect("Folder already exists");
 
     let file1 = client
-        .upload_small(Me, ItemLocation::Path("/test_folder/1.txt"), b"hello")
+        .upload_small(ItemLocation::Path("/test_folder/1.txt"), b"hello")
         .expect("Failed to upload small file");
 
     let file2 = client
         .move_(
-            Me,
             ItemLocation::ItemId(&file1.id),
-            Me,
             ItemLocation::ItemId(&folder_item.id),
             Some("2.txt"),
             None,
@@ -149,7 +149,6 @@ fn test_file_operations() {
 
     assert!(client
         .get_item(
-            Me,
             ItemLocation::Path("/test_folder/2.txt"),
             Some(&file2.e_tag), // The file is not changed. Should return `None`.
         )
@@ -157,7 +156,7 @@ fn test_file_operations() {
         .is_none());
 
     let children = client
-        .list_children(Me, ItemLocation::ItemId(&folder_item.id), None)
+        .list_children(ItemLocation::ItemId(&folder_item.id), None)
         .expect("Failed to list children")
         .expect("Listing children returns expected None");
 
@@ -166,7 +165,7 @@ fn test_file_operations() {
     assert_eq!(children[0].e_tag, file2.e_tag);
 
     let upload_session = client
-        .new_upload_session(Me, ItemLocation::Path("/test_folder/3.txt"), false, None)
+        .new_upload_session(ItemLocation::Path("/test_folder/3.txt"), false, None)
         .expect("Failed to create upload session")
         .expect("Creating upload session returns expected None");
     assert!(
@@ -185,7 +184,7 @@ fn test_file_operations() {
 
     // This contains more fields.
     let file3 = client
-        .get_item(Me, ItemLocation::ItemId(&file3.id), None)
+        .get_item(ItemLocation::ItemId(&file3.id), None)
         .expect("Failed to get file3")
         .expect("Getting file3 returns unexpected None");
 
@@ -199,11 +198,11 @@ fn test_file_operations() {
     assert_eq!(file3_content, "123456");
 
     client
-        .delete(Me, ItemLocation::ItemId(&folder_item.id), None)
+        .delete(ItemLocation::ItemId(&folder_item.id), None)
         .expect("Failed to delete");
 
     let err = client
-        .get_item(Me, ItemLocation::ItemId(&folder_item.id), None)
+        .get_item(ItemLocation::ItemId(&folder_item.id), None)
         .expect_err("File should be already deleted");
 
     assert!(match &err {

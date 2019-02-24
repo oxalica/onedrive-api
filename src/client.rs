@@ -57,25 +57,18 @@ impl Scope {
 /// # See also
 /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
 #[derive(Clone, Debug)]
-pub enum DriveLocation<'a> {
-    CurrentDrive, // FIXME: Should be `MyDrive`
-    UserId(&'a str),
-    GroupId(&'a str),
-    SiteId(&'a str),
-    DriveId(&'a DriveId),
-}
-
-impl<'a> From<&'a DriveId> for DriveLocation<'a> {
-    fn from(id: &'a DriveId) -> Self {
-        DriveLocation::DriveId(id)
-    }
+pub enum DriveLocation {
+    CurrentDrive,
+    UserId(String),
+    GroupId(String),
+    SiteId(String),
+    DriveId(DriveId),
 }
 
 /// Specify a `DriveItem` resource.
 ///
 /// # See also
 /// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
-// TODO: It is always together with DriveLocation, and can be implemented with `ItemReference`.
 #[derive(Clone, Debug)]
 pub enum ItemLocation<'a> {
     ItemId(&'a ItemId),
@@ -102,10 +95,10 @@ trait ApiPathComponent {
     fn extend_into(&self, buf: &mut PathSegmentsMut);
 }
 
-impl ApiPathComponent for DriveLocation<'_> {
+impl ApiPathComponent for DriveLocation {
     fn extend_into(&self, buf: &mut PathSegmentsMut) {
         use self::DriveLocation::*;
-        match *self {
+        match self {
             CurrentDrive => buf.push("drive"),
             UserId(id) => buf.extend(&["users", id, "drive"]),
             GroupId(id) => buf.extend(&["groups", id, "drive"]),
@@ -144,6 +137,7 @@ pub struct AuthClient {
 }
 
 impl AuthClient {
+    /// Create a client for authorization.
     pub fn new(client_id: String, scope: Scope, redirect_uri: String) -> Self {
         AuthClient {
             client: RequestClient::new(),
@@ -182,7 +176,7 @@ impl AuthClient {
         self.get_auth_url("code")
     }
 
-    fn request_authorize(&self, require_refresh: bool, params: &[(&str, &str)]) -> Result<Client> {
+    fn request_authorize(&self, require_refresh: bool, params: &[(&str, &str)]) -> Result<Token> {
         #[derive(Deserialize)]
         struct Response {
             // token_type: String,
@@ -205,14 +199,18 @@ impl AuthClient {
             });
         }
 
-        Ok(Client::new(resp.access_token, resp.refresh_token))
+        Ok(Token {
+            token: resp.access_token,
+            refresh_token: resp.refresh_token,
+            _private: (),
+        })
     }
 
     /// Login using a code in code flow authentication.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token
-    pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Client> {
+    pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
         self.request_authorize(
             self.scope.offline(),
             &[
@@ -226,7 +224,8 @@ impl AuthClient {
     }
 
     /// Login using a refresh token.
-    /// This requires offline access.
+    ///
+    /// This requires offline access, and will always returns new refresh token if success.
     ///
     /// # Panic
     /// Panic if the `scope` given in `Client::new` has no `offline_access` scope.
@@ -237,7 +236,7 @@ impl AuthClient {
         &self,
         refresh_token: &str,
         client_secret: Option<&str>,
-    ) -> Result<Client> {
+    ) -> Result<Token> {
         assert!(
             self.scope.offline(),
             "Refresh token requires offline_access scope."
@@ -256,11 +255,11 @@ impl AuthClient {
     }
 }
 
-/// The client for requests accessing OneDrive resources.
-pub struct Client {
-    client: RequestClient,
-    token: String,
-    refresh_token: Option<String>,
+/// Access tokens from AuthClient.
+pub struct Token {
+    pub token: String,
+    pub refresh_token: Option<String>,
+    _private: (),
 }
 
 macro_rules! api_url {
@@ -285,21 +284,21 @@ macro_rules! api_path {
     };
 }
 
-impl Client {
-    pub fn new(token: String, refresh_token: Option<String>) -> Self {
-        Client {
+/// The authorized client to access OneDrive resources in a specified Drive.
+pub struct DriveClient {
+    client: RequestClient,
+    token: String,
+    drive: DriveLocation,
+}
+
+impl DriveClient {
+    /// Create a DriveClient to perform operations in a Drive.
+    pub fn new(token: String, drive: impl Into<DriveLocation>) -> Self {
+        DriveClient {
             client: RequestClient::new(),
             token,
-            refresh_token,
+            drive: drive.into(),
         }
-    }
-
-    pub fn get_token(&self) -> &str {
-        &self.token
-    }
-
-    pub fn get_refresh_token(&self) -> Option<&str> {
-        self.refresh_token.as_ref().map(|s| &**s)
     }
 
     /// Get `Drive`
@@ -308,9 +307,9 @@ impl Client {
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
-    pub fn get_drive<'a>(&self, drive: impl Into<DriveLocation<'a>>) -> Result<Drive> {
+    pub fn get_drive(&self) -> Result<Drive> {
         self.client
-            .get(api_url![&drive.into()])
+            .get(api_url![&self.drive])
             .bearer_auth(&self.token)
             .send()?
             .parse()
@@ -324,9 +323,8 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0
     pub fn list_children<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
-        none_if_match: Option<&Tag>,
+        if_none_match: Option<&Tag>,
     ) -> Result<Option<Vec<DriveItem>>> {
         #[derive(Deserialize)]
         struct Response {
@@ -344,8 +342,8 @@ impl Client {
                 .parse_or_none(StatusCode::NOT_MODIFIED)
         };
 
-        let url = api_url![&drive.into(), &item.into(), "children"];
-        match fetch(url.as_ref(), none_if_match)? {
+        let url = api_url![&self.drive, &item.into(), "children"];
+        match fetch(url.as_ref(), if_none_match)? {
             None => Ok(None),
             Some(Response {
                 mut value,
@@ -369,14 +367,13 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
     pub fn get_item<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
-        none_if_match: Option<&Tag>,
+        if_none_match: Option<&Tag>,
     ) -> Result<Option<DriveItem>> {
         self.client
-            .get(api_url![&drive.into(), &item.into()])
+            .get(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
-            .opt_header("if-none-match", none_if_match)
+            .opt_header("if-none-match", if_none_match)
             .send()?
             .parse_or_none(StatusCode::NOT_MODIFIED)
     }
@@ -389,7 +386,6 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0
     pub fn create_folder<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         parent_item: impl Into<ItemLocation<'a>>,
         name: &str,
     ) -> Result<Option<DriveItem>> {
@@ -406,7 +402,7 @@ impl Client {
         }
 
         self.client
-            .post(api_url![&drive.into(), &parent_item.into(), "children"])
+            .post(api_url![&self.drive, &parent_item.into(), "children"])
             .bearer_auth(&self.token)
             .json(&Request {
                 name,
@@ -417,7 +413,7 @@ impl Client {
             .parse_or_none(StatusCode::CONFLICT)
     }
 
-    const SMALL_FILE_SIZE: usize = 4_000_000; // 4 MB
+    const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
 
     /// Upload or replace the contents of a `DriveItem`
     ///
@@ -429,17 +425,18 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0
     pub fn upload_small<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
         data: &[u8],
     ) -> Result<DriveItem> {
         assert!(
-            data.len() <= Self::SMALL_FILE_SIZE,
-            "Uploading large file requires upload session"
+            data.len() <= Self::UPLOAD_SMALL_LIMIT,
+            "Data too large for upload_small ({} B > {} B)",
+            data.len(),
+            Self::UPLOAD_SMALL_LIMIT,
         );
 
         self.client
-            .put(api_url![&drive.into(), &item.into(), "content"])
+            .put(api_url![&self.drive, &item.into(), "content"])
             .bearer_auth(&self.token)
             .body(data.to_owned())
             .send()?
@@ -456,10 +453,9 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session
     pub fn new_upload_session<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
         overwrite: bool,
-        none_if_match: Option<&Tag>,
+        if_none_match: Option<&Tag>,
     ) -> Result<Option<UploadSession>> {
         #[derive(Serialize)]
         struct Item {
@@ -473,8 +469,8 @@ impl Client {
         }
 
         self.client
-            .post(api_url![&drive.into(), &item.into(), "createUploadSession"])
-            .opt_header("if-match", none_if_match)
+            .post(api_url![&self.drive, &item.into(), "createUploadSession"])
+            .opt_header("if-match", if_none_match)
             .bearer_auth(&self.token)
             .json(&Request {
                 item: Item {
@@ -532,7 +528,7 @@ impl Client {
             .parse_no_content()
     }
 
-    const SESSION_UPLOAD_MAX_FILE_SIZE: usize = 60 << 20; // 60 MiB
+    const UPLOAD_SESSION_PART_LIMIT: usize = 60 << 20; // 60 MiB
 
     /// Upload bytes to the upload session
     ///
@@ -555,18 +551,24 @@ impl Client {
         remote_range: Range<usize>,
         total_size: usize,
     ) -> Result<Option<DriveItem>> {
-        assert!(
-            remote_range.start <= remote_range.end && remote_range.end <= total_size,
-            "Invalid range",
-        );
+        // FIXME: https://github.com/rust-lang/rust-clippy/issues/3807
+        #[allow(clippy::len_zero)]
+        {
+            assert!(
+                remote_range.len() > 0 && remote_range.end <= total_size,
+                "Invalid range",
+            );
+        }
         assert_eq!(
             data.len(),
             remote_range.end - remote_range.start,
             "Length mismatch"
         );
         assert!(
-            data.len() < Self::SESSION_UPLOAD_MAX_FILE_SIZE,
-            "Data too long"
+            data.len() <= Self::UPLOAD_SESSION_PART_LIMIT,
+            "Data too large for one part ({} B > {} B)",
+            data.len(),
+            Self::UPLOAD_SESSION_PART_LIMIT,
         );
 
         self.client
@@ -595,9 +597,7 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0
     pub fn copy<'a>(
         &self,
-        source_drive: impl Into<DriveLocation<'a>>,
         source_item: impl Into<ItemLocation<'a>>,
-        dest_drive: impl Into<DriveLocation<'a>>,
         dest_folder: impl Into<ItemLocation<'a>>,
         dest_name: &str,
     ) -> Result<()> {
@@ -609,11 +609,11 @@ impl Client {
         }
 
         self.client
-            .post(api_url![&source_drive.into(), &source_item.into(), "copy"])
+            .post(api_url![&self.drive, &source_item.into(), "copy"])
             .bearer_auth(&self.token)
             .json(&Request {
                 parent_reference: ItemReference {
-                    path: api_path![&dest_drive.into(), &dest_folder.into()],
+                    path: api_path![&self.drive, &dest_folder.into()],
                 },
                 name: dest_name,
             })
@@ -633,12 +633,10 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0
     pub fn move_<'a>(
         &self,
-        source_drive: impl Into<DriveLocation<'a>>,
         source_item: impl Into<ItemLocation<'a>>,
-        dest_drive: impl Into<DriveLocation<'a>>, // TODO: Must be same as `source_drive`
-        dest_folder: impl Into<ItemLocation<'a>>,
+        dest_directory: impl Into<ItemLocation<'a>>,
         dest_name: Option<&str>,
-        none_if_not_match: Option<&Tag>,
+        if_match: Option<&Tag>,
     ) -> Result<Option<DriveItem>> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -648,12 +646,12 @@ impl Client {
         }
 
         self.client
-            .patch(api_url![&source_drive.into(), &source_item.into()])
+            .patch(api_url![&self.drive, &source_item.into()])
             .bearer_auth(&self.token)
-            .opt_header("if-match", none_if_not_match)
+            .opt_header("if-match", if_match)
             .json(&Request {
                 parent_reference: ItemReference {
-                    path: api_path![&dest_drive.into(), &dest_folder.into()],
+                    path: api_path![&self.drive, &dest_directory.into()],
                 },
                 name: dest_name,
             })
@@ -671,14 +669,13 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0
     pub fn delete<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         item: impl Into<ItemLocation<'a>>,
-        none_if_not_match: Option<&Tag>,
+        if_match: Option<&Tag>,
     ) -> Result<()> {
         self.client
-            .delete(api_url![&drive.into(), &item.into()])
+            .delete(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
-            .opt_header("if-match", none_if_not_match)
+            .opt_header("if-match", if_match)
             .send()?
             .parse_no_content()
     }
@@ -699,7 +696,6 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
     pub fn track_changes<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         folder: impl Into<ItemLocation<'a>>,
         previous_state: Option<&TrackStateToken>,
     ) -> Result<(Vec<DriveItem>, TrackStateToken)> {
@@ -707,7 +703,7 @@ impl Client {
 
         let mut url = match previous_state {
             Some(state) => Cow::Borrowed(state.get_delta_link()), // Including param `token`
-            None => Cow::Owned(api_url![&drive.into(), &folder.into(), "delta"].into_string()),
+            None => Cow::Owned(api_url![&self.drive, &folder.into(), "delta"].into_string()),
         };
 
         let mut changes = vec![];
@@ -737,12 +733,11 @@ impl Client {
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
     pub fn get_latest_track_state<'a>(
         &self,
-        drive: impl Into<DriveLocation<'a>>,
         folder: impl Into<ItemLocation<'a>>,
     ) -> Result<TrackStateToken> {
         let resp = self
             .client
-            .get(api_url![&drive.into(), &folder.into(), "delta"])
+            .get(api_url![&self.drive, &folder.into(), "delta"])
             .form(&[("token", "latest")])
             .bearer_auth(&self.token)
             .send()?
@@ -989,7 +984,7 @@ mod test {
 
         let mock_drive_id = DriveId::new("1234".to_owned());
         assert_eq!(
-            api_path![&DriveLocation::DriveId(&mock_drive_id)],
+            api_path![&DriveLocation::DriveId(mock_drive_id)],
             "/drives/1234",
         );
 
