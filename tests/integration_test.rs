@@ -12,10 +12,9 @@ use lazy_static::lazy_static;
 use log::{info, warn};
 use onedrive_api::*;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::io::{Seek, SeekFrom};
 
 const LOGIN_SETTING_PATH: &str = "tests/login_setting.json";
+const LOGIN_SETTING_TMP_PATH: &str = "tests/login_setting.json.tmp";
 
 #[derive(Deserialize, Serialize)]
 struct LoginSetting {
@@ -25,14 +24,6 @@ struct LoginSetting {
     refresh_token: Option<String>,
     token: Option<String>,
     code: Option<String>,
-}
-
-fn open_setting_file() -> fs::File {
-    fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(LOGIN_SETTING_PATH)
-        .expect("Login setting file is not found")
 }
 
 // NOTE: This supports code auth only.
@@ -94,14 +85,24 @@ fn get_token(setting: &mut LoginSetting) -> String {
 
 lazy_static! {
     static ref TOKEN: String = {
+        use std::fs::{rename, File};
+        use std::io::Write;
+
         env_logger::init();
 
-        let mut f = open_setting_file();
-        let mut setting: LoginSetting =
-            serde_json::from_reader(&f).expect("Invalid JSON of login setting");
+        let mut setting: LoginSetting = {
+            let f = File::open(LOGIN_SETTING_PATH).unwrap();
+            serde_json::from_reader(f).expect("Invalid JSON of login setting")
+        };
         let client = get_token(&mut setting);
-        f.seek(SeekFrom::Start(0)).expect("Failed to seek");
-        serde_json::to_writer_pretty(&mut f, &setting).expect("Failed to updating login setting");
+        {
+            let mut f = File::create(LOGIN_SETTING_TMP_PATH).unwrap();
+            serde_json::to_writer_pretty(&mut f, &setting).expect("Failed to write login setting");
+            f.flush().unwrap();
+            f.sync_all().unwrap();
+        }
+        rename(LOGIN_SETTING_TMP_PATH, LOGIN_SETTING_PATH).expect("Failed to update login setting");
+
         client
     };
 }
