@@ -1,7 +1,7 @@
 use self::Error::UnexpectedResponse;
 use crate::error::*;
 use crate::resource::*;
-use reqwest::{header, Client as RequestClient, RequestBuilder, Response, StatusCode};
+use reqwest::{header, Client as RequestClient, RequestBuilder, Response};
 use serde::{de, Deserialize, Serialize};
 use std::ops::Range;
 use url::{PathSegmentsMut, Url};
@@ -447,6 +447,9 @@ impl DriveClient {
     ///
     /// Return a collection of `DriveItem`s in the children relationship of a `DriveItem`.
     ///
+    /// # Note
+    /// Will return `Ok(None)` if `if_none_match` is set and matches the item .
+    ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0
     pub fn list_children<'a>(
@@ -465,9 +468,9 @@ impl DriveClient {
             self.client
                 .get(url)
                 .bearer_auth(&self.token)
-                .opt_header("if-none-match", tag)
+                .opt_header(header::IF_NONE_MATCH, tag)
                 .send()?
-                .parse_or_none(StatusCode::NOT_MODIFIED)
+                .parse_optional()
         };
 
         let url = api_url![&self.drive, &item.into(), "children"];
@@ -491,6 +494,9 @@ impl DriveClient {
     ///
     /// Retrieve the metadata for a `DriveItem` in a `Drive` by file system path or ID.
     ///
+    /// # Errors
+    /// Will return `Ok(None)` if `if_none_match` is set and matches the item .
+    ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
     pub fn get_item<'a>(
@@ -501,14 +507,17 @@ impl DriveClient {
         self.client
             .get(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
-            .opt_header("if-none-match", if_none_match)
+            .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
-            .parse_or_none(StatusCode::NOT_MODIFIED)
+            .parse_optional()
     }
 
     /// Create a new folder in a drive
     ///
     /// Create a new folder or `DriveItem` in a `Drive` with a specified parent item or path.
+    ///
+    /// # Errors
+    /// Will return `Err` with HTTP CONFLICT if the target already exists.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0
@@ -516,7 +525,7 @@ impl DriveClient {
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
         name: &FileName,
-    ) -> Result<Option<DriveItem>> {
+    ) -> Result<DriveItem> {
         #[derive(Serialize)]
         struct Folder {}
 
@@ -538,7 +547,7 @@ impl DriveClient {
                 conflict_behavior: "fail", // TODO
             })
             .send()?
-            .parse_or_none(StatusCode::CONFLICT)
+            .parse()
     }
 
     const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
@@ -579,14 +588,18 @@ impl DriveClient {
     /// the transfer to be resumed if a connection is dropped
     /// while the upload is in progress.
     ///
+    /// # Errors
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
+    /// but does not match the item.
+    ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session
     pub fn new_upload_session<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         overwrite: bool,
-        if_none_match: Option<&Tag>,
-    ) -> Result<Option<UploadSession>> {
+        if_match: Option<&Tag>,
+    ) -> Result<UploadSession> {
         #[derive(Serialize)]
         struct Item {
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
@@ -600,7 +613,7 @@ impl DriveClient {
 
         self.client
             .post(api_url![&self.drive, &item.into(), "createUploadSession"])
-            .opt_header("if-match", if_none_match)
+            .opt_header(header::IF_MATCH, if_match)
             .bearer_auth(&self.token)
             .json(&Request {
                 item: Item {
@@ -608,7 +621,7 @@ impl DriveClient {
                 },
             })
             .send()?
-            .parse_or_none(StatusCode::PRECONDITION_FAILED)
+            .parse()
     }
 
     /// Resuming an in-progress upload
@@ -716,7 +729,7 @@ impl DriveClient {
             )
             .body(data.to_owned())
             .send()?
-            .parse_or_none(StatusCode::ACCEPTED)
+            .parse_optional()
     }
 
     /// Copy a DriveItem.
@@ -760,6 +773,10 @@ impl DriveClient {
     ///
     /// Note: Items cannot be moved between Drives using this request.
     ///
+    /// # Errors
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
+    /// but doesn't match the item.
+    ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0
     pub fn move_<'a, 'b>(
@@ -768,7 +785,7 @@ impl DriveClient {
         dest_directory: impl Into<ItemLocation<'b>>,
         dest_name: Option<&FileName>,
         if_match: Option<&Tag>,
-    ) -> Result<Option<DriveItem>> {
+    ) -> Result<DriveItem> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Request<'a> {
@@ -779,7 +796,7 @@ impl DriveClient {
         self.client
             .patch(api_url![&self.drive, &source_item.into()])
             .bearer_auth(&self.token)
-            .opt_header("if-match", if_match)
+            .opt_header(header::IF_MATCH, if_match)
             .json(&Request {
                 parent_reference: ItemReference {
                     path: api_path![&self.drive, &dest_directory.into()],
@@ -787,7 +804,7 @@ impl DriveClient {
                 name: dest_name.map(FileName::as_str),
             })
             .send()?
-            .parse_or_none(StatusCode::PRECONDITION_FAILED)
+            .parse()
     }
 
     /// Delete a DriveItem
@@ -795,6 +812,10 @@ impl DriveClient {
     /// Delete a `DriveItem` by using its ID or path. Note that deleting items using
     /// this method will move the items to the recycle bin instead of permanently
     /// deleting the item.
+    ///
+    /// # Errors
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set but
+    /// does not match the item.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0
@@ -806,7 +827,7 @@ impl DriveClient {
         self.client
             .delete(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
-            .opt_header("if-match", if_match)
+            .opt_header(header::IF_MATCH, if_match)
             .send()?
             .parse_no_content()
     }
@@ -998,40 +1019,40 @@ impl RequestBuilderExt for RequestBuilder {
 trait ResponseExt: Sized {
     fn check_status(self) -> Result<Self>;
     fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
+    fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>>;
     fn parse_no_content(self) -> Result<()>;
-    /// Allow `status` as None. For code like `304 Not Modified`.
-    fn parse_or_none<T: de::DeserializeOwned>(self, status: StatusCode) -> Result<Option<T>>;
 }
 
 impl ResponseExt for Response {
     fn check_status(mut self) -> Result<Self> {
-        let status_code = self.status();
-        if status_code.is_success() {
-            return Ok(self);
+        match self.error_for_status_ref() {
+            Ok(_) => Ok(self),
+            Err(source) => {
+                let body = self.text()?; // Throw network error
+                Err(Error::RequestError {
+                    source,
+                    response: Some(body),
+                })
+            }
         }
-
-        let body = self.text()?; // Throw network error
-        Err(Error::RequestError {
-            source: self.error_for_status().unwrap_err(), // Checked
-            response: Some(body),
-        })
     }
 
     fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
         Ok(self.check_status()?.json()?)
     }
 
+    fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>> {
+        use reqwest::StatusCode;
+
+        match self.status() {
+            StatusCode::NOT_MODIFIED | StatusCode::ACCEPTED => Ok(None),
+            _ => Ok(Some(self.parse()?)),
+        }
+    }
+
     fn parse_no_content(self) -> Result<()> {
         self.check_status()?;
         Ok(())
-    }
-
-    fn parse_or_none<T: de::DeserializeOwned>(self, status: StatusCode) -> Result<Option<T>> {
-        if self.status() == status {
-            Ok(None)
-        } else {
-            self.parse().map(Option::Some)
-        }
     }
 }
 

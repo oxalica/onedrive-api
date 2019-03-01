@@ -130,8 +130,7 @@ fn test_file_operations() {
 
     let folder_item = client
         .create_folder(ItemLocation::root(), FileName::new("test_folder").unwrap())
-        .expect("Failed to create folder")
-        .expect("Folder already exists");
+        .expect("Failed to create folder");
 
     let file1_path = ItemLocation::from_path("/test_folder/1.txt").unwrap();
     let file1 = client
@@ -146,8 +145,7 @@ fn test_file_operations() {
             Some(FileName::new("2.txt").unwrap()),
             None,
         )
-        .expect("Failed to move file")
-        .expect("Moving file returns unexpected None");
+        .expect("Failed to move file");
 
     assert!(client
         .get_item(
@@ -169,8 +167,7 @@ fn test_file_operations() {
     let file3_path = ItemLocation::from_path("/test_folder/3.txt").unwrap();
     let upload_session = client
         .new_upload_session(file3_path, false, None)
-        .expect("Failed to create upload session")
-        .expect("Creating upload session returns expected None");
+        .expect("Failed to create upload session");
     assert!(
         client
             .upload_to_session(&upload_session, b"1234", 0..4, 6)
