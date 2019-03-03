@@ -42,7 +42,7 @@ fn download(url: &str) -> Vec<u8> {
     buf
 }
 
-/// Max 2 requests.
+/// Max 4 requests.
 ///
 /// # Test
 /// - new()
@@ -50,12 +50,14 @@ fn download(url: &str) -> Vec<u8> {
 ///   - From drive id.
 /// - get_drive()
 ///   - Success.
+/// - get_item()
+///   - Success, directory.
+///   - Success, directory, with option.
 #[test]
 #[ignore]
 fn test_get_drive() {
-    let drive1 = DriveClient::new(TOKEN.clone(), DriveLocation::me())
-        .get_drive()
-        .expect("Cannot get drive #1");
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+    let drive1 = client.get_drive().expect("Cannot get drive #1");
 
     // Default fields.
     let drive1_id = drive1.id.unwrap();
@@ -64,6 +66,24 @@ fn test_get_drive() {
         .get_drive_with_option(ObjectOption::new().select(&[&DriveField::id]))
         .expect("Cannot get drive #2");
     assert_eq!(drive1_id, drive2.id.unwrap());
+
+    let root_item = client
+        .get_item(ItemLocation::root(), None)
+        .expect("Cannot get root item")
+        .unwrap();
+    assert!(root_item.id.is_some());
+    assert!(root_item.e_tag.is_some());
+
+    let root_item2 = client
+        .get_item_with_option(
+            ItemLocation::root(),
+            None,
+            ObjectOption::new().select(&[&DriveItemField::e_tag]),
+        )
+        .expect("Cannot get root item with option")
+        .unwrap();
+    assert!(root_item2.id.is_none());
+    assert!(root_item2.e_tag.is_some());
 }
 
 /// Max 8 requests.
@@ -97,13 +117,21 @@ fn test_folder() {
 
     try_finally(
         || {
-            let ret = client.create_folder(ItemLocation::root(), folder1_name);
-            assert!(ret.is_err(), "Re-create folder should fail");
-            assert_eq!(ret.unwrap_err().status(), Some(StatusCode::CONFLICT));
+            assert_eq!(
+                client
+                    .create_folder(ItemLocation::root(), folder1_name)
+                    .expect_err("Re-create folder should fail")
+                    .status(),
+                Some(StatusCode::CONFLICT),
+            );
 
-            let ret = client.delete(folder2_location, None);
-            assert!(ret.is_err(), "Should not delete a file does not exist");
-            assert_eq!(ret.unwrap_err().status(), Some(StatusCode::NOT_FOUND));
+            assert_eq!(
+                client
+                    .delete(folder2_location, None)
+                    .expect_err("Should not delete a file does not exist")
+                    .status(),
+                Some(StatusCode::NOT_FOUND),
+            );
 
             assert!(
                 client
@@ -133,9 +161,13 @@ fn test_folder() {
         },
     );
 
-    let ret = client.list_children(&folder1_id, None);
-    assert!(ret.is_err(), "Folder should be already deleted");
-    assert_eq!(ret.unwrap_err().status(), Some(StatusCode::NOT_FOUND));
+    assert_eq!(
+        client
+            .list_children(&folder1_id, None)
+            .expect_err("Folder should be already deleted")
+            .status(),
+        Some(StatusCode::NOT_FOUND),
+    );
 }
 
 /// Max 5 requests.
@@ -256,16 +288,17 @@ fn test_file_upload_session() {
         next_ranges[0],
     );
 
-    let ret = client.upload_to_session(
-        &upload_session,
-        &CONTENT[RANGE2_ERROR],
-        RANGE2_ERROR,
-        CONTENT.len(),
-    );
-    assert!(ret.is_err(), "Upload wrong range should fail");
     assert_eq!(
-        ret.unwrap_err().status(),
-        Some(StatusCode::RANGE_NOT_SATISFIABLE)
+        client
+            .upload_to_session(
+                &upload_session,
+                &CONTENT[RANGE2_ERROR],
+                RANGE2_ERROR,
+                CONTENT.len(),
+            )
+            .expect_err("Upload wrong range should fail")
+            .status(),
+        Some(StatusCode::RANGE_NOT_SATISFIABLE),
     );
 
     let file3_id = client
@@ -288,6 +321,80 @@ fn test_file_upload_session() {
         },
         || {
             client.delete(&file3_id, None).unwrap();
+        },
+    );
+}
+
+/// Max 7 requests.
+///
+/// # Test
+/// - create_folder()
+///   - Success.
+/// - list_children()
+///   - Success, with option, iterator, multi page.
+/// - delete()
+///   - Success, folder.
+#[test]
+#[ignore]
+fn test_list_children() {
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+
+    const TOTAL_COUNT: usize = 3;
+
+    let folder_id = client
+        .create_folder(ItemLocation::root(), gen_filename())
+        .expect("Failed to create container folder")
+        .id
+        .unwrap();
+    let folder_location = ItemLocation::from_id(&folder_id);
+
+    try_finally(
+        || {
+            let mut files: std::collections::HashMap<String, Tag> = (0..TOTAL_COUNT)
+                .map(|i| {
+                    let name = gen_filename();
+                    let item = client
+                        .create_folder(folder_location, name)
+                        .unwrap_or_else(|e| {
+                            panic!("Failed to create child {}/{}: {}", i + 1, TOTAL_COUNT, e)
+                        });
+                    (name.as_str().to_owned(), item.e_tag.unwrap())
+                })
+                .collect();
+
+            let mut fetcher: ListChildrenFetcher = client
+                .list_children_with_option(
+                    folder_location,
+                    None,
+                    CollectionOption::new()
+                        .select(&[&DriveItemField::name, &DriveItemField::e_tag])
+                        .page_size(2),
+                )
+                .expect("Failed to list children with option")
+                .unwrap();
+
+            let page1 = fetcher.next().unwrap().expect("Failed to fetch page 1");
+            assert_eq!(page1.len(), 2);
+            let page2 = fetcher.next().unwrap().expect("Failed to fetch page 2");
+            assert_eq!(page2.len(), 1);
+            assert!(fetcher.next().is_none());
+
+            std::iter::empty()
+                .chain(page1.iter())
+                .chain(page2.iter())
+                .for_each(|item| {
+                    assert!(item.id.is_none()); // Not selected.
+                    let expected_tag = files
+                        .remove(item.name.as_ref().unwrap())
+                        .expect("Unexpected name");
+                    assert_eq!(item.e_tag.as_ref().unwrap(), &expected_tag);
+                });
+            assert!(files.is_empty()); // All matched
+        },
+        || {
+            client
+                .delete(folder_location, None)
+                .expect("Failed to delete container folder");
         },
     );
 }

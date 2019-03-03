@@ -473,7 +473,7 @@ impl DriveClient {
             .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
             .parse_optional()?
-            .map(|resp| ListChildrenFetcher::new(self.client.clone(), resp)))
+            .map(|resp| ListChildrenFetcher::new(self.client.clone(), self.token.clone(), resp)))
     }
 
     /// Shortcut to `list_children_with_option` with default params and fetch all.
@@ -496,17 +496,28 @@ impl DriveClient {
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
+    pub fn get_item_with_option<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+        if_none_match: Option<&Tag>,
+        option: ObjectOption<DriveItem>,
+    ) -> Result<Option<DriveItem>> {
+        self.client
+            .get(api_url![&self.drive, &item.into()])
+            .query(&option.params().collect::<Vec<_>>())
+            .bearer_auth(&self.token)
+            .opt_header(header::IF_NONE_MATCH, if_none_match)
+            .send()?
+            .parse_optional()
+    }
+
+    /// Shortcut to `get_item_with_option` with default parameters.
     pub fn get_item<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         if_none_match: Option<&Tag>,
     ) -> Result<Option<DriveItem>> {
-        self.client
-            .get(api_url![&self.drive, &item.into()])
-            .bearer_auth(&self.token)
-            .opt_header(header::IF_NONE_MATCH, if_none_match)
-            .send()?
-            .parse_optional()
+        self.get_item_with_option(item.into(), if_none_match, Default::default())
     }
 
     /// Create a new folder in a drive
@@ -909,14 +920,16 @@ struct ListChildrenResponse {
 #[derive(Debug)]
 pub struct ListChildrenFetcher {
     client: reqwest::Client,
+    token: String,
     first_page: Option<Vec<DriveItem>>,
     next_url: Option<String>,
 }
 
 impl ListChildrenFetcher {
-    fn new(client: reqwest::Client, resp: ListChildrenResponse) -> Self {
+    fn new(client: reqwest::Client, token: String, resp: ListChildrenResponse) -> Self {
         Self {
             client,
+            token,
             first_page: Some(resp.value),
             next_url: resp.next_url,
         }
@@ -937,7 +950,12 @@ impl Iterator for ListChildrenFetcher {
 
         let url = self.next_url.take()?;
         let mut fetch = || -> Result<Vec<DriveItem>> {
-            let resp: ListChildrenResponse = self.client.get(&url).send()?.parse()?;
+            let resp: ListChildrenResponse = self
+                .client
+                .get(&url)
+                .bearer_auth(&self.token)
+                .send()?
+                .parse()?;
             self.next_url = resp.next_url;
             Ok(resp.value)
         };

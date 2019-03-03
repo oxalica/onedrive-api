@@ -42,7 +42,7 @@ define_string_wrapper! {
 }
 
 pub trait ResourceFieldOf<T> {
-    fn api_field_name(&self) -> &'static str;
+    fn api_field_name(&self) -> String;
 }
 
 // Separate `type` to enable making `ResoucrFieldOf` into trait object.
@@ -107,8 +107,9 @@ macro_rules! define_resource_object {
         $(
             define_resource_object! { __impl_if_empty($($unselectable)?) {
                 impl ResourceFieldOf<$struct_name> for $field_mod_name::$field {
-                    fn api_field_name(&self) -> &'static str {
-                        stringify!($field)
+                    #[inline]
+                    fn api_field_name(&self) -> String {
+                        snake_to_camel_case(stringify!($field))
                         $(; $rename)? // Replace
                     }
                 }
@@ -242,5 +243,39 @@ define_resource_object! {
         // shared_id: String,
         // sharepoint_ids: SharepointIds,
         // site_id: String,
+    }
+}
+
+#[inline]
+fn snake_to_camel_case(s: &str) -> String {
+    let mut buf = String::new();
+    let mut is_u = false;
+    for c in s.chars() {
+        if c == '_' {
+            is_u = true;
+        } else if is_u {
+            is_u = false;
+            buf.push(c.to_ascii_uppercase());
+        } else {
+            buf.push(c);
+        }
+    }
+    buf
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_snake_to_camel_case() {
+        let data = [
+            ("abc", "abc"),
+            ("hello_world", "helloWorld"),
+            ("wh_tst_ef_ck", "whTstEfCk"),
+        ];
+        for (i, o) in &data {
+            assert_eq!(snake_to_camel_case(i), *o);
+        }
     }
 }
