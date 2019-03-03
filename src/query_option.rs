@@ -31,6 +31,13 @@ impl<T> ObjectOption<T> {
         }
     }
 
+    /// Select only some fields of the resource object.
+    ///
+    /// # Note
+    /// If called more than once, all fields mentioned will be selected.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/query-parameters#select-parameter
     pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
         for sel in fields {
             write!(self.select_buf, ",{}", sel.api_field_name()).unwrap();
@@ -38,6 +45,13 @@ impl<T> ObjectOption<T> {
         self
     }
 
+    /// Expand a field of the resource object.
+    ///
+    /// # Note
+    /// If called more than once, all fields mentioned will be expanded.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter
     pub fn expand<Field: ResourceFieldTypeOf<T>>(
         mut self,
         field: Field,
@@ -87,11 +101,15 @@ impl<T> CollectionOption<T> {
         }
     }
 
+    /// # See also
+    /// `ObjectOption::select`
     pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
         self.q = self.q.select(fields);
         self
     }
 
+    /// # See also
+    /// `ObjectOption::expand`
     pub fn expand<Field: ResourceFieldTypeOf<T>>(
         mut self,
         field: Field,
@@ -101,6 +119,13 @@ impl<T> CollectionOption<T> {
         self
     }
 
+    /// Specify the sort order of the items responsed.
+    ///
+    /// # Note
+    /// If called more than once, only the last call make sense.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/query-parameters#orderby-parameter
     pub fn order_by<Field: ResourceFieldOf<T>>(mut self, field: Field, order: Order) -> Self {
         let order = match order {
             Order::Ascending => "asc",
@@ -110,11 +135,27 @@ impl<T> CollectionOption<T> {
         self
     }
 
+    /// Specify the number of items per page.
+    ///
+    /// # Note
+    /// If called more than once, only the last call make sense.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/query-parameters#top-parameter
     pub fn page_size(mut self, size: usize) -> Self {
         self.page_size_buf = Some(size.to_string());
         self
     }
 
+    /// Specify to get the number of all items.
+    ///
+    /// # Note
+    /// If called more than once, only the last call make sense.
+    ///
+    /// Set it when calling unsupported API will cause HTTP 400 Client Error.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
     pub fn get_count(mut self, get_count: bool) -> Self {
         self.get_count_buf = Some(get_count);
         self
@@ -138,6 +179,7 @@ impl<T> Default for CollectionOption<T> {
     }
 }
 
+/// Specify the sorting order in `CollectionOption::order_by`.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Order {
     Ascending,

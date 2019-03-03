@@ -465,15 +465,25 @@ impl DriveClient {
         if_none_match: Option<&Tag>,
         option: CollectionOption<DriveItem>,
     ) -> Result<Option<ListChildrenFetcher>> {
+        let mut url: Url = api_url![&self.drive, &item.into(), "children"];
+        url.query_pairs_mut()
+            .extend_pairs(&option.params().collect::<Vec<_>>());
+        let url_str = url.to_string();
         Ok(self
             .client
-            .get(api_url![&self.drive, &item.into(), "children"])
-            .query(&option.params().collect::<Vec<_>>())
+            .get(url)
             .bearer_auth(&self.token)
             .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
             .parse_optional()?
-            .map(|resp| ListChildrenFetcher::new(self.client.clone(), self.token.clone(), resp)))
+            .map(|resp| {
+                ListChildrenFetcher::from_first_page(
+                    self.client.clone(),
+                    self.token.clone(),
+                    url_str,
+                    resp,
+                )
+            }))
     }
 
     /// Shortcut to `list_children_with_option` with default params and fetch all.
@@ -485,6 +495,13 @@ impl DriveClient {
         self.list_children_with_option(item.into(), if_none_match, Default::default())?
             .map(|fetcher| fetcher.fetch_all())
             .transpose()
+    }
+
+    /// Resume a process of `list_children(_with_option)`.
+    ///
+    /// `url` should be get from `ListChildrenFetcher::get_next_url()`
+    pub fn resume_list_children(&self, url: String) -> ListChildrenFetcher {
+        ListChildrenFetcher::from_url(self.client.clone(), self.token.clone(), url)
     }
 
     /// Get a DriveItem resource
@@ -917,24 +934,63 @@ struct ListChildrenResponse {
     next_url: Option<String>,
 }
 
+/// The page fetcher for `list_children` operation with `Iterator` interface.
 #[derive(Debug)]
 pub struct ListChildrenFetcher {
     client: reqwest::Client,
     token: String,
-    first_page: Option<Vec<DriveItem>>,
+    first_page: Option<(Vec<DriveItem>, String)>,
     next_url: Option<String>,
 }
 
 impl ListChildrenFetcher {
-    fn new(client: reqwest::Client, token: String, resp: ListChildrenResponse) -> Self {
+    fn from_first_page(
+        client: reqwest::Client,
+        token: String,
+        url: String,
+        resp: ListChildrenResponse,
+    ) -> Self {
         Self {
             client,
             token,
-            first_page: Some(resp.value),
+            first_page: Some((resp.value, url)),
             next_url: resp.next_url,
         }
     }
 
+    fn from_url(client: reqwest::Client, token: String, url: String) -> Self {
+        Self {
+            client,
+            token,
+            first_page: None,
+            next_url: Some(url),
+        }
+    }
+
+    /// Get the url to the next page, or `None` for no more pages.
+    ///
+    /// The returned url can be used to resume the fetching progress using
+    /// `DriveClient::resume_list_children`
+    ///
+    /// # Note
+    /// The fetcher returned by `DriveClient::list_children` will cache the data of
+    /// (only) the first page to reduce the number of requests. But the fetcher
+    /// reconstructed through url will lose the cache and will cause one more request
+    /// when called `next`.
+    pub fn get_next_url(&self) -> Option<&str> {
+        match (&self.first_page, &self.next_url) {
+            (Some((_, url)), _) | (None, Some(url)) => Some(&**url),
+            (None, None) => None,
+        }
+    }
+
+    /// Fetch all rest pages and return all items concated.
+    ///
+    /// # Errors
+    /// Will return `Err` if any error occurs during fetching.
+    ///
+    /// Note that you will lose all progress unless all requests are success,
+    /// so it is preferred to use `Iterator::next` to make it more error-tolerant.
     pub fn fetch_all(self) -> Result<Vec<DriveItem>> {
         try_flat_collect(self)
     }
@@ -944,22 +1000,24 @@ impl Iterator for ListChildrenFetcher {
     type Item = Result<Vec<DriveItem>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(v) = self.first_page.take() {
+        if let Some((v, _)) = self.first_page.take() {
             return Some(Ok(v));
         }
 
-        let url = self.next_url.take()?;
-        let mut fetch = || -> Result<Vec<DriveItem>> {
-            let resp: ListChildrenResponse = self
+        let url = self.next_url.as_ref()?; // Not `take` here. Will remain unchanged if failed.
+        let fetch = || {
+            let ListChildrenResponse { value, next_url } = self
                 .client
-                .get(&url)
+                .get(url)
                 .bearer_auth(&self.token)
                 .send()?
                 .parse()?;
-            self.next_url = resp.next_url;
-            Ok(resp.value)
+            Ok((value, next_url))
         };
-        Some(fetch())
+        Some(fetch().map(|(value, next_url)| {
+            self.next_url = next_url;
+            value
+        }))
     }
 }
 

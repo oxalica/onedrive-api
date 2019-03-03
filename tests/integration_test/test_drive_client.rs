@@ -325,7 +325,7 @@ fn test_file_upload_session() {
     );
 }
 
-/// Max 7 requests.
+/// Max 8 requests.
 ///
 /// # Test
 /// - create_folder()
@@ -339,7 +339,10 @@ fn test_file_upload_session() {
 fn test_list_children() {
     let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
 
-    const TOTAL_COUNT: usize = 3;
+    const TOTAL_COUNT: usize = 2;
+    const PAGE_SIZE: usize = 1;
+    const PAGE1_COUNT: usize = 1;
+    const PAGE2_COUNT: usize = 1;
 
     let folder_id = client
         .create_folder(ItemLocation::root(), gen_filename())
@@ -368,16 +371,35 @@ fn test_list_children() {
                     None,
                     CollectionOption::new()
                         .select(&[&DriveItemField::name, &DriveItemField::e_tag])
-                        .page_size(2),
+                        .page_size(PAGE_SIZE),
                 )
                 .expect("Failed to list children with option")
                 .unwrap();
 
+            let etags_of = |v: &[DriveItem]| -> Vec<Tag> {
+                v.iter()
+                    .map(|item| item.e_tag.as_ref().cloned().unwrap())
+                    .collect()
+            };
+            let check_page_eq = |url: String, expected: &[DriveItem]| {
+                let mut fetcher_ = client.resume_list_children(url);
+                let page_ = fetcher_.next().unwrap().expect("Failed to re-get page");
+                assert_eq!(etags_of(&page_), etags_of(&expected));
+            };
+
+            let url1 = fetcher.get_next_url().unwrap().to_owned();
             let page1 = fetcher.next().unwrap().expect("Failed to fetch page 1");
-            assert_eq!(page1.len(), 2);
+            assert_eq!(page1.len(), PAGE1_COUNT);
+            check_page_eq(url1, &page1);
+
+            let url2 = fetcher.get_next_url().unwrap().to_owned();
             let page2 = fetcher.next().unwrap().expect("Failed to fetch page 2");
-            assert_eq!(page2.len(), 1);
+            assert_eq!(page2.len(), PAGE2_COUNT);
+            check_page_eq(url2, &page2);
+
+            assert!(fetcher.get_next_url().is_none());
             assert!(fetcher.next().is_none());
+            assert!(fetcher.next().is_none()); // Check fused.
 
             std::iter::empty()
                 .chain(page1.iter())
