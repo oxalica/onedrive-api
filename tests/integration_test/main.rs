@@ -8,6 +8,7 @@
 //! Login setting file `tests/login_setting.json` is private and is ignored
 //! in `.gitignore`, so you need to set up it manually before running this test.
 //! The format is specified in `tests/login_setting.json.template`.
+extern crate onedrive_api;
 
 mod login_setting;
 mod test_drive_client;

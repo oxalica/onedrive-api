@@ -52,7 +52,7 @@ define_string_wrapper! {
 #[serde(rename_all = "camelCase")]
 pub struct Drive {
     // TODO: Incomplete
-    pub id: DriveId,
+    pub id: Option<DriveId>,
     // created_by: IdentitySet,
     // created_date_time: Timestamp,
     pub description: Option<String>,
@@ -118,15 +118,15 @@ pub struct DriveItem {
     // versions: Vec<DriveItemVersion>,
 
     // Base item
-    pub id: ItemId,
+    pub id: Option<ItemId>,
     // created_by: IdentitySet,
     // created_date_time: Timestamp,
-    pub e_tag: Tag,
+    pub e_tag: Option<Tag>,
     // last_modified_by: IdentitySet,
     // last_modified_date_time: Timestamp,
-    pub name: String,
+    pub name: Option<String>,
     pub parent_reference: Option<ItemReference>,
-    pub web_url: Url,
+    pub web_url: Option<Url>,
 
     // Instance annotations
     #[serde(rename = "@microsoft.graph.downloadUrl")]
@@ -142,7 +142,7 @@ pub struct DriveItem {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Deleted {
-    pub state: String,
+    pub state: Option<String>,
 }
 
 /// ItemReference resource type
@@ -154,9 +154,9 @@ pub struct Deleted {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemReference {
-    pub drive_id: DriveId,
+    pub drive_id: Option<DriveId>,
     // drive_type: DriveType,
-    pub id: ItemId,
+    pub id: Option<ItemId>,
     // list_id: String,
     pub name: Option<String>,
     pub path: Option<String>,

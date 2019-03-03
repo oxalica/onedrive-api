@@ -1,3 +1,4 @@
+use onedrive_api::query_option::*;
 use onedrive_api::*;
 use reqwest::StatusCode;
 
@@ -40,26 +41,37 @@ fn download(url: &str) -> Vec<u8> {
     buf
 }
 
-/// Max 2 requests.
+/// Max 3 requests.
 ///
 /// # Test
 /// - new()
 ///   - From `me()`.
 ///   - From drive id.
+/// - get_drive()
+///   - Success.
+///   - Failed (select unknow field), with option.
 #[test]
 #[ignore]
 fn test_get_drive() {
-    let drive_id1 = DriveClient::new(TOKEN.clone(), DriveLocation::me())
+    let drive1 = DriveClient::new(TOKEN.clone(), DriveLocation::me())
         .get_drive()
-        .expect("Cannot get drive #1")
-        .id;
+        .expect("Cannot get drive #1");
 
-    let drive_id2 = DriveClient::new(TOKEN.clone(), drive_id1.clone())
-        .get_drive()
-        .expect("Cannot get drive #2")
-        .id;
+    // Default fields.
+    let drive1_id = drive1.id.unwrap();
 
-    assert_eq!(drive_id1, drive_id2);
+    let drive2 = DriveClient::new(TOKEN.clone(), drive1_id.clone())
+        .get_drive_with_option(ObjectOption::new().select(&["id"]))
+        .expect("Cannot get drive #2");
+    assert_eq!(drive1_id, drive2.id.unwrap());
+
+    let ret = DriveClient::new(TOKEN.clone(), drive1_id.clone())
+        .get_drive_with_option(ObjectOption::new().select(&["dram"]));
+    assert_eq!(
+        ret.expect_err("Should fail to select unknow field")
+            .status(),
+        Some(StatusCode::BAD_REQUEST)
+    );
 }
 
 /// Max 8 requests.
@@ -84,9 +96,12 @@ fn test_folder() {
     let folder2_name = gen_filename();
     let folder2_location = rooted_location(folder2_name);
 
-    let folder1 = client
-        .create_folder(ItemLocation::root(), folder1_name)
-        .expect("Failed to create folder");
+    let (folder1_id, folder1_e_tag) = {
+        let c = client
+            .create_folder(ItemLocation::root(), folder1_name)
+            .expect("Failed to create folder");
+        (c.id.unwrap(), c.e_tag.unwrap())
+    };
 
     try_finally(
         || {
@@ -100,18 +115,18 @@ fn test_folder() {
 
             assert!(
                 client
-                    .list_children(&folder1.id, Some(&folder1.e_tag))
+                    .list_children(&folder1_id, Some(&folder1_e_tag))
                     .expect("Failed to list children with tag")
                     .is_none(),
                 "Folder should be 'not modified'",
             );
 
             let folder2 = client
-                .create_folder(&folder1.id, folder2_name)
+                .create_folder(&folder1_id, folder2_name)
                 .expect("Failed to create sub-folder");
 
             let children = client
-                .list_children(&folder1.id, None)
+                .list_children(&folder1_id, None)
                 .expect("Failed to list children")
                 .unwrap();
 
@@ -122,11 +137,11 @@ fn test_folder() {
             assert_eq!(child.e_tag, folder2.e_tag);
         },
         || {
-            client.delete(&folder1.id, None).unwrap();
+            client.delete(&folder1_id, None).unwrap();
         },
     );
 
-    let ret = client.list_children(&folder1.id, None);
+    let ret = client.list_children(&folder1_id, None);
     assert!(ret.is_err(), "Folder should be already deleted");
     assert_eq!(ret.unwrap_err().status(), Some(StatusCode::NOT_FOUND));
 }
@@ -154,7 +169,8 @@ fn test_file_upload_small_and_move() {
     let file1_id = client
         .upload_small(file1_location, CONTENT)
         .expect("Failed to upload small file")
-        .id;
+        .id
+        .unwrap();
 
     let is_moved = std::cell::Cell::new(false);
     let file2_id = try_finally(
@@ -163,7 +179,7 @@ fn test_file_upload_small_and_move() {
                 .move_(&file1_id, ItemLocation::root(), Some(file2_name), None)
                 .expect("Failed to move file");
             is_moved.set(true);
-            file2.id
+            file2.id.unwrap()
         },
         || {
             if !is_moved.get() {
@@ -264,7 +280,8 @@ fn test_file_upload_session() {
         .upload_to_session(&upload_session, &CONTENT[RANGE2], RANGE2, CONTENT.len())
         .expect("Failed to upload part 2")
         .expect("Uploading should be completed")
-        .id;
+        .id
+        .unwrap();
 
     try_finally(
         || {

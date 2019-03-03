@@ -1,5 +1,6 @@
 use self::Error::UnexpectedResponse;
 use crate::error::*;
+use crate::query_option::{CollectionOption, ObjectOption};
 use crate::resource::*;
 use reqwest::{header, Client as RequestClient, RequestBuilder, Response};
 use serde::{de, Deserialize, Serialize};
@@ -435,12 +436,18 @@ impl DriveClient {
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
-    pub fn get_drive(&self) -> Result<Drive> {
+    pub fn get_drive_with_option(&self, option: ObjectOption) -> Result<Drive> {
         self.client
             .get(api_url![&self.drive])
+            .query(&option.params().collect::<Vec<_>>())
             .bearer_auth(&self.token)
             .send()?
             .parse()
+    }
+
+    /// Shortcut to `get_drive_with_option` with default parameters.
+    pub fn get_drive(&self) -> Result<Drive> {
+        self.get_drive_with_option(Default::default())
     }
 
     /// List children of a `DriveItem`
@@ -448,46 +455,36 @@ impl DriveClient {
     /// Return a collection of `DriveItem`s in the children relationship of a `DriveItem`.
     ///
     /// # Note
-    /// Will return `Ok(None)` if `if_none_match` is set and matches the item .
+    /// Will return `Ok(None)` if `if_none_match` is set and matches the item.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0
+    pub fn list_children_with_option<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+        if_none_match: Option<&Tag>,
+        option: CollectionOption,
+    ) -> Result<Option<ListChildrenFetcher>> {
+        Ok(self
+            .client
+            .get(api_url![&self.drive, &item.into(), "children"])
+            .query(&option.params().collect::<Vec<_>>())
+            .bearer_auth(&self.token)
+            .opt_header(header::IF_NONE_MATCH, if_none_match)
+            .send()?
+            .parse_optional()?
+            .map(|resp| ListChildrenFetcher::new(self.client.clone(), resp)))
+    }
+
+    /// Shortcut to `list_children_with_option` with default params and fetch all.
     pub fn list_children<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         if_none_match: Option<&Tag>,
     ) -> Result<Option<Vec<DriveItem>>> {
-        #[derive(Deserialize)]
-        struct Response {
-            value: Vec<DriveItem>,
-            #[serde(rename = "@odata.nextLink")]
-            next_link: Option<String>,
-        }
-
-        let fetch = |url: &str, tag: Option<&Tag>| -> Result<Option<Response>> {
-            self.client
-                .get(url)
-                .bearer_auth(&self.token)
-                .opt_header(header::IF_NONE_MATCH, tag)
-                .send()?
-                .parse_optional()
-        };
-
-        let url = api_url![&self.drive, &item.into(), "children"];
-        match fetch(url.as_ref(), if_none_match)? {
-            None => Ok(None),
-            Some(Response {
-                mut value,
-                mut next_link,
-            }) => {
-                while let Some(link) = next_link {
-                    let resp = fetch(&link, None)?.unwrap(); // No `match_Tag`
-                    value.extend(resp.value);
-                    next_link = resp.next_link;
-                }
-                Ok(Some(value))
-            }
-        }
+        self.list_children_with_option(item.into(), if_none_match, Default::default())?
+            .map(|fetcher| fetcher.fetch_all())
+            .transpose()
     }
 
     /// Get a DriveItem resource
@@ -900,6 +897,59 @@ impl DriveClient {
         })?;
         Ok(TrackStateToken::new(delta_link))
     }
+}
+
+#[derive(Deserialize)]
+struct ListChildrenResponse {
+    value: Vec<DriveItem>,
+    #[serde(rename = "@odata.nextLink")]
+    next_url: Option<String>,
+}
+
+#[derive(Debug)]
+pub struct ListChildrenFetcher {
+    client: reqwest::Client,
+    first_page: Option<Vec<DriveItem>>,
+    next_url: Option<String>,
+}
+
+impl ListChildrenFetcher {
+    fn new(client: reqwest::Client, resp: ListChildrenResponse) -> Self {
+        Self {
+            client,
+            first_page: Some(resp.value),
+            next_url: resp.next_url,
+        }
+    }
+
+    pub fn fetch_all(self) -> Result<Vec<DriveItem>> {
+        try_flat_collect(self)
+    }
+}
+
+impl Iterator for ListChildrenFetcher {
+    type Item = Result<Vec<DriveItem>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(v) = self.first_page.take() {
+            return Some(Ok(v));
+        }
+
+        let url = self.next_url.take()?;
+        let mut fetch = || -> Result<Vec<DriveItem>> {
+            let resp: ListChildrenResponse = self.client.get(&url).send()?.parse()?;
+            self.next_url = resp.next_url;
+            Ok(resp.value)
+        };
+        Some(fetch())
+    }
+}
+
+fn try_flat_collect<T>(mut it: impl Iterator<Item = Result<Vec<T>>>) -> Result<Vec<T>> {
+    it.try_fold(vec![], |mut v, c| {
+        v.append(&mut c?);
+        Ok(v)
+    })
 }
 
 #[derive(Serialize)]
