@@ -436,7 +436,7 @@ impl DriveClient {
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
-    pub fn get_drive_with_option(&self, option: ObjectOption) -> Result<Drive> {
+    pub fn get_drive_with_option(&self, option: ObjectOption<Drive>) -> Result<Drive> {
         self.client
             .get(api_url![&self.drive])
             .query(&option.params().collect::<Vec<_>>())
@@ -463,7 +463,7 @@ impl DriveClient {
         &self,
         item: impl Into<ItemLocation<'a>>,
         if_none_match: Option<&Tag>,
-        option: CollectionOption,
+        option: CollectionOption<DriveItem>,
     ) -> Result<Option<ListChildrenFetcher>> {
         Ok(self
             .client

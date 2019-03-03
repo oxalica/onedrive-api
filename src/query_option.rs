@@ -9,38 +9,48 @@
 //!
 //! # See also
 //! https://docs.microsoft.com/en-us/graph/query-parameters
+use crate::resource::{ResourceFieldOf, ResourceFieldTypeOf};
+use std::default::Default;
 use std::fmt::Write;
+use std::marker::PhantomData;
 
 /// Option for a request to resource object.
-#[derive(Debug, Default)]
-pub struct ObjectOption {
+#[derive(Debug)]
+pub struct ObjectOption<T> {
     select_buf: String,
     expand_buf: String,
+    _marker: PhantomData<Fn(&T)>,
 }
 
-impl ObjectOption {
+impl<T> ObjectOption<T> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            select_buf: String::new(),
+            expand_buf: String::new(),
+            _marker: PhantomData,
+        }
     }
 
-    pub fn select(mut self, fields: &[&str]) -> Self {
+    pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
         for sel in fields {
-            write!(self.select_buf, ",{}", sel).unwrap();
+            write!(self.select_buf, ",{}", sel.api_field_name()).unwrap();
         }
         self
     }
 
-    pub fn expand(mut self, field: &str, select_children: Option<&[&str]>) -> Self {
+    pub fn expand<Field: ResourceFieldTypeOf<T>>(
+        mut self,
+        field: Field,
+        select_children: Option<&[&dyn ResourceFieldOf<Field>]>,
+    ) -> Self {
         let buf = &mut self.expand_buf;
-        match select_children {
-            None => write!(buf, ",{}", field).unwrap(),
-            Some(children) => {
-                write!(buf, ",{}($select=", field).unwrap();
-                for sel in children {
-                    write!(buf, "{},", sel).unwrap();
-                }
-                write!(buf, ")").unwrap();
+        write!(buf, ",{}", field.api_field_name()).unwrap();
+        if let Some(children) = select_children {
+            write!(buf, "($select=").unwrap();
+            for sel in children {
+                write!(buf, "{},", sel.api_field_name()).unwrap();
             }
+            write!(buf, ")").unwrap();
         }
         self
     }
@@ -52,36 +62,51 @@ impl ObjectOption {
     }
 }
 
+impl<T> Default for ObjectOption<T> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Option for the request to a collection of resource objects.
-#[derive(Debug, Default)]
-pub struct CollectionOption {
-    q: ObjectOption,
+#[derive(Debug)]
+pub struct CollectionOption<T> {
+    q: ObjectOption<T>,
     order_buf: Option<String>,
     page_size_buf: Option<String>,
     get_count_buf: Option<bool>,
 }
 
-impl CollectionOption {
+impl<T> CollectionOption<T> {
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            q: Default::default(),
+            order_buf: None,
+            page_size_buf: None,
+            get_count_buf: None,
+        }
     }
 
-    pub fn select(mut self, fields: &[&str]) -> Self {
+    pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
         self.q = self.q.select(fields);
         self
     }
 
-    pub fn expand(mut self, field: &str, select_children: Option<&[&str]>) -> Self {
+    pub fn expand<Field: ResourceFieldTypeOf<T>>(
+        mut self,
+        field: Field,
+        select_children: Option<&[&dyn ResourceFieldOf<Field>]>,
+    ) -> Self {
         self.q = self.q.expand(field, select_children);
         self
     }
 
-    pub fn order_by(mut self, field: &str, order: Order) -> Self {
+    pub fn order_by<Field: ResourceFieldOf<T>>(mut self, field: Field, order: Order) -> Self {
         let order = match order {
             Order::Ascending => "asc",
             Order::Descending => "desc",
         };
-        self.order_buf = Some(format!("{} {}", field, order));
+        self.order_buf = Some(format!("{} {}", field.api_field_name(), order));
         self
     }
 
@@ -104,6 +129,12 @@ impl CollectionOption {
                 self.get_count_buf
                     .map(|v| ("$count", if v { "true" } else { "false" })),
             )
+    }
+}
+
+impl<T> Default for CollectionOption<T> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

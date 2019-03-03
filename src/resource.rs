@@ -41,126 +41,206 @@ define_string_wrapper! {
     pub Tag;
 }
 
-/// Drive resource type
-///
-/// The drive resource is the top level object representing a user's OneDrive
-/// or a document library in SharePoint.
-///
-/// # See also
-/// https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Drive {
-    // TODO: Incomplete
-    pub id: Option<DriveId>,
-    // created_by: IdentitySet,
-    // created_date_time: Timestamp,
-    pub description: Option<String>,
-    // drive_type: DriveType,
-    pub items: Option<Vec<DriveItem>>,
-    // last_modified_by: IdeneitySet,
-    // last_modified_date_time: Timestamp,
-    pub name: Option<String>,
-    // owner: IdentitySet,
-    // quota: Quota,
-    // root: DriveItem,
-    // sharepoint_ids: SharepointIds,
-    pub special: Option<DriveItem>,
-    // system: SystemFacet,
-    pub web_url: Option<Url>,
+pub trait ResourceFieldOf<T> {
+    fn api_field_name(&self) -> &'static str;
 }
 
-/// DriveItem resource type
-///
-/// The `DriveItem` resource represents a file, folder, or other item stored in a drive.
-/// All file system objects in OneDrive and SharePoint are returned as `DriveItem` resources.
-///
-/// # See also
-/// https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DriveItem {
-    // TODO: Incomplete
-    // Type specified fields
-
-    // audio: Audio,
-    // content: Stream,
-    // file: File,
-    // folder: Folder,
-    // image: Image,
-    // location: Option<GeoCoordinations>,
-    // malware: Option<Malware>,
-    // package: Package,
-    // photo: Photo,
-    // root: Root,
-    // special_folder: SpecialFolder,
-    // video: Video,
-
-    // Drive item
-    // c_tag: Option<Tag>,
-    pub deleted: Option<Deleted>,
-    pub description: Option<String>,
-    // pub file_system_info: FileSystemInfo,
-    // publication: Option<PublicationFacet>,
-    // remote_item: Option<RemoteItem>,
-    // search_result: Option<SearchResult>,
-    // shared: Shared,
-    // sharepoint_ids: SharepointIds,
-    pub size: Option<FileSize>,
-    // web_dav_url: Url,
-
-    // Relationships
-
-    // activities: Vec<ItemActivity>,
-    pub children: Option<Vec<DriveItem>>,
-    // permissions: Vec<Permission>,
-    // thumbnails: Vec<ThumbnailSet>,
-    // versions: Vec<DriveItemVersion>,
-
-    // Base item
-    pub id: Option<ItemId>,
-    // created_by: IdentitySet,
-    // created_date_time: Timestamp,
-    pub e_tag: Option<Tag>,
-    // last_modified_by: IdentitySet,
-    // last_modified_date_time: Timestamp,
-    pub name: Option<String>,
-    pub parent_reference: Option<ItemReference>,
-    pub web_url: Option<Url>,
-
-    // Instance annotations
-    #[serde(rename = "@microsoft.graph.downloadUrl")]
-    pub download_url: Option<Url>,
+// Separate `type` to enable making `ResoucrFieldOf` into trait object.
+pub trait ResourceFieldTypeOf<T>: ResourceFieldOf<T> {
+    type Type;
 }
 
-/// Deleted facet
-///
-/// The `Deleted` resource indicates that the item has been deleted.
-///
-/// # See also
-/// https://docs.microsoft.com/en-us/graph/api/resources/deleted?view=graph-rest-1.0
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Deleted {
-    pub state: Option<String>,
+macro_rules! define_resource_object {
+    ($(
+        $(#[$meta:meta])*
+        $vis:vis struct $struct_name:ident $(#$field_mod_name:ident)? {
+            $(
+                $(#[$field_meta:meta])*
+                $([unselectable $($unselectable_mark:ident)?])?
+                pub $field_name:ident $(@$field_rename:literal)?: Option<$field_ty:ty>,
+            )*
+        }
+    )*) => {
+        $(
+            $(#[$meta])*
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase")]
+            $vis struct $struct_name {
+                $(
+                    $(#[$field_meta])*
+                    $(#[serde(rename = $field_rename)])?
+                    pub $field_name: Option<$field_ty>,
+                )*
+                #[serde(default)]
+                _private: (),
+            }
+
+            define_resource_object! { __impl_struct($struct_name $($field_mod_name)?) [
+                $({
+                    [$(unselectable $($unselectable_mark)?)?]
+                    [$($field_meta)*]
+                    $field_name
+                    ($($field_rename)?)
+                    ($field_ty)
+                })*
+            ] }
+        )*
+    };
+    (__impl_struct($struct_name:ident) $tt:tt) => {}; // No field mod.
+    (__impl_struct($struct_name:ident $field_mod_name:ident) [$({
+        [$($unselectable:ident)?]
+        [$($meta:meta)*]
+        $field:ident
+        ($($rename:literal)?)
+        ($ty:ty)
+    })*]) => {
+        #[allow(non_snake_case)]
+        pub mod $field_mod_name {
+            $(
+                define_resource_object! { __impl_if_empty($($unselectable)?) {
+                    #[allow(non_camel_case_types)]
+                    pub struct $field;
+                } }
+            )*
+        }
+
+        $(
+            define_resource_object! { __impl_if_empty($($unselectable)?) {
+                impl ResourceFieldOf<$struct_name> for $field_mod_name::$field {
+                    fn api_field_name(&self) -> &'static str {
+                        stringify!($field)
+                        $(; $rename)? // Replace
+                    }
+                }
+
+                impl ResourceFieldTypeOf<$struct_name> for $field_mod_name::$field {
+                    type Type = $ty;
+                }
+            } }
+        )*
+    };
+    (__impl_if_empty() { $($tt:tt)* }) => { $($tt)* };
+    (__impl_if_empty($sth:tt) $tt:tt) => {};
 }
 
-/// ItemReference resource type
-///
-/// The `ItemReference` resource provides information necessary to address a `DriveItem` via the API.
-///
-/// # See also
-/// https://docs.microsoft.com/en-us/graph/api/resources/itemreference?view=graph-rest-1.0
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ItemReference {
-    pub drive_id: Option<DriveId>,
-    // drive_type: DriveType,
-    pub id: Option<ItemId>,
-    // list_id: String,
-    pub name: Option<String>,
-    pub path: Option<String>,
-    // shared_id: String,
-    // sharepoint_ids: SharepointIds,
-    // site_id: String,
+define_resource_object! {
+    /// Drive resource type
+    ///
+    /// The drive resource is the top level object representing a user's OneDrive
+    /// or a document library in SharePoint.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0
+    #[derive(Debug)]
+    pub struct Drive #DriveField {
+        // TODO: Incomplete
+        pub id: Option<DriveId>,
+        // created_by: IdentitySet,
+        // created_date_time: Timestamp,
+        pub description: Option<String>,
+        // drive_type: DriveType,
+        pub items: Option<Vec<DriveItem>>,
+        // last_modified_by: IdeneitySet,
+        // last_modified_date_time: Timestamp,
+        pub name: Option<String>,
+        // owner: IdentitySet,
+        // quota: Quota,
+        // root: DriveItem,
+        // sharepoint_ids: SharepointIds,
+        pub special: Option<DriveItem>,
+        // system: SystemFacet,
+        pub web_url: Option<Url>,
+    }
+
+    /// DriveItem resource type
+    ///
+    /// The `DriveItem` resource represents a file, folder, or other item stored in a drive.
+    /// All file system objects in OneDrive and SharePoint are returned as `DriveItem` resources.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0
+    #[derive(Debug)]
+    pub struct DriveItem #DriveItemField {
+        // TODO: Incomplete
+        // Type specified fields
+
+        // audio: Audio,
+        // content: Stream,
+        // file: File,
+        // folder: Folder,
+        // image: Image,
+        // location: Option<GeoCoordinations>,
+        // malware: Option<Malware>,
+        // package: Package,
+        // photo: Photo,
+        // root: Root,
+        // special_folder: SpecialFolder,
+        // video: Video,
+
+        // Drive item
+        // c_tag: Option<Tag>,
+        pub deleted: Option<Deleted>,
+        pub description: Option<String>,
+        // pub file_system_info: FileSystemInfo,
+        // publication: Option<PublicationFacet>,
+        // remote_item: Option<RemoteItem>,
+        // search_result: Option<SearchResult>,
+        // shared: Shared,
+        // sharepoint_ids: SharepointIds,
+        pub size: Option<FileSize>,
+        // web_dav_url: Url,
+
+        // Relationships
+
+        // activities: Vec<ItemActivity>,
+        pub children: Option<Vec<DriveItem>>,
+        // permissions: Vec<Permission>,
+        // thumbnails: Vec<ThumbnailSet>,
+        // versions: Vec<DriveItemVersion>,
+
+        // Base item
+        pub id: Option<ItemId>,
+        // created_by: IdentitySet,
+        // created_date_time: Timestamp,
+        pub e_tag: Option<Tag>,
+        // last_modified_by: IdentitySet,
+        // last_modified_date_time: Timestamp,
+        pub name: Option<String>,
+        pub parent_reference: Option<ItemReference>,
+        pub web_url: Option<Url>,
+
+        // Instance annotations
+        [unselectable]
+        pub download_url @"@microsoft.graph.downloadUrl": Option<Url>,
+    }
+
+    /// Deleted facet
+    ///
+    /// The `Deleted` resource indicates that the item has been deleted.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/resources/deleted?view=graph-rest-1.0
+    #[derive(Debug, Serialize)]
+    pub struct Deleted {
+        pub state: Option<String>,
+    }
+
+    /// ItemReference resource type
+    ///
+    /// The `ItemReference` resource provides information necessary to address a `DriveItem` via the API.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/api/resources/itemreference?view=graph-rest-1.0
+    #[derive(Debug, Serialize)]
+    pub struct ItemReference {
+        pub drive_id: Option<DriveId>,
+        // drive_type: DriveType,
+        pub id: Option<ItemId>,
+        // list_id: String,
+        pub name: Option<String>,
+        pub path: Option<String>,
+        // shared_id: String,
+        // sharepoint_ids: SharepointIds,
+        // site_id: String,
+    }
 }

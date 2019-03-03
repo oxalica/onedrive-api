@@ -1,4 +1,5 @@
 use onedrive_api::query_option::*;
+use onedrive_api::resource::*;
 use onedrive_api::*;
 use reqwest::StatusCode;
 
@@ -41,7 +42,7 @@ fn download(url: &str) -> Vec<u8> {
     buf
 }
 
-/// Max 3 requests.
+/// Max 2 requests.
 ///
 /// # Test
 /// - new()
@@ -49,7 +50,6 @@ fn download(url: &str) -> Vec<u8> {
 ///   - From drive id.
 /// - get_drive()
 ///   - Success.
-///   - Failed (select unknow field), with option.
 #[test]
 #[ignore]
 fn test_get_drive() {
@@ -61,17 +61,9 @@ fn test_get_drive() {
     let drive1_id = drive1.id.unwrap();
 
     let drive2 = DriveClient::new(TOKEN.clone(), drive1_id.clone())
-        .get_drive_with_option(ObjectOption::new().select(&["id"]))
+        .get_drive_with_option(ObjectOption::new().select(&[&DriveField::id]))
         .expect("Cannot get drive #2");
     assert_eq!(drive1_id, drive2.id.unwrap());
-
-    let ret = DriveClient::new(TOKEN.clone(), drive1_id.clone())
-        .get_drive_with_option(ObjectOption::new().select(&["dram"]));
-    assert_eq!(
-        ret.expect_err("Should fail to select unknow field")
-            .status(),
-        Some(StatusCode::BAD_REQUEST)
-    );
 }
 
 /// Max 8 requests.
