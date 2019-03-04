@@ -2,6 +2,8 @@ use onedrive_api::query_option::*;
 use onedrive_api::resource::*;
 use onedrive_api::*;
 use reqwest::StatusCode;
+use std::collections::{HashMap, HashSet};
+use std::iter::{empty, FromIterator};
 
 use crate::login_setting::TOKEN;
 
@@ -325,7 +327,7 @@ fn test_file_upload_session() {
     );
 }
 
-/// Max 8 requests.
+/// Max 7 requests.
 ///
 /// # Test
 /// - create_folder()
@@ -353,7 +355,7 @@ fn test_list_children() {
 
     try_finally(
         || {
-            let mut files: std::collections::HashMap<String, Tag> = (0..TOTAL_COUNT)
+            let mut files: HashMap<String, Tag> = (0..TOTAL_COUNT)
                 .map(|i| {
                     let name = gen_filename();
                     let item = client
@@ -387,10 +389,10 @@ fn test_list_children() {
                 assert_eq!(etags_of(&page_), etags_of(&expected));
             };
 
-            let url1 = fetcher.get_next_url().unwrap().to_owned();
+            // Cannot get next_url for the first page.
+            assert!(fetcher.get_next_url().is_none());
             let page1 = fetcher.next().unwrap().expect("Failed to fetch page 1");
             assert_eq!(page1.len(), PAGE1_COUNT);
-            check_page_eq(url1, &page1);
 
             let url2 = fetcher.get_next_url().unwrap().to_owned();
             let page2 = fetcher.next().unwrap().expect("Failed to fetch page 2");
@@ -399,9 +401,10 @@ fn test_list_children() {
 
             assert!(fetcher.get_next_url().is_none());
             assert!(fetcher.next().is_none());
+            assert!(fetcher.get_next_url().is_none());
             assert!(fetcher.next().is_none()); // Check fused.
 
-            std::iter::empty()
+            empty()
                 .chain(page1.iter())
                 .chain(page2.iter())
                 .for_each(|item| {
@@ -416,6 +419,108 @@ fn test_list_children() {
         || {
             client
                 .delete(folder_location, None)
+                .expect("Failed to delete container folder");
+        },
+    );
+}
+
+/// Max >=9 requests
+///
+/// - create_folder()
+///   - Success.
+/// - track_changes()
+///   - Success, with option.
+///   - Success.
+/// - get_latest_track_change_delta_url()
+///   - Success.
+/// - delete()
+///   - Success, folder.
+#[test]
+#[ignore]
+fn test_track_changes() {
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+
+    let container_id = client
+        .create_folder(ItemLocation::root(), gen_filename())
+        .expect("Failed to create container folder")
+        .id
+        .unwrap();
+    let container_location = ItemLocation::from_id(&container_id);
+
+    try_finally(
+        || {
+            let folder1_id = client
+                .create_folder(container_location, gen_filename())
+                .expect("Failed to create folder1")
+                .id
+                .unwrap();
+            let folder2_id = client
+                .create_folder(container_location, gen_filename())
+                .expect("Failed to create folder2")
+                .id
+                .unwrap();
+
+            let mut fetcher = client
+                .track_changes_with_option(
+                    container_location,
+                    None,
+                    CollectionOption::new()
+                        .select(&[&DriveItemField::id])
+                        .page_size(1),
+                )
+                .expect("Failed to track initial changes");
+
+            assert!(fetcher.get_delta_url().is_none());
+            assert!(fetcher.get_next_url().is_none()); // None for the first page.
+
+            let mut delta_ids = HashSet::new();
+            for (i, items) in fetcher.by_ref().enumerate() {
+                for item in
+                    items.unwrap_or_else(|e| panic!("Failed to fetch page {}: {}", i + 1, e))
+                {
+                    assert!(item.e_tag.is_none()); // Not selected.
+                                                   // Items may duplicate.
+                                                   // See: https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#remarks
+                    delta_ids.insert(item.id.unwrap());
+                }
+            }
+            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next().is_none()); // Assert fused.
+
+            // Note that the one of the item is the root folder itself.
+            assert_eq!(
+                delta_ids,
+                HashSet::from_iter(vec![
+                    container_id.clone(),
+                    folder1_id.clone(),
+                    folder2_id.clone()
+                ]),
+            );
+
+            assert!(fetcher.get_delta_url().is_some());
+            let delta_url = client
+                .get_latest_track_change_delta_url(container_location)
+                .expect("Failed to get latest track change delta url");
+
+            let folder3_id = client
+                .create_folder(ItemLocation::from_id(&folder1_id), gen_filename())
+                .expect("Failed to create folder3")
+                .id
+                .unwrap();
+
+            let (v, _) = client
+                .track_changes(container_location, Some(&delta_url))
+                .expect("Failed to track changes with delta url");
+            assert_eq!(
+                v.into_iter()
+                    .map(|item| item.id.unwrap())
+                    .collect::<HashSet<_>>(),
+                HashSet::from_iter(vec![container_id.clone(), folder1_id, folder3_id]),
+            );
+        },
+        || {
+            client
+                .delete(container_location, None)
                 .expect("Failed to delete container folder");
         },
     );

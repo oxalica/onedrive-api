@@ -465,25 +465,18 @@ impl DriveClient {
         if_none_match: Option<&Tag>,
         option: CollectionOption<DriveItem>,
     ) -> Result<Option<ListChildrenFetcher>> {
-        let mut url: Url = api_url![&self.drive, &item.into(), "children"];
-        url.query_pairs_mut()
-            .extend_pairs(&option.params().collect::<Vec<_>>());
-        let url_str = url.to_string();
-        Ok(self
-            .client
-            .get(url)
+        self.client
+            .get(api_url![&self.drive, &item.into(), "children"])
+            .query(&option.params().collect::<Vec<_>>())
             .bearer_auth(&self.token)
             .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
-            .parse_optional()?
-            .map(|resp| {
-                ListChildrenFetcher::from_first_page(
-                    self.client.clone(),
-                    self.token.clone(),
-                    url_str,
-                    resp,
-                )
-            }))
+            .parse_optional()
+            .map(|opt_resp| {
+                opt_resp.map(|resp| {
+                    ListChildrenFetcher::new(self.client.clone(), self.token.clone(), resp)
+                })
+            })
     }
 
     /// Shortcut to `list_children_with_option` with default params and fetch all.
@@ -501,7 +494,11 @@ impl DriveClient {
     ///
     /// `url` should be get from `ListChildrenFetcher::get_next_url()`
     pub fn resume_list_children(&self, url: String) -> ListChildrenFetcher {
-        ListChildrenFetcher::from_url(self.client.clone(), self.token.clone(), url)
+        ListChildrenFetcher::new(
+            self.client.clone(),
+            self.token.clone(),
+            DriveItemCollectionResponse::from_url(url),
+        )
     }
 
     /// Get a DriveItem resource
@@ -666,16 +663,14 @@ impl DriveClient {
             // expiration_date_time: Timestamp,
         }
 
-        let resp = self
-            .client
+        self.client
             .get(upload_url)
             .send()?
-            .parse::<UploadSessionResponse>()?;
-
-        Ok(UploadSession {
-            upload_url: resp.upload_url.unwrap_or_else(|| upload_url.to_owned()),
-            next_expected_ranges: resp.next_expected_ranges,
-        })
+            .parse::<UploadSessionResponse>()
+            .map(|resp| UploadSession {
+                upload_url: upload_url.to_owned(),
+                next_expected_ranges: resp.next_expected_ranges,
+            })
     }
 
     /// Cancel the upload session
@@ -872,98 +867,155 @@ impl DriveClient {
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
+    pub fn track_changes_with_option<'a>(
+        &self,
+        folder: impl Into<ItemLocation<'a>>,
+        previous_delta_url: Option<&str>,
+        option: CollectionOption<DriveItem>,
+    ) -> Result<TrackChangeFetcher> {
+        previous_delta_url
+            .map_or_else(
+                || {
+                    self.client
+                        .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
+                },
+                |url| self.client.get(url),
+            )
+            .query(&option.params().collect::<Vec<_>>())
+            .bearer_auth(&self.token)
+            .send()?
+            .parse()
+            .map(|resp| TrackChangeFetcher::new(self.client.clone(), self.token.clone(), resp))
+    }
+
+    /// Shortcut to `track_changes_with_option` with default parameters and fetch all.
+    ///
+    /// Return all changes and delta_url.
     pub fn track_changes<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
-        previous_state: Option<&TrackStateToken>,
-    ) -> Result<(Vec<DriveItem>, TrackStateToken)> {
-        use std::borrow::Cow;
+        previous_delta_url: Option<&str>,
+    ) -> Result<(Vec<DriveItem>, String)> {
+        self.track_changes_with_option(folder.into(), previous_delta_url, Default::default())?
+            .fetch_all()
+    }
 
-        let mut url = match previous_state {
-            Some(state) => Cow::Borrowed(state.get_delta_link()), // Including param `token`
-            None => Cow::Owned(api_url![&self.drive, &folder.into(), "delta"].into_string()),
-        };
-
-        let mut changes = vec![];
-        loop {
-            let resp = self
-                .client
-                .get(url.as_ref())
-                .bearer_auth(&self.token)
-                .send()?
-                .parse::<DeltaResponse>()?;
-            changes.extend(resp.value);
-            match resp.next_link {
-                Some(next) => url = Cow::Owned(next),
-                None => {
-                    let delta_link = resp.delta_link.ok_or_else(|| UnexpectedResponse {
-                        reason: "Missing field `delta_link`",
-                    })?;
-                    return Ok((changes, TrackStateToken::new(delta_link)));
-                }
-            }
-        }
+    pub fn resume_track_changes(&self, next_url: String) -> TrackChangeFetcher {
+        TrackChangeFetcher::new(
+            self.client.clone(),
+            self.token.clone(),
+            DriveItemCollectionResponse::from_url(next_url),
+        )
     }
 
     /// Get the state token for the current state.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
-    pub fn get_latest_track_state<'a>(
+    pub fn get_latest_track_change_delta_url<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
-    ) -> Result<TrackStateToken> {
-        let resp = self
-            .client
-            .get(api_url![&self.drive, &folder.into(), "delta"])
-            .form(&[("token", "latest")])
+    ) -> Result<String> {
+        self.client
+            .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
+            .query(&[("token", "latest")])
             .bearer_auth(&self.token)
             .send()?
-            .parse::<DeltaResponse>()?;
-        let delta_link = resp.delta_link.ok_or_else(|| UnexpectedResponse {
-            reason: "Missing field `delta_link`",
-        })?;
-        Ok(TrackStateToken::new(delta_link))
+            .parse()
+            .and_then(|resp: DriveItemCollectionResponse| {
+                resp.delta_url.ok_or_else(|| Error::UnexpectedResponse {
+                    reason: "Missing field `@odata.deltaLink` for getting latest delta",
+                })
+            })
     }
 }
 
-#[derive(Deserialize)]
-struct ListChildrenResponse {
-    value: Vec<DriveItem>,
+#[derive(Debug, Deserialize)]
+struct DriveItemCollectionResponse {
+    value: Option<Vec<DriveItem>>,
     #[serde(rename = "@odata.nextLink")]
     next_url: Option<String>,
+    #[serde(rename = "@odata.deltaLink")]
+    delta_url: Option<String>,
+}
+
+impl DriveItemCollectionResponse {
+    fn from_url(url: String) -> Self {
+        Self {
+            value: None,
+            next_url: Some(url),
+            delta_url: None,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct DriveItemFetcher {
+    client: reqwest::Client,
+    token: String,
+    response: DriveItemCollectionResponse,
+}
+
+impl DriveItemFetcher {
+    fn get_next_url(&self) -> Option<&str> {
+        match (&self.response.value, &self.response.next_url) {
+            (None, Some(url)) => Some(url),
+            _ => None,
+        }
+    }
+
+    fn fetch_next(&mut self) -> Option<Result<Vec<DriveItem>>> {
+        if let Some(v) = self.response.value.take() {
+            return Some(Ok(v));
+        }
+
+        // Not `take` here. Will remain unchanged if failed to fetch.
+        let url = self.response.next_url.as_ref()?;
+        match (|| {
+            self.client
+                .get(url)
+                .bearer_auth(&self.token)
+                .send()?
+                .parse::<DriveItemCollectionResponse>()
+        })() {
+            Err(err) => Some(Err(err)),
+            Ok(DriveItemCollectionResponse {
+                next_url: Some(_),
+                value: None,
+                ..
+            }) => Some(Err(Error::UnexpectedResponse {
+                reason: "Missing field `value` when not finished",
+            })),
+            Ok(resp) => {
+                self.response = resp;
+                Some(Ok(self.response.value.take()?))
+            }
+        }
+    }
+
+    fn fetch_all(&mut self) -> Result<Vec<DriveItem>> {
+        let mut buf = vec![];
+        while let Some(ret) = self.fetch_next() {
+            buf.append(&mut ret?);
+        }
+        Ok(buf)
+    }
 }
 
 /// The page fetcher for `list_children` operation with `Iterator` interface.
 #[derive(Debug)]
 pub struct ListChildrenFetcher {
-    client: reqwest::Client,
-    token: String,
-    first_page: Option<(Vec<DriveItem>, String)>,
-    next_url: Option<String>,
+    fetcher: DriveItemFetcher,
 }
 
 impl ListChildrenFetcher {
-    fn from_first_page(
-        client: reqwest::Client,
-        token: String,
-        url: String,
-        resp: ListChildrenResponse,
-    ) -> Self {
+    fn new(client: reqwest::Client, token: String, response: DriveItemCollectionResponse) -> Self {
         Self {
-            client,
-            token,
-            first_page: Some((resp.value, url)),
-            next_url: resp.next_url,
-        }
-    }
-
-    fn from_url(client: reqwest::Client, token: String, url: String) -> Self {
-        Self {
-            client,
-            token,
-            first_page: None,
-            next_url: Some(url),
+            fetcher: DriveItemFetcher {
+                client,
+                token,
+                response,
+            },
         }
     }
 
@@ -978,10 +1030,7 @@ impl ListChildrenFetcher {
     /// reconstructed through url will lose the cache and will cause one more request
     /// when called `next`.
     pub fn get_next_url(&self) -> Option<&str> {
-        match (&self.first_page, &self.next_url) {
-            (Some((_, url)), _) | (None, Some(url)) => Some(&**url),
-            (None, None) => None,
-        }
+        self.fetcher.get_next_url()
     }
 
     /// Fetch all rest pages and return all items concated.
@@ -991,8 +1040,8 @@ impl ListChildrenFetcher {
     ///
     /// Note that you will lose all progress unless all requests are success,
     /// so it is preferred to use `Iterator::next` to make it more error-tolerant.
-    pub fn fetch_all(self) -> Result<Vec<DriveItem>> {
-        try_flat_collect(self)
+    pub fn fetch_all(mut self) -> Result<Vec<DriveItem>> {
+        self.fetcher.fetch_all()
     }
 }
 
@@ -1000,64 +1049,64 @@ impl Iterator for ListChildrenFetcher {
     type Item = Result<Vec<DriveItem>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some((v, _)) = self.first_page.take() {
-            return Some(Ok(v));
-        }
-
-        let url = self.next_url.as_ref()?; // Not `take` here. Will remain unchanged if failed.
-        let fetch = || {
-            let ListChildrenResponse { value, next_url } = self
-                .client
-                .get(url)
-                .bearer_auth(&self.token)
-                .send()?
-                .parse()?;
-            Ok((value, next_url))
-        };
-        Some(fetch().map(|(value, next_url)| {
-            self.next_url = next_url;
-            value
-        }))
+        self.fetcher.fetch_next()
     }
 }
 
-fn try_flat_collect<T>(mut it: impl Iterator<Item = Result<Vec<T>>>) -> Result<Vec<T>> {
-    it.try_fold(vec![], |mut v, c| {
-        v.append(&mut c?);
-        Ok(v)
-    })
+#[derive(Debug)]
+pub struct TrackChangeFetcher {
+    fetcher: DriveItemFetcher,
+}
+
+impl TrackChangeFetcher {
+    fn new(client: reqwest::Client, token: String, response: DriveItemCollectionResponse) -> Self {
+        Self {
+            fetcher: DriveItemFetcher {
+                client,
+                token,
+                response,
+            },
+        }
+    }
+
+    pub fn get_next_url(&self) -> Option<&str> {
+        self.fetcher.get_next_url()
+    }
+
+    pub fn get_delta_url(&self) -> Option<&str> {
+        match &self.fetcher.response {
+            DriveItemCollectionResponse {
+                value: None,
+                delta_url: Some(url),
+                ..
+            } => Some(url),
+            _ => None,
+        }
+    }
+
+    pub fn fetch_all(mut self) -> Result<(Vec<DriveItem>, String)> {
+        let v = self.fetcher.fetch_all()?;
+        // Must not be None if `fetch_all` succeed.
+        Ok((v, self.fetcher.response.delta_url.unwrap()))
+    }
+}
+
+impl Iterator for TrackChangeFetcher {
+    type Item = Result<Vec<DriveItem>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.fetcher.fetch_next(), &self.fetcher.response.delta_url) {
+            (None, None) => Some(Err(Error::UnexpectedResponse {
+                reason: "Missing field `@odata.deltaLink` for the last page",
+            })),
+            (ret, _) => ret,
+        }
+    }
 }
 
 #[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
 struct ItemReference<'a> {
     path: &'a str,
-}
-
-#[derive(Deserialize)]
-struct DeltaResponse {
-    value: Vec<DriveItem>,
-    #[serde(rename = "@odata.nextLink")]
-    next_link: Option<String>,
-    #[serde(rename = "@odata.deltaLink")]
-    delta_link: Option<String>,
-}
-
-/// Representing a state of a drive or folder. Used in `Client::track_changes`.
-#[derive(Debug)]
-pub struct TrackStateToken {
-    // TODO: Extract and store the token only
-    delta_link: String,
-}
-
-impl TrackStateToken {
-    pub fn new(delta_link: String) -> Self {
-        TrackStateToken { delta_link }
-    }
-
-    pub fn get_delta_link(&self) -> &str {
-        &self.delta_link
-    }
 }
 
 #[derive(Debug, Deserialize)]
