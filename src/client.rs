@@ -472,11 +472,7 @@ impl DriveClient {
             .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
             .parse_optional()
-            .map(|opt_resp| {
-                opt_resp.map(|resp| {
-                    ListChildrenFetcher::new(self.client.clone(), self.token.clone(), resp)
-                })
-            })
+            .map(|opt_resp| opt_resp.map(|resp| ListChildrenFetcher::new(self, resp)))
     }
 
     /// Shortcut to `list_children_with_option` with default params and fetch all.
@@ -488,17 +484,6 @@ impl DriveClient {
         self.list_children_with_option(item.into(), if_none_match, Default::default())?
             .map(|fetcher| fetcher.fetch_all())
             .transpose()
-    }
-
-    /// Resume a process of `list_children(_with_option)`.
-    ///
-    /// `url` should be get from `ListChildrenFetcher::get_next_url()`
-    pub fn resume_list_children(&self, url: String) -> ListChildrenFetcher {
-        ListChildrenFetcher::new(
-            self.client.clone(),
-            self.token.clone(),
-            DriveItemCollectionResponse::from_url(url),
-        )
     }
 
     /// Get a DriveItem resource
@@ -852,7 +837,7 @@ impl DriveClient {
             .parse_no_content()
     }
 
-    /// Track changes for a Drive
+    /// Track changes for a folder from initial state (empty state) to snapshot of current states.
     ///
     /// This method allows your app to track changes to a drive and its children over time.
     /// Deleted items are returned with the deleted facet. Items with this property set
@@ -862,60 +847,52 @@ impl DriveClient {
     /// syncing all the changes.
     ///
     /// # Return
-    /// The changes from `previous_state` (None for oldest empty state) to now, and
-    /// a token for current state.
+    /// The fetcher for fetching all changes from initial state (empty) to the snapshot of
+    /// current states.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
-    pub fn track_changes_with_option<'a>(
+    pub fn track_changes_from_initial_with_option<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
-        previous_delta_url: Option<&str>,
         option: CollectionOption<DriveItem>,
     ) -> Result<TrackChangeFetcher> {
-        previous_delta_url
-            .map_or_else(
-                || {
-                    self.client
-                        .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
-                },
-                |url| self.client.get(url),
-            )
+        self.client
+            .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
             .query(&option.params().collect::<Vec<_>>())
             .bearer_auth(&self.token)
             .send()?
             .parse()
-            .map(|resp| TrackChangeFetcher::new(self.client.clone(), self.token.clone(), resp))
+            .map(|resp| TrackChangeFetcher::new(self, resp))
     }
 
-    /// Shortcut to `track_changes_with_option` with default parameters and fetch all.
-    ///
-    /// Return all changes and delta_url.
-    pub fn track_changes<'a>(
+    /// Shortcut to `track_changes_from_initial_with_option` with default parameters.
+    pub fn track_changes_from_initial<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
-        previous_delta_url: Option<&str>,
     ) -> Result<(Vec<DriveItem>, String)> {
-        self.track_changes_with_option(folder.into(), previous_delta_url, Default::default())?
+        self.track_changes_from_initial_with_option(folder.into(), Default::default())?
             .fetch_all()
     }
 
-    pub fn resume_track_changes(&self, next_url: String) -> TrackChangeFetcher {
-        TrackChangeFetcher::new(
-            self.client.clone(),
-            self.token.clone(),
-            DriveItemCollectionResponse::from_url(next_url),
-        )
+    /// Track changes for a folder from snapshot (delta url) to snapshot of current states.
+    ///
+    /// # See also
+    /// `track_changes_from_initial_with_option()`
+    pub fn track_changes_from_delta_url(&self, delta_url: &str) -> Result<TrackChangeFetcher> {
+        self.client
+            .get(delta_url)
+            .bearer_auth(&self.token)
+            .send()?
+            .parse()
+            .map(|resp| TrackChangeFetcher::new(self, resp))
     }
 
-    /// Get the state token for the current state.
+    /// Get a delta url representing the snapshot of current states.
     ///
     /// # See also
     /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
-    pub fn get_latest_track_change_delta_url<'a>(
-        &self,
-        folder: impl Into<ItemLocation<'a>>,
-    ) -> Result<String> {
+    pub fn get_latest_delta_url<'a>(&self, folder: impl Into<ItemLocation<'a>>) -> Result<String> {
         self.client
             .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
             .query(&[("token", "latest")])
@@ -939,16 +916,6 @@ struct DriveItemCollectionResponse {
     delta_url: Option<String>,
 }
 
-impl DriveItemCollectionResponse {
-    fn from_url(url: String) -> Self {
-        Self {
-            value: None,
-            next_url: Some(url),
-            delta_url: None,
-        }
-    }
-}
-
 #[derive(Debug)]
 struct DriveItemFetcher {
     client: reqwest::Client,
@@ -957,6 +924,14 @@ struct DriveItemFetcher {
 }
 
 impl DriveItemFetcher {
+    fn new(client: &DriveClient, response: DriveItemCollectionResponse) -> Self {
+        Self {
+            client: client.client.clone(),
+            token: client.token.clone(),
+            response,
+        }
+    }
+
     fn get_next_url(&self) -> Option<&str> {
         match (&self.response.value, &self.response.next_url) {
             (None, Some(url)) => Some(url),
@@ -1009,26 +984,34 @@ pub struct ListChildrenFetcher {
 }
 
 impl ListChildrenFetcher {
-    fn new(client: reqwest::Client, token: String, response: DriveItemCollectionResponse) -> Self {
+    fn new(client: &DriveClient, response: DriveItemCollectionResponse) -> Self {
         Self {
-            fetcher: DriveItemFetcher {
-                client,
-                token,
-                response,
-            },
+            fetcher: DriveItemFetcher::new(client, response),
         }
     }
 
-    /// Get the url to the next page, or `None` for no more pages.
+    /// Resume a fetching process from url from `ListChildrenFetcher::get_next_url`;
+    pub fn resume_from(client: &DriveClient, next_url: String) -> Self {
+        Self::new(
+            client,
+            DriveItemCollectionResponse {
+                value: None,
+                next_url: Some(next_url),
+                delta_url: None,
+            },
+        )
+    }
+
+    /// Try to get the url to the next page.
     ///
-    /// The returned url can be used to resume the fetching progress using
-    /// `DriveClient::resume_list_children`
+    /// Used for resuming the fetching progress.
+    ///
+    /// # Error
+    /// Will success only if there are more pages and the first page is already readed.
     ///
     /// # Note
-    /// The fetcher returned by `DriveClient::list_children` will cache the data of
-    /// (only) the first page to reduce the number of requests. But the fetcher
-    /// reconstructed through url will lose the cache and will cause one more request
-    /// when called `next`.
+    /// The first page data from `DriveClient::list_children[_with_option]`
+    /// will be cached and have no idempotent url to resume/re-fetch.
     pub fn get_next_url(&self) -> Option<&str> {
         self.fetcher.get_next_url()
     }
@@ -1059,20 +1042,53 @@ pub struct TrackChangeFetcher {
 }
 
 impl TrackChangeFetcher {
-    fn new(client: reqwest::Client, token: String, response: DriveItemCollectionResponse) -> Self {
+    fn new(client: &DriveClient, response: DriveItemCollectionResponse) -> Self {
+        Self {
+            fetcher: DriveItemFetcher::new(client, response),
+        }
+    }
+
+    /// Resume a fetching process from url from `TrackChangeFetcher::get_next_url`;
+    pub fn resume_from(client: &DriveClient, next_url: String) -> Self {
         Self {
             fetcher: DriveItemFetcher {
-                client,
-                token,
-                response,
+                client: client.client.clone(),
+                token: client.token.clone(),
+                response: DriveItemCollectionResponse {
+                    value: None,
+                    delta_url: None,
+                    next_url: Some(next_url),
+                },
             },
         }
     }
 
+    /// Try to get the url to the next page.
+    ///
+    /// Used for resuming the fetching progress.
+    ///
+    /// # Error
+    /// Will success only if there are more pages and the first page is already readed.
+    ///
+    /// # Note
+    /// The first page data from `DriveClient::track_changes_from_initial(_with_option)`
+    /// will be cached and have no idempotent url to resume/re-fetch.
     pub fn get_next_url(&self) -> Option<&str> {
         self.fetcher.get_next_url()
     }
 
+    /// Try to the delta url representing a snapshot of current track change operation.
+    ///
+    /// Used for tracking changes from this snapshot (rather than initial) later,
+    /// using `DriveClient::track_changes_from_delta_url`.
+    ///
+    /// # Error
+    /// Will success only if there are no more pages.
+    ///
+    /// # See also
+    /// `DriveClient::track_changes_from_delta_url`
+    ///
+    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#example-last-page-in-a-set
     pub fn get_delta_url(&self) -> Option<&str> {
         match &self.fetcher.response {
             DriveItemCollectionResponse {
@@ -1084,6 +1100,13 @@ impl TrackChangeFetcher {
         }
     }
 
+    /// Fetch all rest pages and return all items concated with a delta url.
+    ///
+    /// # Errors
+    /// Will return `Err` if any error occurs during fetching.
+    ///
+    /// Note that you will lose all progress unless all requests are success,
+    /// so it is preferred to use `Iterator::next` to make it more error-tolerant.
     pub fn fetch_all(mut self) -> Result<(Vec<DriveItem>, String)> {
         let v = self.fetcher.fetch_all()?;
         // Must not be None if `fetch_all` succeed.

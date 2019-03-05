@@ -384,7 +384,7 @@ fn test_list_children() {
                     .collect()
             };
             let check_page_eq = |url: String, expected: &[DriveItem]| {
-                let mut fetcher_ = client.resume_list_children(url);
+                let mut fetcher_ = ListChildrenFetcher::resume_from(&client, url);
                 let page_ = fetcher_.next().unwrap().expect("Failed to re-get page");
                 assert_eq!(etags_of(&page_), etags_of(&expected));
             };
@@ -461,9 +461,8 @@ fn test_track_changes() {
                 .unwrap();
 
             let mut fetcher = client
-                .track_changes_with_option(
+                .track_changes_from_initial_with_option(
                     container_location,
-                    None,
                     CollectionOption::new()
                         .select(&[&DriveItemField::id])
                         .page_size(1),
@@ -499,7 +498,7 @@ fn test_track_changes() {
 
             assert!(fetcher.get_delta_url().is_some());
             let delta_url = client
-                .get_latest_track_change_delta_url(container_location)
+                .get_latest_delta_url(container_location)
                 .expect("Failed to get latest track change delta url");
 
             let folder3_id = client
@@ -509,7 +508,8 @@ fn test_track_changes() {
                 .unwrap();
 
             let (v, _) = client
-                .track_changes(container_location, Some(&delta_url))
+                .track_changes_from_delta_url(&delta_url)
+                .and_then(|fetcher| fetcher.fetch_all())
                 .expect("Failed to track changes with delta url");
             assert_eq!(
                 v.into_iter()
