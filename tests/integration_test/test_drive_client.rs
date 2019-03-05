@@ -1,3 +1,4 @@
+use lazy_static::lazy_static;
 use onedrive_api::query_option::*;
 use onedrive_api::resource::*;
 use onedrive_api::*;
@@ -8,9 +9,16 @@ use std::iter::{empty, FromIterator};
 use crate::login_setting::TOKEN;
 
 fn gen_filename() -> &'static FileName {
-    use std::sync::atomic::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    // Randomly initialized counter.
+    lazy_static! {
+        static ref COUNTER: AtomicUsize = {
+            use rand::{thread_rng, Rng};
+            AtomicUsize::new(thread_rng().gen())
+        };
+    }
+
     let id = COUNTER.fetch_add(1, Ordering::SeqCst);
     let s = Box::leak(format!("$onedrive_api_tests.{}", id).into_boxed_str());
     FileName::new(s).unwrap()
