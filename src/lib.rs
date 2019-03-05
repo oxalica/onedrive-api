@@ -1,4 +1,5 @@
 #![deny(warnings)]
+#![deny(missing_debug_implementations)]
 
 pub mod client;
 mod error;

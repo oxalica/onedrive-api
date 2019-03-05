@@ -257,6 +257,7 @@ impl ApiPathComponent for str {
 ///
 /// # See also
 /// https://docs.microsoft.com/en-us/graph/auth-overview?view=graph-rest-1.0
+#[derive(Debug)]
 pub struct AuthClient {
     client: RequestClient,
     client_id: String,
@@ -382,6 +383,7 @@ impl AuthClient {
 }
 
 /// Access tokens from AuthClient.
+#[derive(Debug)]
 pub struct Token {
     pub token: String,
     pub refresh_token: Option<String>,
@@ -411,6 +413,7 @@ macro_rules! api_path {
 }
 
 /// The authorized client to access OneDrive resources in a specified Drive.
+#[derive(Debug)]
 pub struct DriveClient {
     client: RequestClient,
     token: String,

@@ -101,6 +101,14 @@ macro_rules! define_resource_object {
                 define_resource_object! { __impl_if_empty($($unselectable)?) {
                     #[allow(non_camel_case_types)]
                     pub struct $field;
+
+                    impl ::std::fmt::Debug for $field {
+                        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+                            f.debug_struct(
+                                concat!(stringify!($field_mod_name), "::", stringify!($field)),
+                            ).finish()
+                        }
+                    }
                 } }
             )*
         }
