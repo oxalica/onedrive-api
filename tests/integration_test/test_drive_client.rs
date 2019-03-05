@@ -123,7 +123,7 @@ fn test_folder() {
                 client
                     .create_folder(ItemLocation::root(), folder1_name)
                     .expect_err("Re-create folder should fail")
-                    .status(),
+                    .status_code(),
                 Some(StatusCode::CONFLICT),
             );
 
@@ -131,7 +131,7 @@ fn test_folder() {
                 client
                     .delete(folder2_location, None)
                     .expect_err("Should not delete a file does not exist")
-                    .status(),
+                    .status_code(),
                 Some(StatusCode::NOT_FOUND),
             );
 
@@ -167,7 +167,7 @@ fn test_folder() {
         client
             .list_children(&folder1_id, None)
             .expect_err("Folder should be already deleted")
-            .status(),
+            .status_code(),
         Some(StatusCode::NOT_FOUND),
     );
 }
@@ -299,7 +299,7 @@ fn test_file_upload_session() {
                 CONTENT.len(),
             )
             .expect_err("Upload wrong range should fail")
-            .status(),
+            .status_code(),
         Some(StatusCode::RANGE_NOT_SATISFIABLE),
     );
 

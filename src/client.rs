@@ -1,7 +1,6 @@
-use self::Error::UnexpectedResponse;
-use crate::error::*;
 use crate::query_option::{CollectionOption, ObjectOption};
 use crate::resource::*;
+use crate::{Error, Result};
 use reqwest::{header, Client as RequestClient, RequestBuilder, Response};
 use serde::{de, Deserialize, Serialize};
 use std::ops::Range;
@@ -323,9 +322,7 @@ impl AuthClient {
             .parse()?;
 
         if require_refresh && resp.refresh_token.is_none() {
-            return Err(UnexpectedResponse {
-                reason: "Missing field `refresh_token`",
-            });
+            return Err(Error::unexpected_response("Missing field `refresh_token`"));
         }
 
         Ok(Token {
@@ -900,8 +897,10 @@ impl DriveClient {
             .send()?
             .parse()
             .and_then(|resp: DriveItemCollectionResponse| {
-                resp.delta_url.ok_or_else(|| Error::UnexpectedResponse {
-                    reason: "Missing field `@odata.deltaLink` for getting latest delta",
+                resp.delta_url.ok_or_else(|| {
+                    Error::unexpected_response(
+                        "Missing field `@odata.deltaLink` for getting latest delta",
+                    )
                 })
             })
     }
@@ -958,9 +957,9 @@ impl DriveItemFetcher {
                 next_url: Some(_),
                 value: None,
                 ..
-            }) => Some(Err(Error::UnexpectedResponse {
-                reason: "Missing field `value` when not finished",
-            })),
+            }) => Some(Err(Error::unexpected_response(
+                "Missing field `value` when not finished",
+            ))),
             Ok(resp) => {
                 self.response = resp;
                 Some(Ok(self.response.value.take()?))
@@ -1119,9 +1118,9 @@ impl Iterator for TrackChangeFetcher {
 
     fn next(&mut self) -> Option<Self::Item> {
         match (self.fetcher.fetch_next(), &self.fetcher.response.delta_url) {
-            (None, None) => Some(Err(Error::UnexpectedResponse {
-                reason: "Missing field `@odata.deltaLink` for the last page",
-            })),
+            (None, None) => Some(Err(Error::unexpected_response(
+                "Missing field `@odata.deltaLink` for the last page",
+            ))),
             (ret, _) => ret,
         }
     }
@@ -1226,11 +1225,13 @@ impl ResponseExt for Response {
         match self.error_for_status_ref() {
             Ok(_) => Ok(self),
             Err(source) => {
-                let body = self.text()?; // Throw network error
-                Err(Error::RequestError {
-                    source,
-                    response: Some(body),
-                })
+                #[derive(Deserialize)]
+                struct ErrorResponse {
+                    error: ErrorObject,
+                }
+
+                let response: ErrorResponse = self.json()?; // Throw network or serialization error first.
+                Err(Error::from_response(source, Some(response.error)))
             }
         }
     }

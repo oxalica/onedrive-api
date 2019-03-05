@@ -264,6 +264,16 @@ fn snake_to_camel_case(s: &str) -> String {
     buf
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorObject {
+    code: Option<String>,
+    message: Option<String>,
+    inner_error: Option<Box<ErrorObject>>,
+    #[serde(flatten)]
+    extra_data: serde_json::Map<String, serde_json::Value>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
