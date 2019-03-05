@@ -46,6 +46,7 @@ pub trait ResourceFieldOf<T> {
 }
 
 // Separate `type` to enable making `ResoucrFieldOf` into trait object.
+#[doc(hidden)]
 pub trait ResourceFieldTypeOf<T>: ResourceFieldOf<T> {
     type Type;
 }

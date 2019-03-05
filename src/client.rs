@@ -140,7 +140,7 @@ pub struct ItemLocation<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum ItemLocationEnum<'a> {
+enum ItemLocationEnum<'a> {
     Path(&'a str),
     Id(&'a str),
 }
