@@ -1,5 +1,9 @@
+use onedrive_api::query_option::*;
+use onedrive_api::resource::*;
 use onedrive_api::*;
 use reqwest::StatusCode;
+use std::collections::{HashMap, HashSet};
+use std::iter::{empty, FromIterator};
 
 use crate::login_setting::TOKEN;
 
@@ -40,26 +44,48 @@ fn download(url: &str) -> Vec<u8> {
     buf
 }
 
-/// Max 2 requests.
+/// Max 4 requests.
 ///
 /// # Test
 /// - new()
 ///   - From `me()`.
 ///   - From drive id.
+/// - get_drive()
+///   - Success.
+/// - get_item()
+///   - Success, directory.
+///   - Success, directory, with option.
 #[test]
 #[ignore]
 fn test_get_drive() {
-    let drive_id1 = DriveClient::new(TOKEN.clone(), DriveLocation::me())
-        .get_drive()
-        .expect("Cannot get drive #1")
-        .id;
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+    let drive1 = client.get_drive().expect("Cannot get drive #1");
 
-    let drive_id2 = DriveClient::new(TOKEN.clone(), drive_id1.clone())
-        .get_drive()
-        .expect("Cannot get drive #2")
-        .id;
+    // Default fields.
+    let drive1_id = drive1.id.unwrap();
 
-    assert_eq!(drive_id1, drive_id2);
+    let drive2 = DriveClient::new(TOKEN.clone(), drive1_id.clone())
+        .get_drive_with_option(ObjectOption::new().select(&[&DriveField::id]))
+        .expect("Cannot get drive #2");
+    assert_eq!(drive1_id, drive2.id.unwrap());
+
+    let root_item = client
+        .get_item(ItemLocation::root(), None)
+        .expect("Cannot get root item")
+        .unwrap();
+    assert!(root_item.id.is_some());
+    assert!(root_item.e_tag.is_some());
+
+    let root_item2 = client
+        .get_item_with_option(
+            ItemLocation::root(),
+            None,
+            ObjectOption::new().select(&[&DriveItemField::e_tag]),
+        )
+        .expect("Cannot get root item with option")
+        .unwrap();
+    assert!(root_item2.id.is_none());
+    assert!(root_item2.e_tag.is_some());
 }
 
 /// Max 8 requests.
@@ -84,34 +110,45 @@ fn test_folder() {
     let folder2_name = gen_filename();
     let folder2_location = rooted_location(folder2_name);
 
-    let folder1 = client
-        .create_folder(ItemLocation::root(), folder1_name)
-        .expect("Failed to create folder");
+    let (folder1_id, folder1_e_tag) = {
+        let c = client
+            .create_folder(ItemLocation::root(), folder1_name)
+            .expect("Failed to create folder");
+        (c.id.unwrap(), c.e_tag.unwrap())
+    };
 
     try_finally(
         || {
-            let ret = client.create_folder(ItemLocation::root(), folder1_name);
-            assert!(ret.is_err(), "Re-create folder should fail");
-            assert_eq!(ret.unwrap_err().status(), Some(StatusCode::CONFLICT));
+            assert_eq!(
+                client
+                    .create_folder(ItemLocation::root(), folder1_name)
+                    .expect_err("Re-create folder should fail")
+                    .status(),
+                Some(StatusCode::CONFLICT),
+            );
 
-            let ret = client.delete(folder2_location, None);
-            assert!(ret.is_err(), "Should not delete a file does not exist");
-            assert_eq!(ret.unwrap_err().status(), Some(StatusCode::NOT_FOUND));
+            assert_eq!(
+                client
+                    .delete(folder2_location, None)
+                    .expect_err("Should not delete a file does not exist")
+                    .status(),
+                Some(StatusCode::NOT_FOUND),
+            );
 
             assert!(
                 client
-                    .list_children(&folder1.id, Some(&folder1.e_tag))
+                    .list_children(&folder1_id, Some(&folder1_e_tag))
                     .expect("Failed to list children with tag")
                     .is_none(),
                 "Folder should be 'not modified'",
             );
 
             let folder2 = client
-                .create_folder(&folder1.id, folder2_name)
+                .create_folder(&folder1_id, folder2_name)
                 .expect("Failed to create sub-folder");
 
             let children = client
-                .list_children(&folder1.id, None)
+                .list_children(&folder1_id, None)
                 .expect("Failed to list children")
                 .unwrap();
 
@@ -122,13 +159,17 @@ fn test_folder() {
             assert_eq!(child.e_tag, folder2.e_tag);
         },
         || {
-            client.delete(&folder1.id, None).unwrap();
+            client.delete(&folder1_id, None).unwrap();
         },
     );
 
-    let ret = client.list_children(&folder1.id, None);
-    assert!(ret.is_err(), "Folder should be already deleted");
-    assert_eq!(ret.unwrap_err().status(), Some(StatusCode::NOT_FOUND));
+    assert_eq!(
+        client
+            .list_children(&folder1_id, None)
+            .expect_err("Folder should be already deleted")
+            .status(),
+        Some(StatusCode::NOT_FOUND),
+    );
 }
 
 /// Max 5 requests.
@@ -154,7 +195,8 @@ fn test_file_upload_small_and_move() {
     let file1_id = client
         .upload_small(file1_location, CONTENT)
         .expect("Failed to upload small file")
-        .id;
+        .id
+        .unwrap();
 
     let is_moved = std::cell::Cell::new(false);
     let file2_id = try_finally(
@@ -163,7 +205,7 @@ fn test_file_upload_small_and_move() {
                 .move_(&file1_id, ItemLocation::root(), Some(file2_name), None)
                 .expect("Failed to move file");
             is_moved.set(true);
-            file2.id
+            file2.id.unwrap()
         },
         || {
             if !is_moved.get() {
@@ -248,23 +290,25 @@ fn test_file_upload_session() {
         next_ranges[0],
     );
 
-    let ret = client.upload_to_session(
-        &upload_session,
-        &CONTENT[RANGE2_ERROR],
-        RANGE2_ERROR,
-        CONTENT.len(),
-    );
-    assert!(ret.is_err(), "Upload wrong range should fail");
     assert_eq!(
-        ret.unwrap_err().status(),
-        Some(StatusCode::RANGE_NOT_SATISFIABLE)
+        client
+            .upload_to_session(
+                &upload_session,
+                &CONTENT[RANGE2_ERROR],
+                RANGE2_ERROR,
+                CONTENT.len(),
+            )
+            .expect_err("Upload wrong range should fail")
+            .status(),
+        Some(StatusCode::RANGE_NOT_SATISFIABLE),
     );
 
     let file3_id = client
         .upload_to_session(&upload_session, &CONTENT[RANGE2], RANGE2, CONTENT.len())
         .expect("Failed to upload part 2")
         .expect("Uploading should be completed")
-        .id;
+        .id
+        .unwrap();
 
     try_finally(
         || {
@@ -279,6 +323,205 @@ fn test_file_upload_session() {
         },
         || {
             client.delete(&file3_id, None).unwrap();
+        },
+    );
+}
+
+/// Max 7 requests.
+///
+/// # Test
+/// - create_folder()
+///   - Success.
+/// - list_children()
+///   - Success, with option, iterator, multi page.
+/// - delete()
+///   - Success, folder.
+#[test]
+#[ignore]
+fn test_list_children() {
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+
+    const TOTAL_COUNT: usize = 2;
+    const PAGE_SIZE: usize = 1;
+    const PAGE1_COUNT: usize = 1;
+    const PAGE2_COUNT: usize = 1;
+
+    let folder_id = client
+        .create_folder(ItemLocation::root(), gen_filename())
+        .expect("Failed to create container folder")
+        .id
+        .unwrap();
+    let folder_location = ItemLocation::from_id(&folder_id);
+
+    try_finally(
+        || {
+            let mut files: HashMap<String, Tag> = (0..TOTAL_COUNT)
+                .map(|i| {
+                    let name = gen_filename();
+                    let item = client
+                        .create_folder(folder_location, name)
+                        .unwrap_or_else(|e| {
+                            panic!("Failed to create child {}/{}: {}", i + 1, TOTAL_COUNT, e)
+                        });
+                    (name.as_str().to_owned(), item.e_tag.unwrap())
+                })
+                .collect();
+
+            let mut fetcher: ListChildrenFetcher = client
+                .list_children_with_option(
+                    folder_location,
+                    None,
+                    CollectionOption::new()
+                        .select(&[&DriveItemField::name, &DriveItemField::e_tag])
+                        .page_size(PAGE_SIZE),
+                )
+                .expect("Failed to list children with option")
+                .unwrap();
+
+            let etags_of = |v: &[DriveItem]| -> Vec<Tag> {
+                v.iter()
+                    .map(|item| item.e_tag.as_ref().cloned().unwrap())
+                    .collect()
+            };
+            let check_page_eq = |url: String, expected: &[DriveItem]| {
+                let mut fetcher_ = ListChildrenFetcher::resume_from(&client, url);
+                let page_ = fetcher_.next().unwrap().expect("Failed to re-get page");
+                assert_eq!(etags_of(&page_), etags_of(&expected));
+            };
+
+            // Cannot get next_url for the first page.
+            assert!(fetcher.get_next_url().is_none());
+            let page1 = fetcher.next().unwrap().expect("Failed to fetch page 1");
+            assert_eq!(page1.len(), PAGE1_COUNT);
+
+            let url2 = fetcher.get_next_url().unwrap().to_owned();
+            let page2 = fetcher.next().unwrap().expect("Failed to fetch page 2");
+            assert_eq!(page2.len(), PAGE2_COUNT);
+            check_page_eq(url2, &page2);
+
+            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next().is_none());
+            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next().is_none()); // Check fused.
+
+            empty()
+                .chain(page1.iter())
+                .chain(page2.iter())
+                .for_each(|item| {
+                    assert!(item.id.is_none()); // Not selected.
+                    let expected_tag = files
+                        .remove(item.name.as_ref().unwrap())
+                        .expect("Unexpected name");
+                    assert_eq!(item.e_tag.as_ref().unwrap(), &expected_tag);
+                });
+            assert!(files.is_empty()); // All matched
+        },
+        || {
+            client
+                .delete(folder_location, None)
+                .expect("Failed to delete container folder");
+        },
+    );
+}
+
+/// Max >=9 requests
+///
+/// - create_folder()
+///   - Success.
+/// - track_changes()
+///   - Success, with option.
+///   - Success.
+/// - get_latest_track_change_delta_url()
+///   - Success.
+/// - delete()
+///   - Success, folder.
+#[test]
+#[ignore]
+fn test_track_changes() {
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+
+    let container_id = client
+        .create_folder(ItemLocation::root(), gen_filename())
+        .expect("Failed to create container folder")
+        .id
+        .unwrap();
+    let container_location = ItemLocation::from_id(&container_id);
+
+    try_finally(
+        || {
+            let folder1_id = client
+                .create_folder(container_location, gen_filename())
+                .expect("Failed to create folder1")
+                .id
+                .unwrap();
+            let folder2_id = client
+                .create_folder(container_location, gen_filename())
+                .expect("Failed to create folder2")
+                .id
+                .unwrap();
+
+            let mut fetcher = client
+                .track_changes_from_initial_with_option(
+                    container_location,
+                    CollectionOption::new()
+                        .select(&[&DriveItemField::id])
+                        .page_size(1),
+                )
+                .expect("Failed to track initial changes");
+
+            assert!(fetcher.get_delta_url().is_none());
+            assert!(fetcher.get_next_url().is_none()); // None for the first page.
+
+            let mut delta_ids = HashSet::new();
+            for (i, items) in fetcher.by_ref().enumerate() {
+                for item in
+                    items.unwrap_or_else(|e| panic!("Failed to fetch page {}: {}", i + 1, e))
+                {
+                    assert!(item.e_tag.is_none()); // Not selected.
+                                                   // Items may duplicate.
+                                                   // See: https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#remarks
+                    delta_ids.insert(item.id.unwrap());
+                }
+            }
+            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next().is_none()); // Assert fused.
+
+            // Note that the one of the item is the root folder itself.
+            assert_eq!(
+                delta_ids,
+                HashSet::from_iter(vec![
+                    container_id.clone(),
+                    folder1_id.clone(),
+                    folder2_id.clone()
+                ]),
+            );
+
+            assert!(fetcher.get_delta_url().is_some());
+            let delta_url = client
+                .get_latest_delta_url(container_location)
+                .expect("Failed to get latest track change delta url");
+
+            let folder3_id = client
+                .create_folder(ItemLocation::from_id(&folder1_id), gen_filename())
+                .expect("Failed to create folder3")
+                .id
+                .unwrap();
+
+            let (v, _) = client
+                .track_changes_from_delta_url(&delta_url)
+                .and_then(|fetcher| fetcher.fetch_all())
+                .expect("Failed to track changes with delta url");
+            assert_eq!(
+                v.into_iter()
+                    .map(|item| item.id.unwrap())
+                    .collect::<HashSet<_>>(),
+                HashSet::from_iter(vec![container_id.clone(), folder1_id, folder3_id]),
+            );
+        },
+        || {
+            client
+                .delete(container_location, None)
+                .expect("Failed to delete container folder");
         },
     );
 }
