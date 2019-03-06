@@ -1,7 +1,13 @@
+//! Resource Objects defined in the OneDrive API.
+//!
+//! # See also
+//! [Microsoft Docs](https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/?view=odsp-graph-online)
 use serde::{Deserialize, Serialize};
 
+/// A semantic alias for URL string in resource objects.
 pub type Url = String;
 
+/// A semantic alias for file size in resource objects.
 pub type FileSize = u64;
 
 macro_rules! define_string_wrapper {
@@ -11,10 +17,14 @@ macro_rules! define_string_wrapper {
         $vis struct $name(String);
 
         impl $name {
+            /// Wrap a string.
+            ///
+            /// Simply wrap without checking.
             pub fn new(id: String) -> Self {
                 $name(id)
             }
 
+            /// View as str.
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -29,22 +39,24 @@ macro_rules! define_string_wrapper {
 }
 
 define_string_wrapper! {
-    /// The unique identifier for a `Drive`,
-    /// which can be get through `Client::get_drive`.
+    /// The unique identifier to a `Drive`.
     pub DriveId;
 
-    /// The unique identifier for a drive,
-    /// which can be get through `Client::get_drive`.
+    /// The unique identifier for a `DriveItem`.
     pub ItemId;
 
-    /// An eTag for the state of an item.
+    /// An tag representing the state of an item.
+    ///
     /// Used for avoid data transmission when a resource is not modified.
     ///
-    /// The tag from `DriveItem::c_tag` is for the content of the item,
-    /// while the one from `DriveItem::e_tag` is for the entire item (metadata + content).
+    /// The tag from `DriveItem::c_tag` (TODO) is for the content of the item,
+    /// while the one from [`DriveItem::e_tag`][e_tag] is for the entire item (metadata + content).
+    ///
+    /// [e_tag]: ./struct.DriveItem.html#structfield.e_tag
     pub Tag;
 }
 
+#[doc(hidden)]
 pub trait ResourceFieldOf<T> {
     fn api_field_name(&self) -> String;
 }
@@ -72,6 +84,7 @@ macro_rules! define_resource_object {
             #[serde(rename_all = "camelCase")]
             $vis struct $struct_name {
                 $(
+                    #[allow(missing_docs)]
                     $(#[$field_meta])*
                     $(#[serde(rename = $field_rename)])?
                     pub $field_name: Option<$field_ty>,
@@ -99,10 +112,20 @@ macro_rules! define_resource_object {
         ($($rename:literal)?)
         ($ty:ty)
     })*]) => {
+        /// Fields descriptors.
+        ///
+        /// More details in [mod documentation][mod].
+        ///
+        /// [mod]: ../index.html
         #[allow(non_snake_case)]
         pub mod $field_mod_name {
             $(
                 define_resource_object! { __impl_if_empty($($unselectable)?) {
+                    /// Field descriptor.
+                    ///
+                    /// More details in [mod documentation][mod].
+                    ///
+                    /// [mod]: ../index.html
                     #[allow(non_camel_case_types)]
                     pub struct $field;
 
@@ -144,7 +167,7 @@ define_resource_object! {
     /// or a document library in SharePoint.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0)
     #[derive(Debug)]
     pub struct Drive #DriveField {
         // TODO: Incomplete
@@ -172,7 +195,7 @@ define_resource_object! {
     /// All file system objects in OneDrive and SharePoint are returned as `DriveItem` resources.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0)
     #[derive(Debug)]
     pub struct DriveItem #DriveItemField {
         // TODO: Incomplete
@@ -233,7 +256,7 @@ define_resource_object! {
     /// The `Deleted` resource indicates that the item has been deleted.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/resources/deleted?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/deleted?view=graph-rest-1.0)
     #[derive(Debug, Serialize)]
     pub struct Deleted {
         pub state: Option<String>,
@@ -244,7 +267,7 @@ define_resource_object! {
     /// The `ItemReference` resource provides information necessary to address a `DriveItem` via the API.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/resources/itemreference?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/itemreference?view=graph-rest-1.0)
     #[derive(Debug, Serialize)]
     pub struct ItemReference {
         pub drive_id: Option<DriveId>,
@@ -276,14 +299,24 @@ fn snake_to_camel_case(s: &str) -> String {
     buf
 }
 
+/// The error object with description and details of the error responsed from server.
+///
+/// It may be contained in [`onedrive_api::Error`][error] which may
+/// be returned when processing requests.
+///
+/// # See also
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/errors#error-resource-type)
+///
+/// [error]: ../struct.Error.html
+#[allow(missing_docs)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorObject {
-    code: Option<String>,
-    message: Option<String>,
-    inner_error: Option<Box<ErrorObject>>,
+    pub code: Option<String>,
+    pub message: Option<String>,
+    pub inner_error: Option<Box<ErrorObject>>,
     #[serde(flatten)]
-    extra_data: serde_json::Map<String, serde_json::Value>,
+    pub extra_data: serde_json::Map<String, serde_json::Value>,
 }
 
 #[cfg(test)]

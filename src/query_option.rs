@@ -8,7 +8,7 @@
 //! from Microsoft first.
 //!
 //! # See also
-//! https://docs.microsoft.com/en-us/graph/query-parameters
+//! [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters)
 use crate::resource::{ResourceFieldOf, ResourceFieldTypeOf};
 use std::default::Default;
 use std::fmt::Write;
@@ -23,6 +23,7 @@ pub struct ObjectOption<T> {
 }
 
 impl<T> ObjectOption<T> {
+    /// Create an empty (default) option.
     pub fn new() -> Self {
         Self {
             select_buf: String::new(),
@@ -37,7 +38,7 @@ impl<T> ObjectOption<T> {
     /// If called more than once, all fields mentioned will be selected.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/query-parameters#select-parameter
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#select-parameter)
     pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
         for sel in fields {
             write!(self.select_buf, ",{}", sel.api_field_name()).unwrap();
@@ -51,7 +52,7 @@ impl<T> ObjectOption<T> {
     /// If called more than once, all fields mentioned will be expanded.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter)
     pub fn expand<Field: ResourceFieldTypeOf<T>>(
         mut self,
         field: Field,
@@ -92,6 +93,7 @@ pub struct CollectionOption<T> {
 }
 
 impl<T> CollectionOption<T> {
+    /// Create an empty (default) option.
     pub fn new() -> Self {
         Self {
             q: Default::default(),
@@ -101,15 +103,23 @@ impl<T> CollectionOption<T> {
         }
     }
 
+    /// Select only some fields of the resource object.
+    ///
     /// # See also
-    /// `ObjectOption::select`
+    /// [`ObjectOption::select`][select]
+    ///
+    /// [select]: ./struct.ObjectOption.html#method.select
     pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
         self.q = self.q.select(fields);
         self
     }
 
+    /// Expand a field of the resource object.
+    ///
     /// # See also
-    /// `ObjectOption::expand`
+    /// [`ObjectOption::expand`][expand]
+    ///
+    /// [expand]: ./struct.ObjectOption.html#method.expand
     pub fn expand<Field: ResourceFieldTypeOf<T>>(
         mut self,
         field: Field,
@@ -125,7 +135,7 @@ impl<T> CollectionOption<T> {
     /// If called more than once, only the last call make sense.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/query-parameters#orderby-parameter
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#orderby-parameter)
     pub fn order_by<Field: ResourceFieldOf<T>>(mut self, field: Field, order: Order) -> Self {
         let order = match order {
             Order::Ascending => "asc",
@@ -141,7 +151,7 @@ impl<T> CollectionOption<T> {
     /// If called more than once, only the last call make sense.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/query-parameters#top-parameter
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#top-parameter)
     pub fn page_size(mut self, size: usize) -> Self {
         self.page_size_buf = Some(size.to_string());
         self
@@ -155,7 +165,7 @@ impl<T> CollectionOption<T> {
     /// Set it when calling unsupported API will cause HTTP 400 Client Error.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter)
     pub fn get_count(mut self, get_count: bool) -> Self {
         self.get_count_buf = Some(get_count);
         self
@@ -179,9 +189,15 @@ impl<T> Default for CollectionOption<T> {
     }
 }
 
-/// Specify the sorting order in `CollectionOption::order_by`.
+/// Specify the sorting order.
+///
+/// Used in [`CollectionOption::order_by`][order_by].
+///
+/// [order_by]: ./struct.CollectionOption.html#method.order_by
 #[derive(Debug, PartialEq, Eq)]
 pub enum Order {
+    /// Ascending order.
     Ascending,
+    /// Descending order.
     Descending,
 }

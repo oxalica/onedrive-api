@@ -4,6 +4,7 @@ use reqwest::StatusCode;
 use std::fmt;
 use std::result::Result as StdResult;
 
+/// An alias to `Result` with `Err` of `onedrive_api::Error`.
 pub type Result<T> = StdResult<T, Error>;
 
 /// The error may occur when processing requests.

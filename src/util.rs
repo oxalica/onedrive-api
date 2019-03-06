@@ -3,10 +3,14 @@ use crate::resource::{DriveId, ItemId};
 use serde::{de, Deserialize};
 use url::PathSegmentsMut;
 
-/// Specify a `Drive` resource.
+/// Specify the location of a `Drive` resource.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
+/// [`resource::Drive`][drive]
+///
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0)
+///
+/// [drive]: ./resource/struct.Drive.html
 #[derive(Clone, Debug)]
 pub struct DriveLocation {
     inner: DriveLocationEnum,
@@ -22,50 +26,50 @@ enum DriveLocationEnum {
 }
 
 impl DriveLocation {
-    /// Get current user's OneDrive
+    /// Current user's OneDrive.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-current-users-onedrive
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-current-users-onedrive)
     pub fn me() -> Self {
         Self {
             inner: DriveLocationEnum::Me,
         }
     }
 
-    /// Get a user's OneDrive
+    /// OneDrive of a user.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-users-onedrive
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-users-onedrive)
     pub fn from_user(id_or_principal_name: String) -> Self {
         Self {
             inner: DriveLocationEnum::User(id_or_principal_name),
         }
     }
 
-    /// Get the document library associated with a group
+    /// The document library associated with a group.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-associated-with-a-group
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-associated-with-a-group)
     pub fn from_group(group_id: String) -> Self {
         Self {
             inner: DriveLocationEnum::Group(group_id),
         }
     }
 
-    /// Get the document library for a site
+    /// The document library for a site.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-for-a-site
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-for-a-site)
     pub fn from_site(site_id: String) -> Self {
         Self {
             inner: DriveLocationEnum::Site(site_id),
         }
     }
 
-    /// Get a drive by ID
+    /// A drive with ID specified.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-drive-by-id
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-drive-by-id)
     pub fn from_id(drive_id: DriveId) -> Self {
         Self {
             inner: DriveLocationEnum::Id(drive_id),
@@ -83,7 +87,11 @@ impl From<DriveId> for DriveLocation {
 /// It does not contains the drive information.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
+/// [`resource::DriveItem`][drive_item]
+///
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0)
+///
+/// [drive_item]: ./resource/struct.DriveItem.html
 #[derive(Clone, Copy, Debug)]
 pub struct ItemLocation<'a> {
     inner: ItemLocationEnum<'a>,
@@ -96,18 +104,20 @@ enum ItemLocationEnum<'a> {
 }
 
 impl<'a> ItemLocation<'a> {
-    /// A UNIX-like `/`-started absolute path to a file or directory in the drive,
-    /// and the trailing `/` is optional.
+    /// A UNIX-like `/`-started absolute path to a file or directory in the drive.
+    ///
+    /// # Error
+    /// If `path` contains invalid characters for OneDrive API, it returns None.
     ///
     /// # Note
-    /// If `path` contains invalid characters, it returns None.
+    /// The trailing `/` is optional.
     ///
     /// Special name on Windows like `CON` or `NUL` is tested to be permitted in API,
     /// but may still cause errors on Windows or OneDrive Online.
     /// These names will pass the check, but STRONGLY NOT recommended.
     ///
     /// # See also
-    /// https://support.office.com/en-us/article/Invalid-file-names-and-file-types-in-OneDrive-OneDrive-for-Business-and-SharePoint-64883a5d-228e-48f5-b3d2-eb39e07630fa#invalidcharacters
+    /// [Microsoft Docs](https://support.office.com/en-us/article/Invalid-file-names-and-file-types-in-OneDrive-OneDrive-for-Business-and-SharePoint-64883a5d-228e-48f5-b3d2-eb39e07630fa#invalidcharacters)
     pub fn from_path(path: &'a str) -> Option<Self> {
         if path == "/" {
             Some(Self::root())
@@ -155,7 +165,9 @@ impl FileName {
     /// Returns None if contains invalid characters.
     ///
     /// # See also
-    /// [ItemLocation::from_path](ItemLocation::from_path)
+    /// [ItemLocation::from_path][from_path]
+    ///
+    /// [from_path]: ../struct.ItemLocation.html#method.from_path
     pub fn new<S: AsRef<str> + ?Sized>(name: &S) -> Option<&Self> {
         const INVALID_CHARS: &str = r#""*:<>?/\|"#;
 

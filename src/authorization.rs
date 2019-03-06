@@ -5,7 +5,7 @@ use serde::Deserialize;
 /// A list of the Microsoft Graph permissions that you want the user to consent to.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/graph/permissions-reference#files-permissions
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/permissions-reference#files-permissions)
 #[derive(Clone, Debug, Default)]
 pub struct Permission {
     write: bool,
@@ -38,7 +38,7 @@ impl Permission {
     /// This permission is required to get a refresh_token for long time access.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-21
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-21)
     pub fn offline_access(mut self, offline_access: bool) -> Self {
         self.offline_access = offline_access;
         self
@@ -64,7 +64,7 @@ impl Permission {
 /// The client for requests relative to authentication.
 ///
 /// # See also
-/// https://docs.microsoft.com/en-us/graph/auth-overview?view=graph-rest-1.0
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-overview?view=graph-rest-1.0)
 #[derive(Debug)]
 pub struct AuthClient {
     client: ::reqwest::Client,
@@ -100,7 +100,8 @@ impl AuthClient {
 
     /// Get the URL for web browser for token flow authentication.
     ///
-    /// TODO: Documentation
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-service?view=graph-rest-1.0)
     pub fn get_token_auth_url(&self) -> String {
         self.get_auth_url("token")
     }
@@ -108,7 +109,7 @@ impl AuthClient {
     /// Get the URL for web browser for code flow authentication.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request)
     pub fn get_code_auth_url(&self) -> String {
         self.get_auth_url("code")
     }
@@ -144,7 +145,7 @@ impl AuthClient {
     /// Login using a code in code flow authentication.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token)
     pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
         self.request_authorize(
             self.permission.offline_access,
@@ -163,10 +164,14 @@ impl AuthClient {
     /// This requires offline access, and will always returns new refresh token if success.
     ///
     /// # Panic
-    /// Panic if the `scope` given in `Client::new` has no `offline_access` scope.
+    /// Panic if the current [`AuthClient`][auth_client] is created with no
+    /// [`offline_access`][offline_access] permission.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token)
+    ///
+    /// [auth_client]: #
+    /// [offline_access]: ./struct.Permission.html#method.offline_access
     pub fn login_with_refresh_token(
         &self,
         refresh_token: &str,
@@ -196,14 +201,17 @@ pub struct Token {
     /// The access token used for authorization in requests.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/auth-overview#what-is-an-access-token-and-how-do-i-use-it
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-overview#what-is-an-access-token-and-how-do-i-use-it)
     pub token: String,
     /// The refresh token for refreshing (re-get) an access token when the previous one expired.
     ///
-    /// This is only provided in code authorization flow with `offline_access` scope.
+    /// This is only provided in code authorization flow with
+    /// [`offline_access`][offline_acccess] permission.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token)
+    ///
+    /// [offline_access]: ./struct.Permission.html#method.offline_access
     pub refresh_token: Option<String>,
     _private: (),
 }

@@ -45,12 +45,14 @@ impl DriveClient {
         }
     }
 
-    /// Get `Drive`
+    /// Get [`Drive`][drive].
     ///
-    /// Retrieve the properties and relationships of a `Drive` resource.
+    /// Retrieve the properties and relationships of a [`Drive`][drive] resource.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0)
+    ///
+    /// [drive]: ./resource/struct.Drive.html
     pub fn get_drive_with_option(&self, option: ObjectOption<Drive>) -> Result<Drive> {
         self.client
             .get(api_url![&self.drive])
@@ -60,20 +62,25 @@ impl DriveClient {
             .parse()
     }
 
-    /// Shortcut to `get_drive_with_option` with default parameters.
+    /// Shortcut to [`get_drive_with_option`][with_opt] with default parameters.
+    ///
+    /// [with_opt]: #method.get_drive_with_option
     pub fn get_drive(&self) -> Result<Drive> {
         self.get_drive_with_option(Default::default())
     }
 
-    /// List children of a `DriveItem`
+    /// List children of a [`DriveItem`][drive_item].
     ///
-    /// Return a collection of `DriveItem`s in the children relationship of a `DriveItem`.
+    /// Return a collection of [`DriveItem`][drive_item]s in the children relationship
+    /// of the given one.
     ///
     /// # Note
     /// Will return `Ok(None)` if `if_none_match` is set and matches the item.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0)
+    ///
+    /// [drive_item]: ./resource/struct.DriveItem.html
     pub fn list_children_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -90,7 +97,9 @@ impl DriveClient {
             .map(|opt_resp| opt_resp.map(|resp| ListChildrenFetcher::new(self, resp)))
     }
 
-    /// Shortcut to `list_children_with_option` with default params and fetch all.
+    /// Shortcut to [`list_children_with_option`][with_opt] with default params and fetch all.
+    ///
+    /// [with_opt]: #method.list_children_with_option
     pub fn list_children<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -101,15 +110,17 @@ impl DriveClient {
             .transpose()
     }
 
-    /// Get a DriveItem resource
+    /// Get a [`DriveItem`][drive_item] resource.
     ///
-    /// Retrieve the metadata for a `DriveItem` in a `Drive` by file system path or ID.
+    /// Retrieve the metadata for a [`DriveItem`][drive_item] by file system path or ID.
     ///
     /// # Errors
     /// Will return `Ok(None)` if `if_none_match` is set and matches the item .
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0)
+    ///
+    /// [drive_item]: ./resource/struct.DriveItem.html
     pub fn get_item_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -125,7 +136,9 @@ impl DriveClient {
             .parse_optional()
     }
 
-    /// Shortcut to `get_item_with_option` with default parameters.
+    /// Shortcut to [`get_item_with_option`][with_opt] with default parameters.
+    ///
+    /// [with_opt]: #method.get_item_with_option
     pub fn get_item<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -136,13 +149,15 @@ impl DriveClient {
 
     /// Create a new folder in a drive
     ///
-    /// Create a new folder or `DriveItem` in a `Drive` with a specified parent item or path.
+    /// Create a new folder [`DriveItem`][drive_item] with a specified parent item or path.
     ///
     /// # Errors
     /// Will return `Err` with HTTP CONFLICT if the target already exists.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0)
+    ///
+    /// [drive_item]: ./resource/struct.DriveItem.html
     pub fn create_folder<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
@@ -155,7 +170,7 @@ impl DriveClient {
         struct Request<'a> {
             name: &'a str,
             folder: Folder,
-            /// https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes
+            // https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
             conflict_behavior: &'a str,
         }
@@ -174,14 +189,16 @@ impl DriveClient {
 
     const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
 
-    /// Upload or replace the contents of a `DriveItem`
+    /// Upload or replace the contents of a [`DriveItem`][drive_item]
     ///
     /// The simple upload API allows you to provide the contents of a new file or
     /// update the contents of an existing file in a single API call. This method
     /// only supports files up to 4MB in size.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0)
+    ///
+    /// [drive_item]: ./resource/struct.DriveItem.html
     pub fn upload_small<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -202,7 +219,7 @@ impl DriveClient {
             .parse()
     }
 
-    /// Create an upload session
+    /// Create an upload session.
     ///
     /// Create an upload session to allow your app to upload files up to
     /// the maximum file size. An upload session allows your app to
@@ -215,7 +232,7 @@ impl DriveClient {
     /// but does not match the item.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
     pub fn new_upload_session<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -252,7 +269,7 @@ impl DriveClient {
     /// have been received previously.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#resuming-an-in-progress-upload
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#resuming-an-in-progress-upload)
     pub fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
@@ -284,7 +301,7 @@ impl DriveClient {
     /// not be deleted immedately after the expiration time has elapsed.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session)
     pub fn delete_upload_session(&self, sess: &UploadSession) -> Result<()> {
         self.client
             .delete(&sess.upload_url)
@@ -307,7 +324,7 @@ impl DriveClient {
     /// some files.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
     pub fn upload_to_session(
         &self,
         session: &UploadSession,
@@ -358,7 +375,7 @@ impl DriveClient {
     /// under a new parent item or with a new name.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0)
     pub fn copy<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
@@ -385,7 +402,7 @@ impl DriveClient {
             .parse_no_content() // TODO: Handle async copy
     }
 
-    /// Move a DriveItem to a new folder
+    /// Move a DriveItem to a new folder.
     ///
     /// This is a special case of the Update method. Your app can combine
     /// moving an item to a new container and updating other properties of
@@ -398,7 +415,7 @@ impl DriveClient {
     /// but doesn't match the item.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0)
     pub fn move_<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
@@ -427,9 +444,9 @@ impl DriveClient {
             .parse()
     }
 
-    /// Delete a DriveItem
+    /// Delete a [`DriveItem`][drive_item].
     ///
-    /// Delete a `DriveItem` by using its ID or path. Note that deleting items using
+    /// Delete a [`DriveItem`][drive_item] by using its ID or path. Note that deleting items using
     /// this method will move the items to the recycle bin instead of permanently
     /// deleting the item.
     ///
@@ -438,7 +455,9 @@ impl DriveClient {
     /// does not match the item.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0)
+    ///
+    /// [drive_item]: ./resource/struct.DriveItem.html
     pub fn delete<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -466,7 +485,7 @@ impl DriveClient {
     /// current states.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0)
     pub fn track_changes_from_initial_with_option<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
@@ -481,7 +500,9 @@ impl DriveClient {
             .map(|resp| TrackChangeFetcher::new(self, resp))
     }
 
-    /// Shortcut to `track_changes_from_initial_with_option` with default parameters.
+    /// Shortcut to [`track_changes_from_initial_with_option`][with_opt] with default parameters.
+    ///
+    /// [with_opt]: #method.track_changes_from_initial_with_option
     pub fn track_changes_from_initial<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
@@ -493,7 +514,9 @@ impl DriveClient {
     /// Track changes for a folder from snapshot (delta url) to snapshot of current states.
     ///
     /// # See also
-    /// `track_changes_from_initial_with_option()`
+    /// [`DriveClient::track_changes_from_initial_with_option`][track_initial]
+    ///
+    /// [track_initial]: #method.track_changes_from_initial_with_option
     pub fn track_changes_from_delta_url(&self, delta_url: &str) -> Result<TrackChangeFetcher> {
         self.client
             .get(delta_url)
@@ -506,7 +529,7 @@ impl DriveClient {
     /// Get a delta url representing the snapshot of current states.
     ///
     /// # See also
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0)
     pub fn get_latest_delta_url<'a>(&self, folder: impl Into<ItemLocation<'a>>) -> Result<String> {
         self.client
             .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
@@ -594,7 +617,12 @@ impl DriveItemFetcher {
     }
 }
 
-/// The page fetcher for `list_children` operation with `Iterator` interface.
+/// The page fetcher for children listing operation with `Iterator` interface.
+///
+/// # See also
+/// [`DriveClient::list_childre_with_option`][list_children_with_opt]
+///
+/// [list_children_with_opt]: ./struct.DriveClient.html#method.list_children_with_option
 #[derive(Debug)]
 pub struct ListChildrenFetcher {
     fetcher: DriveItemFetcher,
@@ -607,7 +635,10 @@ impl ListChildrenFetcher {
         }
     }
 
-    /// Resume a fetching process from url from `ListChildrenFetcher::get_next_url`;
+    /// Resume a fetching process from url from
+    /// [`ListChildrenFetcher::get_next_url`][get_next_url].
+    ///
+    /// [get_next_url]: #method.get_next_url
     pub fn resume_from(client: &DriveClient, next_url: String) -> Self {
         Self::new(
             client,
@@ -627,8 +658,10 @@ impl ListChildrenFetcher {
     /// Will success only if there are more pages and the first page is already readed.
     ///
     /// # Note
-    /// The first page data from `DriveClient::list_children[_with_option]`
+    /// The first page data from [`DriveClient::list_children_with_option`][list_children_with_opt]
     /// will be cached and have no idempotent url to resume/re-fetch.
+    ///
+    /// [list_children_with_opt]: ./struct.DriveClient.html#method.list_children_with_option
     pub fn get_next_url(&self) -> Option<&str> {
         self.fetcher.get_next_url()
     }
@@ -653,7 +686,15 @@ impl Iterator for ListChildrenFetcher {
     }
 }
 
-/// The page fetcher for `trach_changes` operation with `Iterator` interface.
+/// The page fetcher for tracking operations with `Iterator` interface.
+///
+/// # See also
+/// [`DriveClient::track_changes_from_initial`][track_initial]
+///
+/// [`DriveClient::track_changes_from_delta_url`][track_delta]
+///
+/// [track_initial]: ./struct.DriveClient.html#method.track_changes_from_initial_with_option
+/// [track_delta]: ./struct.DriveClient.html#method.track_changes_from_delta_url
 #[derive(Debug)]
 pub struct TrackChangeFetcher {
     fetcher: DriveItemFetcher,
@@ -666,7 +707,11 @@ impl TrackChangeFetcher {
         }
     }
 
-    /// Resume a fetching process from url from `TrackChangeFetcher::get_next_url`;
+    /// Resume a fetching process from url.
+    ///
+    /// The url should be from [`TrackChangeFetcher::get_next_url`][get_next_url].
+    ///
+    /// [get_next_url]: #method.get_next_url
     pub fn resume_from(client: &DriveClient, next_url: String) -> Self {
         Self {
             fetcher: DriveItemFetcher {
@@ -689,8 +734,11 @@ impl TrackChangeFetcher {
     /// Will success only if there are more pages and the first page is already readed.
     ///
     /// # Note
-    /// The first page data from `DriveClient::track_changes_from_initial(_with_option)`
+    /// The first page data from
+    /// [`DriveClient::track_changes_from_initial_with_option`][track_initial]
     /// will be cached and have no idempotent url to resume/re-fetch.
+    ///
+    /// [track_initial]: ./struct.DriveClient.html#method.track_changes_from_initial
     pub fn get_next_url(&self) -> Option<&str> {
         self.fetcher.get_next_url()
     }
@@ -698,15 +746,17 @@ impl TrackChangeFetcher {
     /// Try to the delta url representing a snapshot of current track change operation.
     ///
     /// Used for tracking changes from this snapshot (rather than initial) later,
-    /// using `DriveClient::track_changes_from_delta_url`.
+    /// using [`DriveClient::track_changes_from_delta_url`][track_delta].
     ///
     /// # Error
     /// Will success only if there are no more pages.
     ///
     /// # See also
-    /// `DriveClient::track_changes_from_delta_url`
+    /// [`DriveClient::track_changes_from_delta_url`][track_delta]
     ///
-    /// https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#example-last-page-in-a-set
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#example-last-page-in-a-set)
+    ///
+    /// [track_delta]: ./struct.DriveClient.html#method.track_changes_from_delta_url
     pub fn get_delta_url(&self) -> Option<&str> {
         match &self.fetcher.response {
             DriveItemCollectionResponse {
@@ -753,9 +803,11 @@ struct ItemReference<'a> {
 /// An upload session for resumable file uploading process.
 ///
 /// # See also
-/// `DriveClient::new_upload_session`
+/// [`DriveClient::new_upload_session`][get_session]
 ///
-/// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
+///
+/// [get_session]: ./struct.DriveClient.html#method.new_upload_session
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadSession {
@@ -768,7 +820,9 @@ pub struct UploadSession {
 impl UploadSession {
     /// Get the url for the upload session.
     ///
-    /// It can be used to resume the session using `DriveClient::get_upload_session`.
+    /// It can be used to resume the session using [`DriveClient::get_upload_session`][get_session].
+    ///
+    /// [get_session]: ./struct.DriveClient.html#method.get_upload_session
     pub fn get_url(&self) -> &str {
         &self.upload_url
     }
