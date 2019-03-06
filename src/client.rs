@@ -10,45 +10,58 @@ use url::{PathSegmentsMut, Url};
 ///
 /// # See also
 /// https://docs.microsoft.com/en-us/graph/permissions-reference#files-permissions
-#[derive(Clone, Debug)]
-pub enum Scope {
-    Read { shared: bool, offline: bool },
-    ReadWrite { shared: bool, offline: bool },
+#[derive(Clone, Debug, Default)]
+pub struct Permission {
+    write: bool,
+    access_shared: bool,
+    offline_access: bool,
 }
 
-impl Scope {
-    pub fn shared(&self) -> bool {
-        match self {
-            Scope::Read { shared, .. } | Scope::ReadWrite { shared, .. } => *shared,
-        }
+impl Permission {
+    /// Create a read-only permission.
+    ///
+    /// Note that the permission is at least to allow reading.
+    pub fn new_read() -> Self {
+        Self::default()
     }
 
-    pub fn offline(&self) -> bool {
-        match self {
-            Scope::Read { offline, .. } | Scope::ReadWrite { offline, .. } => *offline,
-        }
+    /// Set the write permission.
+    pub fn write(mut self, write: bool) -> Self {
+        self.write = write;
+        self
     }
 
-    fn to_scope_string(&self) -> &'static str {
-        use self::Scope::*;
+    /// Set the permission to the shared files.
+    pub fn access_shared(mut self, access_shared: bool) -> Self {
+        self.access_shared = access_shared;
+        self
+    }
 
-        let mut s = match self {
-            Read { .. } => "offline_access files.read.all",
-            ReadWrite { .. } => "offline_access files.readwrite.all",
-        };
+    /// Set whether allows offline access.
+    ///
+    /// This permission is required to get a refresh_token for long time access.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-21
+    pub fn offline_access(mut self, offline_access: bool) -> Self {
+        self.offline_access = offline_access;
+        self
+    }
 
-        match self {
-            Read { offline, shared } | ReadWrite { offline, shared } => {
-                if !offline {
-                    s = &s["offline_access ".len()..];
-                }
-                if !shared {
-                    s = &s[..s.len() - ".all".len()];
-                }
-            }
+    fn to_scope_str(&self) -> &'static str {
+        macro_rules! cond_concat {
+            ($($s:literal,)*) => { concat!($($s),*) };
+            ($($s:literal,)* ($cond:expr, $t:literal, $f:literal), $($tt:tt)*) => {
+                if $cond { cond_concat!($($s,)* $t, $($tt)*) }
+                else { cond_concat!($($s,)* $f, $($tt)*) }
+            };
         }
 
-        s
+        cond_concat![
+            (self.offline_access, "offline_access ", ""), // Postfix space here.
+            (self.write, "files.readwrite", "files.read"),
+            (self.access_shared, ".all", ""),
+        ]
     }
 }
 
@@ -194,6 +207,7 @@ impl<'a> From<&'a ItemId> for ItemLocation<'a> {
     }
 }
 
+/// An valid file name str (unsized).
 #[derive(Debug)]
 pub struct FileName(str);
 
@@ -204,9 +218,10 @@ impl FileName {
     ///
     /// # See also
     /// [ItemLocation::from_path](ItemLocation::from_path)
-    pub fn new(name: &str) -> Option<&Self> {
+    pub fn new<S: AsRef<str> + ?Sized>(name: &S) -> Option<&Self> {
         const INVALID_CHARS: &str = r#""*:<>?/\|"#;
 
+        let name = name.as_ref();
         if !name.is_empty() && !name.contains(|c| INVALID_CHARS.contains(c)) {
             Some(unsafe { &*(name as *const str as *const Self) })
         } else {
@@ -214,8 +229,15 @@ impl FileName {
         }
     }
 
+    /// View the file name as `&str`. It is cost-free.
     pub fn as_str(&self) -> &str {
-        unsafe { &*(self as *const Self as *const str) }
+        &self.0
+    }
+}
+
+impl AsRef<str> for FileName {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -261,17 +283,17 @@ impl ApiPathComponent for str {
 pub struct AuthClient {
     client: RequestClient,
     client_id: String,
-    scope: Scope,
+    permission: Permission,
     redirect_uri: String,
 }
 
 impl AuthClient {
     /// Create a client for authorization.
-    pub fn new(client_id: String, scope: Scope, redirect_uri: String) -> Self {
+    pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
         AuthClient {
             client: RequestClient::new(),
             client_id,
-            scope,
+            permission,
             redirect_uri,
         }
     }
@@ -281,7 +303,7 @@ impl AuthClient {
             "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
             &[
                 ("client_id", &self.client_id as &str),
-                ("scope", self.scope.to_scope_string()),
+                ("scope", self.permission.to_scope_str()),
                 ("redirect_uri", &self.redirect_uri),
                 ("response_type", response_type),
             ],
@@ -339,7 +361,7 @@ impl AuthClient {
     /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token
     pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
         self.request_authorize(
-            self.scope.offline(),
+            self.permission.offline_access,
             &[
                 ("client_id", &self.client_id as &str),
                 ("client_secret", client_secret.unwrap_or("")),
@@ -365,8 +387,8 @@ impl AuthClient {
         client_secret: Option<&str>,
     ) -> Result<Token> {
         assert!(
-            self.scope.offline(),
-            "Refresh token requires offline_access scope."
+            self.permission.offline_access,
+            "Refresh token requires offline_access permission."
         );
 
         self.request_authorize(
@@ -385,7 +407,17 @@ impl AuthClient {
 /// Access tokens from AuthClient.
 #[derive(Debug)]
 pub struct Token {
+    /// The access token used for authorization in requests.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/auth-overview#what-is-an-access-token-and-how-do-i-use-it
     pub token: String,
+    /// The refresh token for refreshing (re-get) an access token when the previous one expired.
+    ///
+    /// This is only provided in code authorization flow with `offline_access` scope.
+    ///
+    /// # See also
+    /// https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token
     pub refresh_token: Option<String>,
     _private: (),
 }
@@ -1038,6 +1070,7 @@ impl Iterator for ListChildrenFetcher {
     }
 }
 
+/// The page fetcher for `trach_changes` operation with `Iterator` interface.
 #[derive(Debug)]
 pub struct TrackChangeFetcher {
     fetcher: DriveItemFetcher,
@@ -1134,6 +1167,12 @@ struct ItemReference<'a> {
     path: &'a str,
 }
 
+/// An upload session for resumable file uploading process.
+///
+/// # See also
+/// `DriveClient::new_upload_session`
+///
+/// https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadSession {
@@ -1144,19 +1183,28 @@ pub struct UploadSession {
 }
 
 impl UploadSession {
+    /// Get the url for the upload session.
+    ///
+    /// It can be used to resume the session using `DriveClient::get_upload_session`.
     pub fn get_url(&self) -> &str {
         &self.upload_url
     }
 
+    /// Get next byte ranges the server expected.
+    ///
+    /// Used for determine what to upload when resuming a session.
     pub fn get_next_expected_ranges(&self) -> &[ExpectRange] {
         &self.next_expected_ranges
     }
 }
 
-#[derive(Debug)]
+/// A half-open byte range `start..end` or `start..`.
+#[derive(Debug, PartialEq, Eq)]
 pub struct ExpectRange {
-    pub start: usize,
-    pub end: Option<usize>,
+    /// The lower bound of the range (inclusive).
+    pub start: u64,
+    /// The optional upper bound of the range (exclusive).
+    pub end: Option<u64>,
 }
 
 impl<'de> de::Deserialize<'de> for ExpectRange {
@@ -1175,25 +1223,28 @@ impl<'de> de::Deserialize<'de> for ExpectRange {
             fn visit_str<E: de::Error>(self, v: &str) -> ::std::result::Result<Self::Value, E> {
                 let parse = || -> Option<ExpectRange> {
                     let mut it = v.split('-');
-                    let l = it.next()?;
-                    let r = it.next()?;
+                    let start = it.next()?.parse().ok()?;
+                    let end = match it.next()? {
+                        "" => None,
+                        s => {
+                            let end = s.parse::<u64>().ok()?.checked_add(1)?; // Exclusive.
+                            if end <= start {
+                                return None;
+                            }
+                            Some(end)
+                        }
+                    };
                     if it.next().is_some() {
                         return None;
                     }
-                    Some(ExpectRange {
-                        start: l.parse().ok()?,
-                        end: if r.is_empty() {
-                            None
-                        } else {
-                            Some(r.parse::<usize>().ok()?.checked_add(1)?)
-                        },
-                    })
+
+                    Some(ExpectRange { start, end })
                 };
                 match parse() {
                     Some(v) => Ok(v),
                     None => Err(E::invalid_value(
                         de::Unexpected::Str(v),
-                        &"`{usize}-` or `{usize}-{usize}`",
+                        &"`{lower}-` or `{lower}-{upper}`",
                     )),
                 }
             }
@@ -1264,69 +1315,32 @@ mod test {
 
     #[test]
     fn test_scope_string() {
-        use self::Scope::*;
-
-        let scopes = [
-            (
-                Read {
-                    offline: false,
-                    shared: false,
-                },
-                "files.read",
-            ),
-            (
-                Read {
-                    offline: false,
-                    shared: true,
-                },
-                "files.read.all",
-            ),
-            (
-                Read {
-                    offline: true,
-                    shared: false,
-                },
-                "offline_access files.read",
-            ),
-            (
-                Read {
-                    offline: true,
-                    shared: true,
-                },
-                "offline_access files.read.all",
-            ),
-            (
-                ReadWrite {
-                    offline: false,
-                    shared: false,
-                },
-                "files.readwrite",
-            ),
-            (
-                ReadWrite {
-                    offline: false,
-                    shared: true,
-                },
-                "files.readwrite.all",
-            ),
-            (
-                ReadWrite {
-                    offline: true,
-                    shared: false,
-                },
-                "offline_access files.readwrite",
-            ),
-            (
-                ReadWrite {
-                    offline: true,
-                    shared: true,
-                },
-                "offline_access files.readwrite.all",
-            ),
-        ];
-
-        for (scope, s) in &scopes {
-            assert_eq!(scope.to_scope_string(), *s);
+        for &write in &[false, true] {
+            for &shared in &[false, true] {
+                for &offline in &[false, true] {
+                    assert_eq!(
+                        Permission::new_read()
+                            .write(write)
+                            .access_shared(shared)
+                            .offline_access(offline)
+                            .to_scope_str(),
+                        format!(
+                            "{}{}{}",
+                            if offline { "offline_access " } else { "" }, // Postfix space here.
+                            if write {
+                                "files.readwrite"
+                            } else {
+                                "files.read"
+                            },
+                            if shared { ".all" } else { "" },
+                        ),
+                        "When testing write={}, shared={}, offline={}",
+                        write,
+                        shared,
+                        offline,
+                    );
+                }
+            }
         }
     }
 
@@ -1404,5 +1418,43 @@ mod test {
         assert!(!check_path("a"));
         assert!(!check_path("a/"));
         assert!(!check_path("//"));
+    }
+
+    #[test]
+    fn test_range_parsing() {
+        let cases = [
+            (
+                "42-196",
+                Some(ExpectRange {
+                    start: 42,
+                    end: Some(197),
+                }),
+            ), // [left, right)
+            (
+                "418-",
+                Some(ExpectRange {
+                    start: 418,
+                    end: None,
+                }),
+            ),
+            ("", None),
+            ("42-4", None),
+            ("-9", None),
+            ("-", None),
+            ("1-2-3", None),
+            ("0--2", None),
+            ("-1-2", None),
+        ];
+
+        for &(s, ref expect) in &cases {
+            let ret = serde_json::from_str(&serde_json::to_string(s).unwrap());
+            assert_eq!(
+                ret.as_ref().ok(),
+                expect.as_ref(),
+                "Failed: Got {:?} on {:?}",
+                ret,
+                s,
+            );
+        }
     }
 }

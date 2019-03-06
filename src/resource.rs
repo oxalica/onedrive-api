@@ -14,11 +14,15 @@ macro_rules! define_string_wrapper {
             pub fn new(id: String) -> Self {
                 $name(id)
             }
+
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
         }
 
         impl AsRef<str> for $name {
             fn as_ref(&self) -> &str {
-                &self.0
+                self.as_str()
             }
         }
     )* };

@@ -287,11 +287,11 @@ fn test_file_upload_session() {
         "Too many 'next expexted ranges: {:?}",
         next_ranges
     );
-    assert_eq!(next_ranges[0].start, RANGE2.start);
+    assert_eq!(next_ranges[0].start, RANGE2.start as u64);
     assert!(
         match next_ranges[0].end {
             None => true,
-            Some(end) if end == RANGE2.end => true,
+            Some(end) if end == RANGE2.end as u64 => true,
             _ => false,
         },
         "Unexpected 'next expected range': {:?}",

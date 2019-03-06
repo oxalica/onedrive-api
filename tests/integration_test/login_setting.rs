@@ -20,10 +20,7 @@ struct LoginSetting {
 fn get_token(setting: &mut LoginSetting) -> String {
     let auth_client = AuthClient::new(
         setting.client_id.clone(),
-        Scope::ReadWrite {
-            shared: false,
-            offline: true,
-        },
+        Permission::new_read().offline_access(true),
         setting.redirect_uri.clone(),
     );
 
