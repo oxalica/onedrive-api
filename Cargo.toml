@@ -8,6 +8,8 @@ categories = ["api-bindings"]
 keywords = ["onedrive", "http", "client", "api"]
 description = "OneDrive REST API Client"
 edition = "2018"
+readme = "README.md"
+documentation = "https://docs.rs/onedrive-api"
 
 [dev-dependencies]
 env_logger = "^0.6.0"
