@@ -1,6 +1,6 @@
 [package]
 name = "onedrive-api"
-version = "0.2.0"
+version = "0.2.1"
 authors = ["uHOOCCOOHu <hooccooh1896@gmail.com>"]
 repository = "https://github.com/uHOOCCOOHu/onedrive-api"
 license = "MIT"
