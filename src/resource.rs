@@ -1,7 +1,40 @@
 //! Resource Objects defined in the OneDrive API.
 //!
+//! # Field descriper
+//!
+//! Some structures have field descriper mods with singleton types representing
+//! all controlable fields of it, which may be used
+//! in [`onedrive_api::query_option`][query_option] to select or expand it using
+//! `with_option` version API of [`DriveClient`][drive_client].
+//!
+//! ## Example
+//! Here is an example to use [`resource::DriveItemField`][drive_item_field].
+//! ```
+//! use onedrive_api::{DriveClient, ItemLocation, query_option::ObjectOption};
+//! use onedrive_api::resource::DriveItemField;
+//!
+//! // let client: DriveClient;
+//! # fn run(client: &DriveClient) -> onedrive_api::Result<()> {
+//! let item = client
+//!     .get_item_with_option(
+//!         ItemLocation::root(),
+//!         None,
+//!         // Only response `id` and `e_tag` to reduce data transmission.
+//!         ObjectOption::new()
+//!             .select(&[&DriveItemField::id, &DriveItemField::e_tag]),
+//!     )?;
+//!
+//! Ok(())
+//! # }
+//! ```
+//!
+//!
 //! # See also
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/?view=odsp-graph-online)
+//!
+//! [query_option]: ../query_option/index.html
+//! [drive_client]: ../struct.DriveClient.html
+//! [drive_item_field]: ./DriveItemField/index.html
 use serde::{Deserialize, Serialize};
 
 /// A semantic alias for URL string in resource objects.

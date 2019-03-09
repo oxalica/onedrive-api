@@ -7,6 +7,28 @@
 //! The [`onedrive_api::DriveClient`][client] and [`onedrive_api::AuthClient`][auth_client]
 //! are synchronous by using `reqwest::Client`. Async support is TODO.
 //!
+//! ## Example
+//! ```
+//! use onedrive_api::{DriveClient, FileName, DriveLocation, ItemLocation};
+//! # fn run() -> onedrive_api::Result<()> {
+//!
+//! let client = DriveClient::new(
+//!     "<...TOKEN...>".to_owned(), // Login token to Microsoft Graph.
+//!     DriveLocation::me(),
+//! );
+//! let folder_item = client.create_folder(
+//!     ItemLocation::root(),
+//!     FileName::new("test_folder").unwrap(),
+//! )?;
+//! client.upload_small(
+//!     folder_item.id.as_ref().unwrap(),
+//!     b"Hello, world",
+//! )?;
+//!
+//! Ok(())
+//! # }
+//! ```
+//!
 //! [client]: ./struct.DriveClient.html
 //! [auth_client]: ./struct.AuthClient.html
 //! [onedrive]: https://onedrive.live.com/about
