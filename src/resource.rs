@@ -40,6 +40,12 @@ use serde::{Deserialize, Serialize};
 /// A semantic alias for URL string in resource objects.
 pub type Url = String;
 
+/// Boxed raw json value.
+pub type JsonValue = Box<::serde_json::Value>;
+
+/// Timestamp string with ISO 8601 format.
+pub type TimestampString = String;
+
 macro_rules! define_string_wrapper {
     ($($(#[$meta:meta])* $vis:vis $name:ident;)*) => { $(
         $(#[$meta])*
@@ -200,22 +206,21 @@ define_resource_object! {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0)
     #[derive(Debug)]
     pub struct Drive #DriveField {
-        // TODO: Incomplete
         pub id: Option<DriveId>,
-        // created_by: IdentitySet,
-        // created_date_time: Timestamp,
+        pub created_by: Option<JsonValue>,
+        pub created_date_time: Option<TimestampString>,
         pub description: Option<String>,
-        // drive_type: DriveType,
+        pub drive_type: Option<JsonValue>,
         pub items: Option<Vec<DriveItem>>,
-        // last_modified_by: IdeneitySet,
-        // last_modified_date_time: Timestamp,
+        pub last_modified_by: Option<JsonValue>,
+        pub last_modified_date_time: Option<TimestampString>,
         pub name: Option<String>,
-        // owner: IdentitySet,
-        // quota: Quota,
-        // root: DriveItem,
-        // sharepoint_ids: SharepointIds,
-        pub special: Option<DriveItem>,
-        // system: SystemFacet,
+        pub owner: Option<JsonValue>,
+        pub quota: Option<JsonValue>,
+        pub root: Option<DriveItem>,
+        pub sharepoint_ids: Option<JsonValue>,
+        pub special: Option<Vec<DriveItem>>,
+        pub system: Option<JsonValue>,
         pub web_url: Option<Url>,
     }
 
@@ -228,87 +233,70 @@ define_resource_object! {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0)
     #[derive(Debug)]
     pub struct DriveItem #DriveItemField {
-        // TODO: Incomplete
-        // Type specified fields
-
-        // audio: Audio,
-        // content: Stream,
-        // file: File,
-        // folder: Folder,
-        // image: Image,
-        // location: Option<GeoCoordinations>,
-        // malware: Option<Malware>,
-        // package: Package,
-        // photo: Photo,
-        // root: Root,
-        // special_folder: SpecialFolder,
-        // video: Video,
 
         // Drive item
-        // c_tag: Option<Tag>,
-        pub deleted: Option<Deleted>,
+
+        pub audio: Option<JsonValue>,
+        pub content: Option<JsonValue>,
+        pub c_tag: Option<Tag>,
+        pub deleted: Option<JsonValue>,
         pub description: Option<String>,
-        // pub file_system_info: FileSystemInfo,
-        // publication: Option<PublicationFacet>,
-        // remote_item: Option<RemoteItem>,
-        // search_result: Option<SearchResult>,
-        // shared: Shared,
-        // sharepoint_ids: SharepointIds,
+        pub file: Option<JsonValue>,
+        pub file_system_info: Option<JsonValue>,
+        pub folder: Option<JsonValue>,
+        pub image: Option<JsonValue>,
+        pub location: Option<JsonValue>,
+        pub package: Option<JsonValue>,
+        pub photo: Option<JsonValue>,
+        pub publication: Option<JsonValue>,
+        pub remote_item: Option<JsonValue>,
+        pub root: Option<JsonValue>,
+        pub search_result: Option<JsonValue>,
+        pub shared: Option<JsonValue>,
+        pub sharepoint_ids: Option<JsonValue>,
         pub size: Option<i64>,
-        // web_dav_url: Url,
+        pub special_folder: Option<JsonValue>,
+        pub video: Option<JsonValue>,
+        pub web_dav_url: Option<Url>,
 
         // Relationships
 
-        // activities: Vec<ItemActivity>,
         pub children: Option<Vec<DriveItem>>,
-        // permissions: Vec<Permission>,
-        // thumbnails: Vec<ThumbnailSet>,
-        // versions: Vec<DriveItemVersion>,
+        pub created_by_user: Option<JsonValue>,
+        pub last_modified_by_user: Option<JsonValue>,
+        pub permissions: Option<JsonValue>,
+        pub thumbnails: Option<JsonValue>,
+        pub versions: Option<JsonValue>,
 
         // Base item
+
         pub id: Option<ItemId>,
-        // created_by: IdentitySet,
-        // created_date_time: Timestamp,
+        pub created_by: Option<JsonValue>,
+        pub created_date_time: Option<TimestampString>,
         pub e_tag: Option<Tag>,
-        // last_modified_by: IdentitySet,
-        // last_modified_date_time: Timestamp,
+        pub last_modified_by: Option<JsonValue>,
+        pub last_modified_date_time: Option<TimestampString>,
         pub name: Option<String>,
-        pub parent_reference: Option<ItemReference>,
+        pub parent_reference: Option<JsonValue>,
         pub web_url: Option<Url>,
 
         // Instance annotations
+
+        // `@microsoft.graph.conflictBehavior` is write-only.
+
+        /// The pre-authorized url for downloading the content.
+        ///
+        /// It is **NOT** selectable through [`ObjectOption::select`][select] and
+        /// only provided in the result of [`AuthClient::get_item`][get_item]
+        /// (or [`AuthClient::get_item_with_option`][get_item_with_opt]).
+        ///
+        /// [select]: ../query_option/struct.ObjectOption.html#method.select
+        /// [get_item]: ../struct.DriveClient.html#method.get_item
+        /// [get_item_with_opt]: ../struct.DriveClient.html#method.get_item_with_option
         [unselectable]
         pub download_url @"@microsoft.graph.downloadUrl": Option<Url>,
-    }
 
-    /// Deleted facet
-    ///
-    /// The `Deleted` resource indicates that the item has been deleted.
-    ///
-    /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/deleted?view=graph-rest-1.0)
-    #[derive(Debug, Serialize)]
-    pub struct Deleted {
-        pub state: Option<String>,
-    }
-
-    /// ItemReference resource type
-    ///
-    /// The `ItemReference` resource provides information necessary to address a `DriveItem` via the API.
-    ///
-    /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/itemreference?view=graph-rest-1.0)
-    #[derive(Debug, Serialize)]
-    pub struct ItemReference {
-        pub drive_id: Option<DriveId>,
-        // drive_type: DriveType,
-        pub id: Option<ItemId>,
-        // list_id: String,
-        pub name: Option<String>,
-        pub path: Option<String>,
-        // shared_id: String,
-        // sharepoint_ids: SharepointIds,
-        // site_id: String,
+        // `@microsoft.graph.sourceUrl` is write-only
     }
 }
 
