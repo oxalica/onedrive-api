@@ -40,9 +40,6 @@ use serde::{Deserialize, Serialize};
 /// A semantic alias for URL string in resource objects.
 pub type Url = String;
 
-/// A semantic alias for file size in resource objects.
-pub type FileSize = u64;
-
 macro_rules! define_string_wrapper {
     ($($(#[$meta:meta])* $vis:vis $name:ident;)*) => { $(
         $(#[$meta])*
@@ -257,7 +254,7 @@ define_resource_object! {
         // search_result: Option<SearchResult>,
         // shared: Shared,
         // sharepoint_ids: SharepointIds,
-        pub size: Option<FileSize>,
+        pub size: Option<i64>,
         // web_dav_url: Url,
 
         // Relationships
