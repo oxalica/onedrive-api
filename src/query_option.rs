@@ -9,20 +9,20 @@
 //!
 //! # See also
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters)
-use crate::resource::{ResourceFieldOf, ResourceFieldTypeOf};
+use crate::resource::ResourceField;
 use std::default::Default;
 use std::fmt::Write;
 use std::marker::PhantomData;
 
 /// Option for a request to resource object.
 #[derive(Debug)]
-pub struct ObjectOption<T> {
+pub struct ObjectOption<Field> {
     select_buf: String,
     expand_buf: String,
-    _marker: PhantomData<Fn(&T)>,
+    _marker: PhantomData<Fn(&Field)>,
 }
 
-impl<T> ObjectOption<T> {
+impl<Field: ResourceField> ObjectOption<Field> {
     /// Create an empty (default) option.
     pub fn new() -> Self {
         Self {
@@ -39,9 +39,16 @@ impl<T> ObjectOption<T> {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#select-parameter)
-    pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
+    pub fn select(mut self, fields: &[Field]) -> Self {
         for sel in fields {
-            write!(self.select_buf, ",{}", sel.api_field_name()).unwrap();
+            self = self.select_raw(&[sel.api_field_name()]);
+        }
+        self
+    }
+
+    fn select_raw(mut self, fields: &[&str]) -> Self {
+        for sel in fields {
+            write!(self.select_buf, ",{}", sel).unwrap();
         }
         self
     }
@@ -53,17 +60,17 @@ impl<T> ObjectOption<T> {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter)
-    pub fn expand<Field: ResourceFieldTypeOf<T>>(
-        mut self,
-        field: Field,
-        select_children: Option<&[&dyn ResourceFieldOf<Field>]>,
-    ) -> Self {
+    pub fn expand(self, field: Field, select_children: Option<&[&str]>) -> Self {
+        self.expand_raw(field.api_field_name(), select_children)
+    }
+
+    fn expand_raw(mut self, field: &str, select_children: Option<&[&str]>) -> Self {
         let buf = &mut self.expand_buf;
-        write!(buf, ",{}", field.api_field_name()).unwrap();
+        write!(buf, ",{}", field).unwrap();
         if let Some(children) = select_children {
             write!(buf, "($select=").unwrap();
             for sel in children {
-                write!(buf, "{},", sel.api_field_name()).unwrap();
+                write!(buf, "{},", sel).unwrap();
             }
             write!(buf, ")").unwrap();
         }
@@ -77,7 +84,7 @@ impl<T> ObjectOption<T> {
     }
 }
 
-impl<T> Default for ObjectOption<T> {
+impl<Field: ResourceField> Default for ObjectOption<Field> {
     fn default() -> Self {
         Self::new()
     }
@@ -85,14 +92,14 @@ impl<T> Default for ObjectOption<T> {
 
 /// Option for the request to a collection of resource objects.
 #[derive(Debug)]
-pub struct CollectionOption<T> {
-    q: ObjectOption<T>,
+pub struct CollectionOption<Field> {
+    q: ObjectOption<Field>,
     order_buf: Option<String>,
     page_size_buf: Option<String>,
     get_count_buf: Option<bool>,
 }
 
-impl<T> CollectionOption<T> {
+impl<Field: ResourceField> CollectionOption<Field> {
     /// Create an empty (default) option.
     pub fn new() -> Self {
         Self {
@@ -109,7 +116,7 @@ impl<T> CollectionOption<T> {
     /// [`ObjectOption::select`][select]
     ///
     /// [select]: ./struct.ObjectOption.html#method.select
-    pub fn select(mut self, fields: &[&dyn ResourceFieldOf<T>]) -> Self {
+    pub fn select(mut self, fields: &[Field]) -> Self {
         self.q = self.q.select(fields);
         self
     }
@@ -120,11 +127,7 @@ impl<T> CollectionOption<T> {
     /// [`ObjectOption::expand`][expand]
     ///
     /// [expand]: ./struct.ObjectOption.html#method.expand
-    pub fn expand<Field: ResourceFieldTypeOf<T>>(
-        mut self,
-        field: Field,
-        select_children: Option<&[&dyn ResourceFieldOf<Field>]>,
-    ) -> Self {
+    pub fn expand(mut self, field: Field, select_children: Option<&[&str]>) -> Self {
         self.q = self.q.expand(field, select_children);
         self
     }
@@ -136,7 +139,7 @@ impl<T> CollectionOption<T> {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#orderby-parameter)
-    pub fn order_by<Field: ResourceFieldOf<T>>(mut self, field: Field, order: Order) -> Self {
+    pub fn order_by(mut self, field: Field, order: Order) -> Self {
         let order = match order {
             Order::Ascending => "asc",
             Order::Descending => "desc",
@@ -183,7 +186,7 @@ impl<T> CollectionOption<T> {
     }
 }
 
-impl<T> Default for CollectionOption<T> {
+impl<Field: ResourceField> Default for CollectionOption<Field> {
     fn default() -> Self {
         Self::new()
     }

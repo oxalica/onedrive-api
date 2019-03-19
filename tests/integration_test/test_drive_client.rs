@@ -73,7 +73,7 @@ fn test_get_drive() {
     let drive1_id = drive1.id.unwrap();
 
     let drive2 = DriveClient::new(TOKEN.clone(), drive1_id.clone())
-        .get_drive_with_option(ObjectOption::new().select(&[&DriveField::id]))
+        .get_drive_with_option(ObjectOption::new().select(&[DriveField::id]))
         .expect("Cannot get drive #2");
     assert_eq!(drive1_id, drive2.id.unwrap());
 
@@ -88,7 +88,7 @@ fn test_get_drive() {
         .get_item_with_option(
             ItemLocation::root(),
             None,
-            ObjectOption::new().select(&[&DriveItemField::e_tag]),
+            ObjectOption::new().select(&[DriveItemField::e_tag]),
         )
         .expect("Cannot get root item with option")
         .unwrap();
@@ -380,7 +380,7 @@ fn test_list_children() {
                     folder_location,
                     None,
                     CollectionOption::new()
-                        .select(&[&DriveItemField::name, &DriveItemField::e_tag])
+                        .select(&[DriveItemField::name, DriveItemField::e_tag])
                         .page_size(PAGE_SIZE),
                 )
                 .expect("Failed to list children with option")
@@ -472,7 +472,7 @@ fn test_track_changes() {
                 .track_changes_from_initial_with_option(
                     container_location,
                     CollectionOption::new()
-                        .select(&[&DriveItemField::id])
+                        .select(&[DriveItemField::id])
                         .page_size(1),
                 )
                 .expect("Failed to track initial changes");
