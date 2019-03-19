@@ -21,7 +21,7 @@
 //!         None,
 //!         // Only response `id` and `e_tag` to reduce data transmission.
 //!         ObjectOption::new()
-//!             .select(&[&DriveItemField::id, &DriveItemField::e_tag]),
+//!             .select(&[DriveItemField::id, DriveItemField::e_tag]),
 //!     )?;
 //!
 //! Ok(())
@@ -35,13 +35,17 @@
 //! [query_option]: ../query_option/index.html
 //! [drive_client]: ../struct.DriveClient.html
 //! [drive_item_field]: ./DriveItemField/index.html
+use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 /// A semantic alias for URL string in resource objects.
 pub type Url = String;
 
-/// A semantic alias for file size in resource objects.
-pub type FileSize = u64;
+/// Boxed raw json value.
+pub type JsonValue = Box<::serde_json::Value>;
+
+/// Timestamp string with ISO 8601 format.
+pub type TimestampString = String;
 
 macro_rules! define_string_wrapper {
     ($($(#[$meta:meta])* $vis:vis $name:ident;)*) => { $(
@@ -82,32 +86,31 @@ define_string_wrapper! {
     ///
     /// Used for avoid data transmission when a resource is not modified.
     ///
-    /// The tag from `DriveItem::c_tag` (TODO) is for the content of the item,
+    /// The tag from [`DriveItem::c_tag`][c_tag] is for the content of the item,
     /// while the one from [`DriveItem::e_tag`][e_tag] is for the entire item (metadata + content).
     ///
     /// [e_tag]: ./struct.DriveItem.html#structfield.e_tag
+    /// [c_tag]: ./struct.DriveItem.html#structfield.c_tag
     pub Tag;
 }
 
 #[doc(hidden)]
-pub trait ResourceFieldOf<T> {
-    fn api_field_name(&self) -> String;
-}
-
-// Separate `type` to enable making `ResoucrFieldOf` into trait object.
-#[doc(hidden)]
-pub trait ResourceFieldTypeOf<T>: ResourceFieldOf<T> {
-    type Type;
+pub trait ResourceField {
+    fn api_field_name(&self) -> &'static str;
 }
 
 macro_rules! define_resource_object {
     ($(
         $(#[$meta:meta])*
-        $vis:vis struct $struct_name:ident $(#$field_mod_name:ident)? {
+        $vis:vis struct $struct_name:ident #$field_enum_name:ident {
             $(
                 $(#[$field_meta:meta])*
-                $([unselectable $($unselectable_mark:ident)?])?
-                pub $field_name:ident $(@$field_rename:literal)?: Option<$field_ty:ty>,
+                $([unselectable]
+                    pub $unsel_field_name:ident
+                    $(@$field_rename:literal)?
+                )?
+                $(pub $sel_field_name:ident)?
+                    : Option<$field_ty:ty>,
             )*
         }
     )*) => {
@@ -119,78 +122,47 @@ macro_rules! define_resource_object {
                 $(
                     #[allow(missing_docs)]
                     $(#[$field_meta])*
-                    $(#[serde(rename = $field_rename)])?
-                    pub $field_name: Option<$field_ty>,
+                    $($(#[serde(rename = $field_rename)])? pub $unsel_field_name)?
+                    $(pub $sel_field_name)?
+                        : Option<$field_ty>,
                 )*
                 #[serde(default)]
                 _private: (),
             }
 
-            define_resource_object! { __impl_struct($struct_name $($field_mod_name)?) [
-                $({
-                    [$(unselectable $($unselectable_mark)?)?]
-                    [$($field_meta)*]
-                    $field_name
-                    ($($field_rename)?)
-                    ($field_ty)
-                })*
-            ] }
+            /// Fields descriptors.
+            ///
+            /// More details in [mod documentation][mod].
+            ///
+            /// [mod]: ../index.html
+            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            $vis enum $field_enum_name {
+                $(
+                    $( // Only place selectable fields.
+                        #[allow(missing_docs, non_camel_case_types)]
+                        $sel_field_name,
+                    )?
+                )*
+            }
+
+            impl ResourceField for $field_enum_name {
+                #[inline]
+                fn api_field_name(&self) -> &'static str {
+                    lazy_static! {
+                        static ref FIELD_NAME_TABLE: Vec<String> = {
+                            vec![
+                                // Only place selectable fields.
+                                $($(snake_to_camel_case(stringify!($sel_field_name)),)?)*
+                            ]
+                        };
+                    }
+
+                    &FIELD_NAME_TABLE[*self as usize]
+                }
+            }
+
         )*
     };
-    (__impl_struct($struct_name:ident) $tt:tt) => {}; // No field mod.
-    (__impl_struct($struct_name:ident $field_mod_name:ident) [$({
-        [$($unselectable:ident)?]
-        [$($meta:meta)*]
-        $field:ident
-        ($($rename:literal)?)
-        ($ty:ty)
-    })*]) => {
-        /// Fields descriptors.
-        ///
-        /// More details in [mod documentation][mod].
-        ///
-        /// [mod]: ../index.html
-        #[allow(non_snake_case)]
-        pub mod $field_mod_name {
-            $(
-                define_resource_object! { __impl_if_empty($($unselectable)?) {
-                    /// Field descriptor.
-                    ///
-                    /// More details in [mod documentation][mod].
-                    ///
-                    /// [mod]: ../index.html
-                    #[allow(non_camel_case_types)]
-                    pub struct $field;
-
-                    impl ::std::fmt::Debug for $field {
-                        fn fmt(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                            f.debug_struct(
-                                concat!(stringify!($field_mod_name), "::", stringify!($field)),
-                            ).finish()
-                        }
-                    }
-                } }
-            )*
-        }
-
-        $(
-            define_resource_object! { __impl_if_empty($($unselectable)?) {
-                impl ResourceFieldOf<$struct_name> for $field_mod_name::$field {
-                    #[inline]
-                    fn api_field_name(&self) -> String {
-                        snake_to_camel_case(stringify!($field))
-                        $(; $rename)? // Replace
-                    }
-                }
-
-                impl ResourceFieldTypeOf<$struct_name> for $field_mod_name::$field {
-                    type Type = $ty;
-                }
-            } }
-        )*
-    };
-    (__impl_if_empty() { $($tt:tt)* }) => { $($tt)* };
-    (__impl_if_empty($sth:tt) $tt:tt) => {};
 }
 
 define_resource_object! {
@@ -203,22 +175,21 @@ define_resource_object! {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0)
     #[derive(Debug)]
     pub struct Drive #DriveField {
-        // TODO: Incomplete
         pub id: Option<DriveId>,
-        // created_by: IdentitySet,
-        // created_date_time: Timestamp,
+        pub created_by: Option<JsonValue>,
+        pub created_date_time: Option<TimestampString>,
         pub description: Option<String>,
-        // drive_type: DriveType,
+        pub drive_type: Option<JsonValue>,
         pub items: Option<Vec<DriveItem>>,
-        // last_modified_by: IdeneitySet,
-        // last_modified_date_time: Timestamp,
+        pub last_modified_by: Option<JsonValue>,
+        pub last_modified_date_time: Option<TimestampString>,
         pub name: Option<String>,
-        // owner: IdentitySet,
-        // quota: Quota,
-        // root: DriveItem,
-        // sharepoint_ids: SharepointIds,
-        pub special: Option<DriveItem>,
-        // system: SystemFacet,
+        pub owner: Option<JsonValue>,
+        pub quota: Option<JsonValue>,
+        pub root: Option<DriveItem>,
+        pub sharepoint_ids: Option<JsonValue>,
+        pub special: Option<Vec<DriveItem>>,
+        pub system: Option<JsonValue>,
         pub web_url: Option<Url>,
     }
 
@@ -231,87 +202,70 @@ define_resource_object! {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0)
     #[derive(Debug)]
     pub struct DriveItem #DriveItemField {
-        // TODO: Incomplete
-        // Type specified fields
-
-        // audio: Audio,
-        // content: Stream,
-        // file: File,
-        // folder: Folder,
-        // image: Image,
-        // location: Option<GeoCoordinations>,
-        // malware: Option<Malware>,
-        // package: Package,
-        // photo: Photo,
-        // root: Root,
-        // special_folder: SpecialFolder,
-        // video: Video,
 
         // Drive item
-        // c_tag: Option<Tag>,
-        pub deleted: Option<Deleted>,
+
+        pub audio: Option<JsonValue>,
+        pub content: Option<JsonValue>,
+        pub c_tag: Option<Tag>,
+        pub deleted: Option<JsonValue>,
         pub description: Option<String>,
-        // pub file_system_info: FileSystemInfo,
-        // publication: Option<PublicationFacet>,
-        // remote_item: Option<RemoteItem>,
-        // search_result: Option<SearchResult>,
-        // shared: Shared,
-        // sharepoint_ids: SharepointIds,
-        pub size: Option<FileSize>,
-        // web_dav_url: Url,
+        pub file: Option<JsonValue>,
+        pub file_system_info: Option<JsonValue>,
+        pub folder: Option<JsonValue>,
+        pub image: Option<JsonValue>,
+        pub location: Option<JsonValue>,
+        pub package: Option<JsonValue>,
+        pub photo: Option<JsonValue>,
+        pub publication: Option<JsonValue>,
+        pub remote_item: Option<JsonValue>,
+        pub root: Option<JsonValue>,
+        pub search_result: Option<JsonValue>,
+        pub shared: Option<JsonValue>,
+        pub sharepoint_ids: Option<JsonValue>,
+        pub size: Option<i64>,
+        pub special_folder: Option<JsonValue>,
+        pub video: Option<JsonValue>,
+        pub web_dav_url: Option<Url>,
 
         // Relationships
 
-        // activities: Vec<ItemActivity>,
         pub children: Option<Vec<DriveItem>>,
-        // permissions: Vec<Permission>,
-        // thumbnails: Vec<ThumbnailSet>,
-        // versions: Vec<DriveItemVersion>,
+        pub created_by_user: Option<JsonValue>,
+        pub last_modified_by_user: Option<JsonValue>,
+        pub permissions: Option<JsonValue>,
+        pub thumbnails: Option<JsonValue>,
+        pub versions: Option<JsonValue>,
 
         // Base item
+
         pub id: Option<ItemId>,
-        // created_by: IdentitySet,
-        // created_date_time: Timestamp,
+        pub created_by: Option<JsonValue>,
+        pub created_date_time: Option<TimestampString>,
         pub e_tag: Option<Tag>,
-        // last_modified_by: IdentitySet,
-        // last_modified_date_time: Timestamp,
+        pub last_modified_by: Option<JsonValue>,
+        pub last_modified_date_time: Option<TimestampString>,
         pub name: Option<String>,
-        pub parent_reference: Option<ItemReference>,
+        pub parent_reference: Option<JsonValue>,
         pub web_url: Option<Url>,
 
         // Instance annotations
+
+        // `@microsoft.graph.conflictBehavior` is write-only.
+
+        /// The pre-authorized url for downloading the content.
+        ///
+        /// It is **NOT** selectable through [`ObjectOption::select`][select] and
+        /// only provided in the result of [`AuthClient::get_item`][get_item]
+        /// (or [`AuthClient::get_item_with_option`][get_item_with_opt]).
+        ///
+        /// [select]: ../query_option/struct.ObjectOption.html#method.select
+        /// [get_item]: ../struct.DriveClient.html#method.get_item
+        /// [get_item_with_opt]: ../struct.DriveClient.html#method.get_item_with_option
         [unselectable]
         pub download_url @"@microsoft.graph.downloadUrl": Option<Url>,
-    }
 
-    /// Deleted facet
-    ///
-    /// The `Deleted` resource indicates that the item has been deleted.
-    ///
-    /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/deleted?view=graph-rest-1.0)
-    #[derive(Debug, Serialize)]
-    pub struct Deleted {
-        pub state: Option<String>,
-    }
-
-    /// ItemReference resource type
-    ///
-    /// The `ItemReference` resource provides information necessary to address a `DriveItem` via the API.
-    ///
-    /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/itemreference?view=graph-rest-1.0)
-    #[derive(Debug, Serialize)]
-    pub struct ItemReference {
-        pub drive_id: Option<DriveId>,
-        // drive_type: DriveType,
-        pub id: Option<ItemId>,
-        // list_id: String,
-        pub name: Option<String>,
-        pub path: Option<String>,
-        // shared_id: String,
-        // sharepoint_ids: SharepointIds,
-        // site_id: String,
+        // `@microsoft.graph.sourceUrl` is write-only
     }
 }
 
@@ -366,5 +320,25 @@ mod tests {
         for (i, o) in &data {
             assert_eq!(snake_to_camel_case(i), *o);
         }
+    }
+
+    #[test]
+    fn test_api_field_name() {
+        assert_eq!(DriveField::id.api_field_name(), "id");
+        assert_eq!(DriveField::drive_type.api_field_name(), "driveType");
+        assert_eq!(DriveField::owner.api_field_name(), "owner");
+        assert_eq!(DriveField::web_url.api_field_name(), "webUrl");
+
+        assert_eq!(DriveItemField::id.api_field_name(), "id");
+        assert_eq!(
+            DriveItemField::file_system_info.api_field_name(),
+            "fileSystemInfo"
+        );
+        assert_eq!(DriveItemField::size.api_field_name(), "size");
+        assert_eq!(DriveItemField::web_dav_url.api_field_name(), "webDavUrl");
+        assert_eq!(DriveItemField::web_url.api_field_name(), "webUrl");
+
+        // This should fail to compile.
+        // let _ = DriveItemField::download_url;
     }
 }

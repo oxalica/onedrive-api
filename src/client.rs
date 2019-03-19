@@ -53,7 +53,7 @@ impl DriveClient {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0)
     ///
     /// [drive]: ./resource/struct.Drive.html
-    pub fn get_drive_with_option(&self, option: ObjectOption<Drive>) -> Result<Drive> {
+    pub fn get_drive_with_option(&self, option: ObjectOption<DriveField>) -> Result<Drive> {
         self.client
             .get(api_url![&self.drive])
             .query(&option.params().collect::<Vec<_>>())
@@ -85,7 +85,7 @@ impl DriveClient {
         &self,
         item: impl Into<ItemLocation<'a>>,
         if_none_match: Option<&Tag>,
-        option: CollectionOption<DriveItem>,
+        option: CollectionOption<DriveItemField>,
     ) -> Result<Option<ListChildrenFetcher>> {
         self.client
             .get(api_url![&self.drive, &item.into(), "children"])
@@ -125,7 +125,7 @@ impl DriveClient {
         &self,
         item: impl Into<ItemLocation<'a>>,
         if_none_match: Option<&Tag>,
-        option: ObjectOption<DriveItem>,
+        option: ObjectOption<DriveItemField>,
     ) -> Result<Option<DriveItem>> {
         self.client
             .get(api_url![&self.drive, &item.into()])
@@ -489,7 +489,7 @@ impl DriveClient {
     pub fn track_changes_from_initial_with_option<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
-        option: CollectionOption<DriveItem>,
+        option: CollectionOption<DriveItemField>,
     ) -> Result<TrackChangeFetcher> {
         self.client
             .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
