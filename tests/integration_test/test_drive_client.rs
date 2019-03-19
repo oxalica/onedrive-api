@@ -62,7 +62,7 @@ fn download(url: &str) -> Vec<u8> {
 ///   - Success.
 /// - get_item()
 ///   - Success, directory.
-///   - Success, directory, with option.
+///   - Success, directory, $select.
 #[test]
 #[ignore]
 fn test_get_drive() {
@@ -71,11 +71,14 @@ fn test_get_drive() {
 
     // Default fields.
     let drive1_id = drive1.id.unwrap();
+    println!("Quota: {}", drive1.quota.unwrap());
 
     let drive2 = DriveClient::new(TOKEN.clone(), drive1_id.clone())
-        .get_drive_with_option(ObjectOption::new().select(&[DriveField::id]))
+        .get_drive_with_option(ObjectOption::new().select(&[DriveField::id, DriveField::owner]))
         .expect("Cannot get drive #2");
     assert_eq!(drive1_id, drive2.id.unwrap());
+    println!("Owner: {}", drive1.owner.unwrap());
+    assert!(drive2.quota.is_none()); // Assert not selected.
 
     let root_item = client
         .get_item(ItemLocation::root(), None)
@@ -96,9 +99,11 @@ fn test_get_drive() {
     assert!(root_item2.e_tag.is_some());
 }
 
-/// Max 8 requests.
+/// Max 9 requests.
 ///
 /// # Test
+/// - get_item()
+///   - Success, $expand.
 /// - create_folder()
 ///   - Success.
 ///   - Failed (folder exists).
@@ -154,6 +159,9 @@ fn test_folder() {
             let folder2 = client
                 .create_folder(&folder1_id, folder2_name)
                 .expect("Failed to create sub-folder");
+            assert!(folder2.id.is_some());
+            assert!(folder2.name.is_some());
+            assert!(folder2.e_tag.is_some());
 
             let children = client
                 .list_children(&folder1_id, None)
@@ -165,6 +173,22 @@ fn test_folder() {
             assert_eq!(child.id, folder2.id);
             assert_eq!(child.name, folder2.name);
             assert_eq!(child.e_tag, folder2.e_tag);
+
+            let item_children = client
+                .get_item_with_option(
+                    &folder1_id,
+                    None,
+                    ObjectOption::new().expand(DriveItemField::children, Some(&["id"])),
+                )
+                .expect("Failed to use get_item to fetch children")
+                .unwrap()
+                .children
+                .unwrap();
+            assert_eq!(item_children.len(), 1);
+
+            let item = item_children.into_iter().next().unwrap();
+            assert_eq!(item.id, folder2.id);
+            assert!(item.e_tag.is_none());
         },
         || {
             client.delete(&folder1_id, None).unwrap();
