@@ -438,7 +438,7 @@ impl DriveClient {
         source_item: impl Into<ItemLocation<'a>>,
         dest_folder: impl Into<ItemLocation<'b>>,
         dest_name: &FileName,
-    ) -> Result<()> {
+    ) -> Result<CopyProgressMonitor> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Request<'a> {
@@ -446,7 +446,8 @@ impl DriveClient {
             name: &'a str,
         }
 
-        self.client
+        let url = self
+            .client
             .post(api_url![&self.drive, &source_item.into(), "copy"])
             .bearer_auth(&self.token)
             .json(&Request {
@@ -456,7 +457,17 @@ impl DriveClient {
                 name: dest_name.as_str(),
             })
             .send()?
-            .parse_no_content() // TODO: Handle async copy
+            .check_status()?
+            .headers()
+            .get(::reqwest::header::LOCATION)
+            .ok_or_else(|| {
+                Error::unexpected_response("Header `Location` not exists in response of `copy`")
+            })?
+            .to_str()
+            .map_err(|_| Error::unexpected_response("Invalid string header `Location`"))?
+            .to_owned();
+
+        Ok(CopyProgressMonitor::from_url(&self.client, url))
     }
 
     /// Move a DriveItem to a new folder.
@@ -650,6 +661,97 @@ impl DriveClient {
                     )
                 })
             })
+    }
+}
+
+/// The monitor for checking the progress of a asynchronous `copy` operation.
+///
+/// # See also
+/// [`DriveClient::copy`][copy]
+///
+/// [Microsoft docs](https://docs.microsoft.com/en-us/graph/long-running-actions-overview)
+///
+/// [copy]: ./struct.DriveClient.html#method.copy
+#[derive(Debug)]
+pub struct CopyProgressMonitor {
+    client: ::reqwest::Client,
+    url: String,
+}
+
+/// The progress of a asynchronous `copy` operation.
+///
+/// # See also
+/// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta)
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub struct CopyProgress {
+    pub percentage_complete: f64,
+    pub status: CopyStatus,
+    _private: (),
+}
+
+/// The status of a `copy` operation.
+///
+/// # See also
+/// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta#json-representation)
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CopyStatus {
+    NotStarted,
+    InProgress,
+    Completed,
+    Updating,
+    Failed,
+    DeletePending,
+    DeleteFailed,
+    Waiting,
+}
+
+impl CopyProgressMonitor {
+    /// Make a progress monitor using existing `url`.
+    ///
+    /// The `url` must be get from [`CopyProgressMonitor::get_url`][get_url]
+    ///
+    /// [get_url]: #method.get_url
+    pub fn from_url(client: &::reqwest::Client, url: String) -> Self {
+        Self {
+            client: client.clone(),
+            url,
+        }
+    }
+
+    /// Get the url of this monitor.
+    pub fn get_url(&self) -> &str {
+        &self.url
+    }
+
+    /// Fetch the `copy` progress.
+    ///
+    /// # See also
+    /// [`CopyProgress`][copy_progress]
+    ///
+    /// [copy_progress]: ../struct.CopyProgress.html
+    pub fn fetch_progress(&self) -> Result<CopyProgress> {
+        #[derive(Debug, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Response {
+            operation: String,
+            percentage_complete: f64,
+            status: CopyStatus,
+        }
+
+        let resp: Response = self.client.get(&self.url).send()?.parse()?;
+
+        if resp.operation != "ItemCopy" {
+            return Err(Error::unexpected_response("Url is not for copy progress"));
+        }
+
+        Ok(CopyProgress {
+            percentage_complete: resp.percentage_complete,
+            status: resp.status,
+            _private: (),
+        })
     }
 }
 

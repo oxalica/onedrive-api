@@ -592,11 +592,21 @@ fn test_copy_and_conflict_behavior() {
 
     try_finally(
         || {
-            client
+            let monitor = client
                 .copy(&file1_id, ItemLocation::root(), name2)
                 .expect("Failed to start copy");
-            // FIXME: `copy` is async. Assume it is done before the next call.
-            std::thread::sleep(std::time::Duration::from_secs(3));
+            loop {
+                match monitor
+                    .fetch_progress()
+                    .expect("Failed to check `copy` progress")
+                    .status
+                {
+                    CopyStatus::NotStarted | CopyStatus::InProgress => (),
+                    CopyStatus::Completed => break,
+                    status => panic!("Unexpected fail of `copy`: {:?}", status),
+                }
+            }
+
             let file2_id = client
                 .get_item(rooted_location(name2))
                 .expect("Copy should be done")
