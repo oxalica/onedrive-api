@@ -1,5 +1,5 @@
 use crate::error::{Error, Result};
-use crate::query_option::{CollectionOption, ObjectOption};
+use crate::option::{CollectionOption, DriveItemPutOption, ObjectOption};
 use crate::resource::*;
 use crate::util::*;
 use reqwest::header;
@@ -45,24 +45,29 @@ impl DriveClient {
         }
     }
 
-    /// Get [`Drive`][drive].
+    /// Get `Drive`.
     ///
     /// Retrieve the properties and relationships of a [`Drive`][drive] resource.
     ///
     /// # See also
+    /// [`resource::Drive`][drive]
+    ///
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0)
     ///
     /// [drive]: ./resource/struct.Drive.html
     pub fn get_drive_with_option(&self, option: ObjectOption<DriveField>) -> Result<Drive> {
         self.client
             .get(api_url![&self.drive])
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
             .send()?
             .parse()
     }
 
-    /// Shortcut to [`get_drive_with_option`][with_opt] with default parameters.
+    /// Shortcut to `get_drive_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`get_drive_with_option`][with_opt]
     ///
     /// [with_opt]: #method.get_drive_with_option
     pub fn get_drive(&self) -> Result<Drive> {
@@ -84,30 +89,27 @@ impl DriveClient {
     pub fn list_children_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
         option: CollectionOption<DriveItemField>,
     ) -> Result<Option<ListChildrenFetcher>> {
         self.client
             .get(api_url![&self.drive, &item.into(), "children"])
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
-            .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
             .parse_optional()
             .map(|opt_resp| opt_resp.map(|resp| ListChildrenFetcher::new(self, resp)))
     }
 
-    /// Shortcut to [`list_children_with_option`][with_opt] with default params and fetch all.
+    /// Shortcut to `list_children_with_option` with default params and fetch all.
+    ///
+    /// # See also
+    /// [`list_children_with_option`][with_opt]
     ///
     /// [with_opt]: #method.list_children_with_option
-    pub fn list_children<'a>(
-        &self,
-        item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
-    ) -> Result<Option<Vec<DriveItem>>> {
-        self.list_children_with_option(item.into(), if_none_match, Default::default())?
-            .map(|fetcher| fetcher.fetch_all())
-            .transpose()
+    pub fn list_children<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<Vec<DriveItem>> {
+        self.list_children_with_option(item.into(), Default::default())?
+            .unwrap()
+            .fetch_all()
     }
 
     /// Get a [`DriveItem`][drive_item] resource.
@@ -124,27 +126,25 @@ impl DriveClient {
     pub fn get_item_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
         option: ObjectOption<DriveItemField>,
     ) -> Result<Option<DriveItem>> {
         self.client
             .get(api_url![&self.drive, &item.into()])
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
-            .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
             .parse_optional()
     }
 
-    /// Shortcut to [`get_item_with_option`][with_opt] with default parameters.
+    /// Shortcut to `get_item_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`get_item_with_option`][with_opt]
     ///
     /// [with_opt]: #method.get_item_with_option
-    pub fn get_item<'a>(
-        &self,
-        item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
-    ) -> Result<Option<DriveItem>> {
-        self.get_item_with_option(item.into(), if_none_match, Default::default())
+    pub fn get_item<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<DriveItem> {
+        self.get_item_with_option(item.into(), Default::default())
+            .map(|v| v.unwrap())
     }
 
     /// Create a new folder in a drive
@@ -233,11 +233,10 @@ impl DriveClient {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
-    pub fn new_upload_session<'a>(
+    pub fn new_upload_session_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        overwrite: bool,
-        if_match: Option<&Tag>,
+        option: DriveItemPutOption,
     ) -> Result<UploadSession> {
         #[derive(Serialize)]
         struct Item {
@@ -252,15 +251,28 @@ impl DriveClient {
 
         self.client
             .post(api_url![&self.drive, &item.into(), "createUploadSession"])
-            .opt_header(header::IF_MATCH, if_match)
+            .apply(&option)
             .bearer_auth(&self.token)
             .json(&Request {
                 item: Item {
-                    conflict_behavior: if overwrite { "overwrite" } else { "fail" },
+                    conflict_behavior: "fail", // TODO
                 },
             })
             .send()?
             .parse()
+    }
+
+    /// Shortcut to `new_upload_session_with_option` with `ConflictBehavior::Fail`.
+    ///
+    /// # See also
+    /// [`new_upload_session_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.create_folder_with_option
+    pub fn new_upload_session<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+    ) -> Result<UploadSession> {
+        self.new_upload_session_with_option(item.into(), Default::default())
     }
 
     /// Resuming an in-progress upload
@@ -274,7 +286,7 @@ impl DriveClient {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct UploadSessionResponse {
-            // There is not url.
+            // There is no url.
             next_expected_ranges: Vec<ExpectRange>,
             expiration_date_time: TimestampString,
         }
@@ -322,6 +334,13 @@ impl DriveClient {
     /// byte range MUST be a multiple of 320 KiB (327,680 bytes). Using a fragment
     /// size that does not divide evenly by 320 KiB will result in errors committing
     /// some files.
+    ///
+    /// # Returns
+    /// - If error occurs, will return `Err`.
+    /// - If the part is uploaded successfully, but the file is not complete yet,
+    ///   will return `Ok(None)`.
+    /// - If this is the last part and it is uploaded successfully,
+    ///   will return `Ok(Some(newly_created_drive_item))`.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
@@ -416,12 +435,12 @@ impl DriveClient {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0)
-    pub fn move_<'a, 'b>(
+    pub fn move_with_option<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
-        dest_directory: impl Into<ItemLocation<'b>>,
+        dest_folder: impl Into<ItemLocation<'b>>,
         dest_name: Option<&FileName>,
-        if_match: Option<&Tag>,
+        option: DriveItemPutOption,
     ) -> Result<DriveItem> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
@@ -433,15 +452,35 @@ impl DriveClient {
         self.client
             .patch(api_url![&self.drive, &source_item.into()])
             .bearer_auth(&self.token)
-            .opt_header(header::IF_MATCH, if_match)
+            .apply(&option)
             .json(&Request {
                 parent_reference: ItemReference {
-                    path: api_path![&self.drive, &dest_directory.into()],
+                    path: api_path![&self.drive, &dest_folder.into()],
                 },
                 name: dest_name.map(FileName::as_str),
             })
             .send()?
             .parse()
+    }
+
+    /// Shortcut to `move_with_option` with `ConflictBehavior::Fail`.
+    ///
+    /// # See also
+    /// [`move_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.move_with_option
+    pub fn move_<'a, 'b>(
+        &self,
+        source_item: impl Into<ItemLocation<'a>>,
+        dest_folder: impl Into<ItemLocation<'b>>,
+        dest_name: Option<&FileName>,
+    ) -> Result<DriveItem> {
+        self.move_with_option(
+            source_item.into(),
+            dest_folder.into(),
+            dest_name,
+            Default::default(),
+        )
     }
 
     /// Delete a [`DriveItem`][drive_item].
@@ -458,17 +497,27 @@ impl DriveClient {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
-    pub fn delete<'a>(
+    pub fn delete_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        if_match: Option<&Tag>,
+        option: DriveItemPutOption,
     ) -> Result<()> {
         self.client
             .delete(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
-            .opt_header(header::IF_MATCH, if_match)
+            .apply(&option)
             .send()?
             .parse_no_content()
+    }
+
+    /// Shortcut to `delete_with_option`.
+    ///
+    /// # See also
+    /// [`delete_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.delete_with_option
+    pub fn delete<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<()> {
+        self.delete_with_option(item.into(), Default::default())
     }
 
     /// Track changes for a folder from initial state (empty state) to snapshot of current states.
@@ -493,14 +542,17 @@ impl DriveClient {
     ) -> Result<TrackChangeFetcher> {
         self.client
             .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
             .send()?
             .parse()
             .map(|resp| TrackChangeFetcher::new(self, resp))
     }
 
-    /// Shortcut to [`track_changes_from_initial_with_option`][with_opt] with default parameters.
+    /// Shortcut to `track_changes_from_initial_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`track_changes_from_initial_with_option`][with_opt]
     ///
     /// [with_opt]: #method.track_changes_from_initial_with_option
     pub fn track_changes_from_initial<'a>(

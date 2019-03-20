@@ -40,7 +40,7 @@
 mod authorization;
 mod client;
 mod error;
-pub mod query_option;
+pub mod option;
 pub mod resource;
 mod util;
 

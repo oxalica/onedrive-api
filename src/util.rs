@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use crate::resource::{DriveId, ItemId};
+use reqwest::{RequestBuilder, Response, StatusCode};
 use serde::{de, Deserialize};
 use url::PathSegmentsMut;
 
@@ -225,16 +226,25 @@ impl ApiPathComponent for str {
     }
 }
 
-pub(crate) trait RequestBuilderExt: Sized {
-    fn opt_header(self, key: impl AsRef<str>, value: Option<impl AsRef<str>>) -> Self;
+pub(crate) trait RequestBuilderTransformer {
+    fn trans(&self, req: RequestBuilder) -> RequestBuilder;
 }
 
-impl RequestBuilderExt for reqwest::RequestBuilder {
+pub(crate) trait RequestBuilderExt: Sized {
+    fn opt_header(self, key: impl AsRef<str>, value: Option<impl AsRef<str>>) -> Self;
+    fn apply(self, f: &impl RequestBuilderTransformer) -> Self;
+}
+
+impl RequestBuilderExt for RequestBuilder {
     fn opt_header(self, key: impl AsRef<str>, value: Option<impl AsRef<str>>) -> Self {
         match value {
             Some(v) => self.header(key.as_ref(), v.as_ref()),
             None => self,
         }
+    }
+
+    fn apply(self, f: &impl RequestBuilderTransformer) -> Self {
+        f.trans(self)
     }
 }
 
@@ -245,7 +255,7 @@ pub(crate) trait ResponseExt: Sized {
     fn parse_no_content(self) -> Result<()>;
 }
 
-impl ResponseExt for reqwest::Response {
+impl ResponseExt for Response {
     fn check_status(mut self) -> Result<Self> {
         match self.error_for_status_ref() {
             Ok(_) => Ok(self),
@@ -266,8 +276,6 @@ impl ResponseExt for reqwest::Response {
     }
 
     fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>> {
-        use reqwest::StatusCode;
-
         match self.status() {
             StatusCode::NOT_MODIFIED | StatusCode::ACCEPTED => Ok(None),
             _ => Ok(Some(self.parse()?)),
