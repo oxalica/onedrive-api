@@ -293,6 +293,11 @@ fn test_file_upload_session() {
         .new_upload_session(rooted_location(gen_filename()), false, None)
         .expect("Failed to create upload session");
 
+    println!(
+        "Upload session will expire at {:?}",
+        upload_session.get_expiration_date_time()
+    );
+
     assert!(
         client
             .upload_to_session(&upload_session, &CONTENT[RANGE1], RANGE1, CONTENT.len())

@@ -274,10 +274,9 @@ impl DriveClient {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct UploadSessionResponse {
-            // TODO: Incompleted
-            upload_url: Option<String>,
+            // There is not url.
             next_expected_ranges: Vec<ExpectRange>,
-            // expiration_date_time: Timestamp,
+            expiration_date_time: TimestampString,
         }
 
         self.client
@@ -287,6 +286,7 @@ impl DriveClient {
             .map(|resp| UploadSession {
                 upload_url: upload_url.to_owned(),
                 next_expected_ranges: resp.next_expected_ranges,
+                expiration_date_time: resp.expiration_date_time,
             })
     }
 
@@ -805,33 +805,53 @@ struct ItemReference<'a> {
 /// # See also
 /// [`DriveClient::new_upload_session`][get_session]
 ///
-/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0)
 ///
 /// [get_session]: ./struct.DriveClient.html#method.new_upload_session
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadSession {
-    // TODO: Incompleted
     upload_url: String,
     next_expected_ranges: Vec<ExpectRange>,
-    // expiration_date_time: Timestamp,
+    expiration_date_time: TimestampString,
 }
 
 impl UploadSession {
-    /// Get the url for the upload session.
+    /// The URL endpoint accepting PUT requests.
     ///
-    /// It can be used to resume the session using [`DriveClient::get_upload_session`][get_session].
+    /// Directly PUT to this URL is **NOT** encouraged.
+    ///
+    /// It is preferred to use [`DriveClient::get_upload_session`][get_session] to get
+    /// the upload session and then [`DriveClient::upload_to_session`][upload_to_session] to
+    /// perform upload.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
     ///
     /// [get_session]: ./struct.DriveClient.html#method.get_upload_session
+    /// [upload_to_session]: ./struct.DriveClient.html#method.upload_to_session
     pub fn get_url(&self) -> &str {
         &self.upload_url
     }
 
-    /// Get next byte ranges the server expected.
+    /// Get a collection of byte ranges that the server is missing for the file.
     ///
     /// Used for determine what to upload when resuming a session.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
     pub fn get_next_expected_ranges(&self) -> &[ExpectRange] {
         &self.next_expected_ranges
+    }
+
+    /// Get the date and time in UTC that the upload session will expire.
+    ///
+    /// The complete file must be uploaded before this expiration time is reached.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
+    pub fn get_expiration_date_time(&self) -> &TimestampString {
+        &self.expiration_date_time
     }
 }
 
