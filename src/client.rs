@@ -2,8 +2,8 @@ use crate::error::{Error, Result};
 use crate::option::{CollectionOption, DriveItemPutOption, ObjectOption};
 use crate::resource::*;
 use crate::util::*;
-use reqwest::header;
-use serde::{de, Deserialize, Serialize};
+use crate::{ConflictBehavior, ExpectRange};
+use serde::{Deserialize, Serialize};
 
 macro_rules! api_url {
     (@$init:expr; $($seg:expr),* $(,)*) => {
@@ -152,16 +152,21 @@ impl DriveClient {
     /// Create a new folder [`DriveItem`][drive_item] with a specified parent item or path.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP CONFLICT if the target already exists.
+    /// Will return `Err` with HTTP CONFLICT if `conflict_behavior` is `Fail` and
+    /// the target already exists.
+    ///
+    /// # Note
+    /// `conflict_behavior` is supported.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
-    pub fn create_folder<'a>(
+    pub fn create_folder_with_option<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
         name: &FileName,
+        option: DriveItemPutOption,
     ) -> Result<DriveItem> {
         #[derive(Serialize)]
         struct Folder {}
@@ -172,19 +177,36 @@ impl DriveClient {
             folder: Folder,
             // https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
-            conflict_behavior: &'a str,
+            conflict_behavior: ConflictBehavior,
         }
 
         self.client
             .post(api_url![&self.drive, &parent_item.into(), "children"])
             .bearer_auth(&self.token)
+            .apply(&option)
             .json(&Request {
                 name: name.as_str(),
                 folder: Folder {},
-                conflict_behavior: "fail", // TODO
+                conflict_behavior: option
+                    .get_conflict_behavior()
+                    .unwrap_or(ConflictBehavior::Fail),
             })
             .send()?
             .parse()
+    }
+
+    /// Shortcut to `create_folder_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`create_folder_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.create_folder_with_option
+    pub fn create_folder<'a>(
+        &self,
+        parent_item: impl Into<ItemLocation<'a>>,
+        name: &FileName,
+    ) -> Result<DriveItem> {
+        self.create_folder_with_option(parent_item.into(), name, Default::default())
     }
 
     const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
@@ -231,6 +253,9 @@ impl DriveClient {
     /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
     /// but does not match the item.
     ///
+    /// # Note
+    /// `conflict_behavior` is supported.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
     pub fn new_upload_session_with_option<'a>(
@@ -241,7 +266,7 @@ impl DriveClient {
         #[derive(Serialize)]
         struct Item {
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
-            conflict_behavior: &'static str,
+            conflict_behavior: ConflictBehavior,
         }
 
         #[derive(Serialize)]
@@ -255,7 +280,9 @@ impl DriveClient {
             .bearer_auth(&self.token)
             .json(&Request {
                 item: Item {
-                    conflict_behavior: "fail", // TODO
+                    conflict_behavior: option
+                        .get_conflict_behavior()
+                        .unwrap_or(ConflictBehavior::Fail),
                 },
             })
             .send()?
@@ -342,6 +369,11 @@ impl DriveClient {
     /// - If this is the last part and it is uploaded successfully,
     ///   will return `Ok(Some(newly_created_drive_item))`.
     ///
+    /// # Errors
+    /// When the file is completely uploaded, if an item with the same name is created
+    /// during uploading, the last `upload_to_session` call will return `Err` with
+    /// HTTP CONFLICT.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
     pub fn upload_to_session(
@@ -375,7 +407,7 @@ impl DriveClient {
             .put(&session.upload_url)
             // No auth token
             .header(
-                header::CONTENT_RANGE,
+                ::reqwest::header::CONTENT_RANGE,
                 format!(
                     "bytes {}-{}/{}",
                     remote_range.start,
@@ -392,6 +424,12 @@ impl DriveClient {
     ///
     /// Asynchronously creates a copy of an driveItem (including any children),
     /// under a new parent item or with a new name.
+    ///
+    /// # Note
+    /// The conflict behavior is not mentioned in Microsoft Docs.
+    ///
+    /// But it seems to be `rename` if the destination folder is just the current
+    /// parent folder, and `fail` if not.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0)
@@ -429,6 +467,9 @@ impl DriveClient {
     ///
     /// Note: Items cannot be moved between Drives using this request.
     ///
+    /// # Note
+    /// `conflict_behavior` is supported.
+    ///
     /// # Errors
     /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
     /// but doesn't match the item.
@@ -447,6 +488,8 @@ impl DriveClient {
         struct Request<'a> {
             parent_reference: ItemReference<'a>,
             name: Option<&'a str>,
+            #[serde(rename = "@microsoft.graph.conflictBehavior")]
+            conflict_behavior: ConflictBehavior,
         }
 
         self.client
@@ -458,6 +501,9 @@ impl DriveClient {
                     path: api_path![&self.drive, &dest_folder.into()],
                 },
                 name: dest_name.map(FileName::as_str),
+                conflict_behavior: option
+                    .get_conflict_behavior()
+                    .unwrap_or(ConflictBehavior::Fail),
             })
             .send()?
             .parse()
@@ -493,6 +539,9 @@ impl DriveClient {
     /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set but
     /// does not match the item.
     ///
+    /// # Note
+    /// `conflict_behavior` is **NOT*** supported.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0)
     ///
@@ -502,6 +551,11 @@ impl DriveClient {
         item: impl Into<ItemLocation<'a>>,
         option: DriveItemPutOption,
     ) -> Result<()> {
+        assert!(
+            option.get_conflict_behavior().is_none(),
+            "`conflict_behavior` is not supported by `delete[_with_option]`",
+        );
+
         self.client
             .delete(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
@@ -907,62 +961,6 @@ impl UploadSession {
     }
 }
 
-/// A half-open byte range `start..end` or `start..`.
-#[derive(Debug, PartialEq, Eq)]
-pub struct ExpectRange {
-    /// The lower bound of the range (inclusive).
-    pub start: u64,
-    /// The optional upper bound of the range (exclusive).
-    pub end: Option<u64>,
-}
-
-impl<'de> de::Deserialize<'de> for ExpectRange {
-    fn deserialize<D: de::Deserializer<'de>>(
-        deserializer: D,
-    ) -> ::std::result::Result<Self, D::Error> {
-        struct Visitor;
-
-        impl<'de> de::Visitor<'de> for Visitor {
-            type Value = ExpectRange;
-
-            fn expecting(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                write!(f, "Expect Range")
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> ::std::result::Result<Self::Value, E> {
-                let parse = || -> Option<ExpectRange> {
-                    let mut it = v.split('-');
-                    let start = it.next()?.parse().ok()?;
-                    let end = match it.next()? {
-                        "" => None,
-                        s => {
-                            let end = s.parse::<u64>().ok()?.checked_add(1)?; // Exclusive.
-                            if end <= start {
-                                return None;
-                            }
-                            Some(end)
-                        }
-                    };
-                    if it.next().is_some() {
-                        return None;
-                    }
-
-                    Some(ExpectRange { start, end })
-                };
-                match parse() {
-                    Some(v) => Ok(v),
-                    None => Err(E::invalid_value(
-                        de::Unexpected::Str(v),
-                        &"`{lower}-` or `{lower}-{upper}`",
-                    )),
-                }
-            }
-        }
-
-        deserializer.deserialize_str(Visitor)
-    }
-}
-
 #[cfg(test)]
 mod test {
     use super::*;
@@ -1040,43 +1038,5 @@ mod test {
         assert!(!check_path("a"));
         assert!(!check_path("a/"));
         assert!(!check_path("//"));
-    }
-
-    #[test]
-    fn test_range_parsing() {
-        let cases = [
-            (
-                "42-196",
-                Some(ExpectRange {
-                    start: 42,
-                    end: Some(197),
-                }),
-            ), // [left, right)
-            (
-                "418-",
-                Some(ExpectRange {
-                    start: 418,
-                    end: None,
-                }),
-            ),
-            ("", None),
-            ("42-4", None),
-            ("-9", None),
-            ("-", None),
-            ("1-2-3", None),
-            ("0--2", None),
-            ("-1-2", None),
-        ];
-
-        for &(s, ref expect) in &cases {
-            let ret = serde_json::from_str(&serde_json::to_string(s).unwrap());
-            assert_eq!(
-                ret.as_ref().ok(),
-                expect.as_ref(),
-                "Failed: Got {:?} on {:?}",
-                ret,
-                s,
-            );
-        }
     }
 }

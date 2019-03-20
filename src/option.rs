@@ -11,6 +11,7 @@
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters)
 use crate::resource::{ResourceField, Tag};
 use crate::util::{RequestBuilderExt, RequestBuilderTransformer};
+use crate::ConflictBehavior;
 use reqwest::{header, RequestBuilder};
 use std::default::Default;
 use std::fmt::Write;
@@ -299,6 +300,7 @@ pub enum Order {
 #[derive(Debug, Default)]
 pub struct DriveItemPutOption {
     access_opt: AccessOption,
+    conflict_behavior: Option<ConflictBehavior>,
 }
 
 impl DriveItemPutOption {
@@ -319,6 +321,22 @@ impl DriveItemPutOption {
     }
 
     // `if_none_match` is not supported in PUT-like requests.
+
+    /// Specify the behavior if the target item already exists.
+    ///
+    /// # Note
+    /// This not only available for DELETE-like requests. Read the docs first.
+    ///
+    /// # See also
+    /// `@microsoft.graph.conflictBehavior` of DriveItem on [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes)
+    pub fn conflict_behavior(mut self, conflict_behavior: ConflictBehavior) -> Self {
+        self.conflict_behavior = Some(conflict_behavior);
+        self
+    }
+
+    pub(crate) fn get_conflict_behavior(&self) -> Option<ConflictBehavior> {
+        self.conflict_behavior
+    }
 }
 
 impl RequestBuilderTransformer for DriveItemPutOption {

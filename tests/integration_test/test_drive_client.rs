@@ -558,3 +558,110 @@ fn test_track_changes() {
         },
     );
 }
+
+/// Max 8 requests.
+///
+/// # Test
+/// - upload_small()
+///   - Success.
+/// - copy()
+///   - Success.
+/// - move()
+///   - Success, with option.
+///   - Fail, conflict, with option.
+/// - get_item()
+///   - Success.
+///   - Fail, not fount.
+/// - delete()
+///   - Success.
+#[test]
+#[ignore]
+fn test_copy_and_conflict_behavior() {
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+
+    const FILE_CONTENT: &[u8] = b"1";
+
+    let name1 = gen_filename();
+    let name2 = gen_filename();
+
+    let file1_id = client
+        .upload_small(rooted_location(name1), FILE_CONTENT)
+        .expect("Failed to create file 1")
+        .id
+        .unwrap();
+
+    try_finally(
+        || {
+            client
+                .copy(&file1_id, ItemLocation::root(), name2)
+                .expect("Failed to start copy");
+            // FIXME: `copy` is async. Assume it is done before the next call.
+            std::thread::sleep(std::time::Duration::from_secs(3));
+            let file2_id = client
+                .get_item(rooted_location(name2))
+                .expect("Copy should be done")
+                .id
+                .unwrap();
+
+            let file2_gone = std::cell::Cell::new(false);
+
+            try_finally(
+                || {
+                    let move_with = |opt| {
+                        client.move_with_option(
+                            &file1_id,
+                            ItemLocation::root(),
+                            Some(name2),
+                            DriveItemPutOption::new().conflict_behavior(opt),
+                        )
+                    };
+
+                    // Default to be `ConflictBehavior::Fail`
+                    assert_eq!(
+                        client
+                            .move_(&file1_id, ItemLocation::root(), Some(name2))
+                            .expect_err("Move to an existing item should fail")
+                            .status_code(),
+                        Some(StatusCode::CONFLICT),
+                    );
+
+                    let renamed_name2 = move_with(ConflictBehavior::Rename)
+                        .expect("Failed to move with rename")
+                        .name
+                        .unwrap();
+                    // Different with both old and new name.
+                    assert_ne!(name1.as_str(), renamed_name2);
+                    assert_ne!(name2.as_str(), renamed_name2);
+
+                    client
+                        .get_item(&file1_id)
+                        .expect("Rename should not replace the target");
+
+                    let replaced_name2 = move_with(ConflictBehavior::Replace)
+                        .expect("Failed to move with replace")
+                        .name
+                        .unwrap();
+                    assert_eq!(name2.as_str(), replaced_name2);
+
+                    assert_eq!(
+                        client
+                            .get_item(&file2_id)
+                            .expect_err("The old file should be replaced")
+                            .status_code(),
+                        Some(StatusCode::NOT_FOUND),
+                    );
+
+                    file2_gone.set(true);
+                },
+                || {
+                    if !file2_gone.get() {
+                        client.delete(&file2_id).expect("Failed to delete folder2");
+                    }
+                },
+            );
+        },
+        || {
+            client.delete(&file1_id).expect("Failed to delete folder 1");
+        },
+    );
+}
