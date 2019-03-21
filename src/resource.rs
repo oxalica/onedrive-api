@@ -2,26 +2,28 @@
 //!
 //! # Field descriper
 //!
-//! Some structures have field descriper mods with singleton types representing
+//! Resource object `struct`s have field descriper `enum`s representing
 //! all controlable fields of it, which may be used
-//! in [`onedrive_api::option`][option] to select or expand it using
+//! in [`onedrive_api::option`][option] to [`select`][select] or [`expand`][expand] it using
 //! `with_option` version API of [`DriveClient`][drive_client].
 //!
 //! ## Example
 //! Here is an example to use [`resource::DriveItemField`][drive_item_field].
 //! ```
 //! use onedrive_api::{DriveClient, ItemLocation, option::ObjectOption};
-//! use onedrive_api::resource::DriveItemField;
+//! use onedrive_api::resource::*;
 //!
 //! // let client: DriveClient;
 //! # fn run(client: &DriveClient) -> onedrive_api::Result<()> {
-//! let item = client
+//! let item: Option<DriveItem> = client
 //!     .get_item_with_option(
 //!         ItemLocation::root(),
-//!         // Only response `id` and `e_tag` to reduce data transmission.
 //!         ObjectOption::new()
+//!             .if_none_match(&Tag::new("<abcd ... 1234>".to_owned()))
+//!             // Only response `id` and `e_tag` to reduce data transmission.
 //!             .select(&[DriveItemField::id, DriveItemField::e_tag]),
 //!     )?;
+//! // `item` is `None` if it matches the tag.
 //!
 //! Ok(())
 //! # }
@@ -32,8 +34,10 @@
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/?view=odsp-graph-online)
 //!
 //! [option]: ../option/index.html
+//! [select]: ../option/struct.ObjectOption.html#method.select
+//! [expand]: ../option/struct.ObjectOption.html#method.expand
 //! [drive_client]: ../struct.DriveClient.html
-//! [drive_item_field]: ./DriveItemField/index.html
+//! [drive_item_field]: ./enum.DriveItemField.html
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
@@ -133,7 +137,7 @@ macro_rules! define_resource_object {
             ///
             /// More details in [mod documentation][mod].
             ///
-            /// [mod]: ../index.html
+            /// [mod]: ./index.html
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
             $vis enum $field_enum_name {
                 $(
@@ -255,8 +259,8 @@ define_resource_object! {
         /// The pre-authorized url for downloading the content.
         ///
         /// It is **NOT** selectable through [`ObjectOption::select`][select] and
-        /// only provided in the result of [`AuthClient::get_item`][get_item]
-        /// (or [`AuthClient::get_item_with_option`][get_item_with_opt]).
+        /// only provided in the result of [`DriveClient::get_item`][get_item]
+        /// (or [`DriveClient::get_item_with_option`][get_item_with_opt]).
         ///
         /// [select]: ../option/struct.ObjectOption.html#method.select
         /// [get_item]: ../struct.DriveClient.html#method.get_item

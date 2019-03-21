@@ -47,11 +47,9 @@ impl DriveClient {
 
     /// Get `Drive`.
     ///
-    /// Retrieve the properties and relationships of a [`Drive`][drive] resource.
+    /// Retrieve the properties and relationships of a [`resource::Drive`][drive] resource.
     ///
     /// # See also
-    /// [`resource::Drive`][drive]
-    ///
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0)
     ///
     /// [drive]: ./resource/struct.Drive.html
@@ -74,18 +72,19 @@ impl DriveClient {
         self.get_drive_with_option(Default::default())
     }
 
-    /// List children of a [`DriveItem`][drive_item].
+    /// List children of a `DriveItem`.
     ///
-    /// Return a collection of [`DriveItem`][drive_item]s in the children relationship
+    /// Return a collection of [`resource::DriveItem`][drive_item]s in the children relationship
     /// of the given one.
     ///
     /// # Note
-    /// Will return `Ok(None)` if `if_none_match` is set and matches the item.
+    /// Will return `Ok(None)` if [`if_none_match`][if_none_match] is set and it matches the item tag.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
     pub fn list_children_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -112,17 +111,18 @@ impl DriveClient {
             .fetch_all()
     }
 
-    /// Get a [`DriveItem`][drive_item] resource.
+    /// Get a `DriveItem` resource.
     ///
-    /// Retrieve the metadata for a [`DriveItem`][drive_item] by file system path or ID.
+    /// Retrieve the metadata for a [`resource::DriveItem`][drive_item] by file system path or ID.
     ///
     /// # Errors
-    /// Will return `Ok(None)` if `if_none_match` is set and matches the item .
+    /// Will return `Ok(None)` if [`if_none_match`][if_none_match] is set and it matches the item tag.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
     pub fn get_item_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -152,16 +152,14 @@ impl DriveClient {
     /// Create a new folder [`DriveItem`][drive_item] with a specified parent item or path.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP CONFLICT if `conflict_behavior` is `Fail` and
-    /// the target already exists.
-    ///
-    /// # Note
-    /// `conflict_behavior` is supported.
+    /// Will return `Err` with HTTP CONFLICT if [`conflict_behavior`][conflict_behavior]
+    /// is `Fail` and the target already exists.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
     pub fn create_folder_with_option<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
@@ -250,14 +248,17 @@ impl DriveClient {
     /// while the upload is in progress.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set
     /// but does not match the item.
     ///
     /// # Note
-    /// `conflict_behavior` is supported.
+    /// [`conflict_behavior`][conflict_behavior] is supported.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
+    ///
+    /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
     pub fn new_upload_session_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -294,7 +295,7 @@ impl DriveClient {
     /// # See also
     /// [`new_upload_session_with_option`][with_opt]
     ///
-    /// [with_opt]: #method.create_folder_with_option
+    /// [with_opt]: #method.new_upload_session_with_option
     pub fn new_upload_session<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -426,10 +427,10 @@ impl DriveClient {
     /// under a new parent item or with a new name.
     ///
     /// # Note
-    /// The conflict behavior is not mentioned in Microsoft Docs.
+    /// The conflict behavior is not mentioned in Microsoft Docs, and cannot be specified.
     ///
-    /// But it seems to be `rename` if the destination folder is just the current
-    /// parent folder, and `fail` if not.
+    /// But it seems to be `Rename` if the destination folder is just the current
+    /// parent folder, and `Fail` if not.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0)
@@ -479,14 +480,17 @@ impl DriveClient {
     /// Note: Items cannot be moved between Drives using this request.
     ///
     /// # Note
-    /// `conflict_behavior` is supported.
+    /// [`conflict_behavior`][conflict_behavior] is supported.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
-    /// but doesn't match the item.
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set
+    /// but it does not match the item.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0)
+    ///
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
+    /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
     pub fn move_with_option<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
@@ -540,23 +544,24 @@ impl DriveClient {
         )
     }
 
-    /// Delete a [`DriveItem`][drive_item].
+    /// Delete a `DriveItem`.
     ///
     /// Delete a [`DriveItem`][drive_item] by using its ID or path. Note that deleting items using
     /// this method will move the items to the recycle bin instead of permanently
     /// deleting the item.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set but
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set but
     /// does not match the item.
     ///
-    /// # Note
-    /// `conflict_behavior` is **NOT*** supported.
+    /// # Panic
+    /// `conflict_behavior` is **NOT** supported. Specify it will cause a panic.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
     pub fn delete_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -646,7 +651,7 @@ impl DriveClient {
     /// Get a delta url representing the snapshot of current states.
     ///
     /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0)
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#retrieving-the-current-deltalink)
     pub fn get_latest_delta_url<'a>(&self, folder: impl Into<ItemLocation<'a>>) -> Result<String> {
         self.client
             .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
@@ -693,7 +698,11 @@ pub struct CopyProgress {
 /// The status of a `copy` operation.
 ///
 /// # See also
+/// [`CopyProgress`][copy_progress]
+///
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta#json-representation)
+///
+/// [copy_progress]: ./struct.CopyProgress.html
 #[allow(missing_docs)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
