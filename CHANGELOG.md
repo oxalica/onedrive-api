@@ -1,3 +1,18 @@
+# v0.4.0
+## Breaking Changes
+- Renane mod `query_option` to `option`.
+- Move `if-match` and `if-none-match` from parameter to `option`
+  to simplify simple API (without `_with_option`).
+
+## Features
+- Support `conflict_behavior` in related `with_option` API.
+- Support `expiration_date_time` field in `UploadSession`.
+- Support tracking asynchronous `copy` operation through `CopyProgressMonitor`.
+
+## Fixes
+- Fix and add more documentations.
+- Maintain mod structure.
+
 # v0.3.0
 ## Features
 - Add all fields available of `resource::{Drive, DriveItem}` in Microsoft Graph Documentation (See documentations of them).
