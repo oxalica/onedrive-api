@@ -1,5 +1,5 @@
 use lazy_static::lazy_static;
-use onedrive_api::query_option::*;
+use onedrive_api::option::*;
 use onedrive_api::resource::*;
 use onedrive_api::*;
 use reqwest::StatusCode;
@@ -81,16 +81,14 @@ fn test_get_drive() {
     assert!(drive2.quota.is_none()); // Assert not selected.
 
     let root_item = client
-        .get_item(ItemLocation::root(), None)
-        .expect("Cannot get root item")
-        .unwrap();
+        .get_item(ItemLocation::root())
+        .expect("Cannot get root item");
     assert!(root_item.id.is_some());
     assert!(root_item.e_tag.is_some());
 
     let root_item2 = client
         .get_item_with_option(
             ItemLocation::root(),
-            None,
             ObjectOption::new().select(&[DriveItemField::e_tag]),
         )
         .expect("Cannot get root item with option")
@@ -142,7 +140,7 @@ fn test_folder() {
 
             assert_eq!(
                 client
-                    .delete(folder2_location, None)
+                    .delete(folder2_location)
                     .expect_err("Should not delete a file does not exist")
                     .status_code(),
                 Some(StatusCode::NOT_FOUND),
@@ -150,7 +148,10 @@ fn test_folder() {
 
             assert!(
                 client
-                    .list_children(&folder1_id, Some(&folder1_e_tag))
+                    .list_children_with_option(
+                        &folder1_id,
+                        CollectionOption::new().if_none_match(&folder1_e_tag),
+                    )
                     .expect("Failed to list children with tag")
                     .is_none(),
                 "Folder should be 'not modified'",
@@ -164,9 +165,8 @@ fn test_folder() {
             assert!(folder2.e_tag.is_some());
 
             let children = client
-                .list_children(&folder1_id, None)
-                .expect("Failed to list children")
-                .unwrap();
+                .list_children(&folder1_id)
+                .expect("Failed to list children");
 
             assert_eq!(children.len(), 1);
             let child = children.into_iter().next().unwrap();
@@ -177,7 +177,6 @@ fn test_folder() {
             let item_children = client
                 .get_item_with_option(
                     &folder1_id,
-                    None,
                     ObjectOption::new().expand(DriveItemField::children, Some(&["id"])),
                 )
                 .expect("Failed to use get_item to fetch children")
@@ -191,13 +190,13 @@ fn test_folder() {
             assert!(item.e_tag.is_none());
         },
         || {
-            client.delete(&folder1_id, None).unwrap();
+            client.delete(&folder1_id).unwrap();
         },
     );
 
     assert_eq!(
         client
-            .list_children(&folder1_id, None)
+            .list_children(&folder1_id)
             .expect_err("Folder should be already deleted")
             .status_code(),
         Some(StatusCode::NOT_FOUND),
@@ -234,14 +233,14 @@ fn test_file_upload_small_and_move() {
     let file2_id = try_finally(
         || {
             let file2 = client
-                .move_(&file1_id, ItemLocation::root(), Some(file2_name), None)
+                .move_(&file1_id, ItemLocation::root(), Some(file2_name))
                 .expect("Failed to move file");
             is_moved.set(true);
             file2.id.unwrap()
         },
         || {
             if !is_moved.get() {
-                client.delete(&file1_id, None).unwrap();
+                client.delete(&file1_id).unwrap();
             }
         },
     );
@@ -249,16 +248,15 @@ fn test_file_upload_small_and_move() {
     try_finally(
         || {
             let file2_download_url = client
-                .get_item(&file2_id, None)
+                .get_item(&file2_id)
                 .expect("Failed to get download url of small file")
-                .unwrap()
                 .download_url
                 .unwrap();
 
             assert_eq!(download(&file2_download_url), CONTENT);
         },
         || {
-            client.delete(&file2_id, None).unwrap();
+            client.delete(&file2_id).unwrap();
         },
     );
 }
@@ -290,8 +288,13 @@ fn test_file_upload_session() {
     const RANGE2: Range = 2..8;
 
     let upload_session = client
-        .new_upload_session(rooted_location(gen_filename()), false, None)
+        .new_upload_session(rooted_location(gen_filename()))
         .expect("Failed to create upload session");
+
+    println!(
+        "Upload session will expire at {:?}",
+        upload_session.get_expiration_date_time()
+    );
 
     assert!(
         client
@@ -345,16 +348,15 @@ fn test_file_upload_session() {
     try_finally(
         || {
             let file3_download_url = client
-                .get_item(&file3_id, None)
+                .get_item(&file3_id)
                 .expect("Failed to get download url of large file")
-                .unwrap()
                 .download_url
                 .unwrap();
 
             assert_eq!(download(&file3_download_url), CONTENT);
         },
         || {
-            client.delete(&file3_id, None).unwrap();
+            client.delete(&file3_id).unwrap();
         },
     );
 }
@@ -402,7 +404,6 @@ fn test_list_children() {
             let mut fetcher: ListChildrenFetcher = client
                 .list_children_with_option(
                     folder_location,
-                    None,
                     CollectionOption::new()
                         .select(&[DriveItemField::name, DriveItemField::e_tag])
                         .page_size(PAGE_SIZE),
@@ -450,7 +451,7 @@ fn test_list_children() {
         },
         || {
             client
-                .delete(folder_location, None)
+                .delete(folder_location)
                 .expect("Failed to delete container folder");
         },
     );
@@ -552,8 +553,125 @@ fn test_track_changes() {
         },
         || {
             client
-                .delete(container_location, None)
+                .delete(container_location)
                 .expect("Failed to delete container folder");
+        },
+    );
+}
+
+/// Max 8 requests.
+///
+/// # Test
+/// - upload_small()
+///   - Success.
+/// - copy()
+///   - Success.
+/// - move()
+///   - Success, with option.
+///   - Fail, conflict, with option.
+/// - get_item()
+///   - Success.
+///   - Fail, not fount.
+/// - delete()
+///   - Success.
+#[test]
+#[ignore]
+fn test_copy_and_conflict_behavior() {
+    let client = DriveClient::new(TOKEN.clone(), DriveLocation::me());
+
+    const FILE_CONTENT: &[u8] = b"1";
+
+    let name1 = gen_filename();
+    let name2 = gen_filename();
+
+    let file1_id = client
+        .upload_small(rooted_location(name1), FILE_CONTENT)
+        .expect("Failed to create file 1")
+        .id
+        .unwrap();
+
+    try_finally(
+        || {
+            let monitor = client
+                .copy(&file1_id, ItemLocation::root(), name2)
+                .expect("Failed to start copy");
+            loop {
+                match monitor
+                    .fetch_progress()
+                    .expect("Failed to check `copy` progress")
+                    .status
+                {
+                    CopyStatus::NotStarted | CopyStatus::InProgress => (),
+                    CopyStatus::Completed => break,
+                    status => panic!("Unexpected fail of `copy`: {:?}", status),
+                }
+            }
+
+            let file2_id = client
+                .get_item(rooted_location(name2))
+                .expect("Copy should be done")
+                .id
+                .unwrap();
+
+            let file2_gone = std::cell::Cell::new(false);
+
+            try_finally(
+                || {
+                    let move_with = |opt| {
+                        client.move_with_option(
+                            &file1_id,
+                            ItemLocation::root(),
+                            Some(name2),
+                            DriveItemPutOption::new().conflict_behavior(opt),
+                        )
+                    };
+
+                    // Default to be `ConflictBehavior::Fail`
+                    assert_eq!(
+                        client
+                            .move_(&file1_id, ItemLocation::root(), Some(name2))
+                            .expect_err("Move to an existing item should fail")
+                            .status_code(),
+                        Some(StatusCode::CONFLICT),
+                    );
+
+                    let renamed_name2 = move_with(ConflictBehavior::Rename)
+                        .expect("Failed to move with rename")
+                        .name
+                        .unwrap();
+                    // Different with both old and new name.
+                    assert_ne!(name1.as_str(), renamed_name2);
+                    assert_ne!(name2.as_str(), renamed_name2);
+
+                    client
+                        .get_item(&file1_id)
+                        .expect("Rename should not replace the target");
+
+                    let replaced_name2 = move_with(ConflictBehavior::Replace)
+                        .expect("Failed to move with replace")
+                        .name
+                        .unwrap();
+                    assert_eq!(name2.as_str(), replaced_name2);
+
+                    assert_eq!(
+                        client
+                            .get_item(&file2_id)
+                            .expect_err("The old file should be replaced")
+                            .status_code(),
+                        Some(StatusCode::NOT_FOUND),
+                    );
+
+                    file2_gone.set(true);
+                },
+                || {
+                    if !file2_gone.get() {
+                        client.delete(&file2_id).expect("Failed to delete folder2");
+                    }
+                },
+            );
+        },
+        || {
+            client.delete(&file1_id).expect("Failed to delete folder 1");
         },
     );
 }

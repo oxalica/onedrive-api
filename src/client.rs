@@ -1,9 +1,9 @@
 use crate::error::{Error, Result};
-use crate::query_option::{CollectionOption, ObjectOption};
+use crate::option::{CollectionOption, DriveItemPutOption, ObjectOption};
 use crate::resource::*;
 use crate::util::*;
-use reqwest::header;
-use serde::{de, Deserialize, Serialize};
+use crate::{ConflictBehavior, ExpectRange};
+use serde::{Deserialize, Serialize};
 
 macro_rules! api_url {
     (@$init:expr; $($seg:expr),* $(,)*) => {
@@ -45,9 +45,9 @@ impl DriveClient {
         }
     }
 
-    /// Get [`Drive`][drive].
+    /// Get `Drive`.
     ///
-    /// Retrieve the properties and relationships of a [`Drive`][drive] resource.
+    /// Retrieve the properties and relationships of a [`resource::Drive`][drive] resource.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0)
@@ -56,95 +56,95 @@ impl DriveClient {
     pub fn get_drive_with_option(&self, option: ObjectOption<DriveField>) -> Result<Drive> {
         self.client
             .get(api_url![&self.drive])
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
             .send()?
             .parse()
     }
 
-    /// Shortcut to [`get_drive_with_option`][with_opt] with default parameters.
+    /// Shortcut to `get_drive_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`get_drive_with_option`][with_opt]
     ///
     /// [with_opt]: #method.get_drive_with_option
     pub fn get_drive(&self) -> Result<Drive> {
         self.get_drive_with_option(Default::default())
     }
 
-    /// List children of a [`DriveItem`][drive_item].
+    /// List children of a `DriveItem`.
     ///
-    /// Return a collection of [`DriveItem`][drive_item]s in the children relationship
+    /// Return a collection of [`resource::DriveItem`][drive_item]s in the children relationship
     /// of the given one.
     ///
     /// # Note
-    /// Will return `Ok(None)` if `if_none_match` is set and matches the item.
+    /// Will return `Ok(None)` if [`if_none_match`][if_none_match] is set and it matches the item tag.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
     pub fn list_children_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
         option: CollectionOption<DriveItemField>,
     ) -> Result<Option<ListChildrenFetcher>> {
         self.client
             .get(api_url![&self.drive, &item.into(), "children"])
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
-            .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
             .parse_optional()
             .map(|opt_resp| opt_resp.map(|resp| ListChildrenFetcher::new(self, resp)))
     }
 
-    /// Shortcut to [`list_children_with_option`][with_opt] with default params and fetch all.
+    /// Shortcut to `list_children_with_option` with default params and fetch all.
+    ///
+    /// # See also
+    /// [`list_children_with_option`][with_opt]
     ///
     /// [with_opt]: #method.list_children_with_option
-    pub fn list_children<'a>(
-        &self,
-        item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
-    ) -> Result<Option<Vec<DriveItem>>> {
-        self.list_children_with_option(item.into(), if_none_match, Default::default())?
-            .map(|fetcher| fetcher.fetch_all())
-            .transpose()
+    pub fn list_children<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<Vec<DriveItem>> {
+        self.list_children_with_option(item.into(), Default::default())?
+            .unwrap()
+            .fetch_all()
     }
 
-    /// Get a [`DriveItem`][drive_item] resource.
+    /// Get a `DriveItem` resource.
     ///
-    /// Retrieve the metadata for a [`DriveItem`][drive_item] by file system path or ID.
+    /// Retrieve the metadata for a [`resource::DriveItem`][drive_item] by file system path or ID.
     ///
     /// # Errors
-    /// Will return `Ok(None)` if `if_none_match` is set and matches the item .
+    /// Will return `Ok(None)` if [`if_none_match`][if_none_match] is set and it matches the item tag.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
     pub fn get_item_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
         option: ObjectOption<DriveItemField>,
     ) -> Result<Option<DriveItem>> {
         self.client
             .get(api_url![&self.drive, &item.into()])
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
-            .opt_header(header::IF_NONE_MATCH, if_none_match)
             .send()?
             .parse_optional()
     }
 
-    /// Shortcut to [`get_item_with_option`][with_opt] with default parameters.
+    /// Shortcut to `get_item_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`get_item_with_option`][with_opt]
     ///
     /// [with_opt]: #method.get_item_with_option
-    pub fn get_item<'a>(
-        &self,
-        item: impl Into<ItemLocation<'a>>,
-        if_none_match: Option<&Tag>,
-    ) -> Result<Option<DriveItem>> {
-        self.get_item_with_option(item.into(), if_none_match, Default::default())
+    pub fn get_item<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<DriveItem> {
+        self.get_item_with_option(item.into(), Default::default())
+            .map(|v| v.unwrap())
     }
 
     /// Create a new folder in a drive
@@ -152,16 +152,19 @@ impl DriveClient {
     /// Create a new folder [`DriveItem`][drive_item] with a specified parent item or path.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP CONFLICT if the target already exists.
+    /// Will return `Err` with HTTP CONFLICT if [`conflict_behavior`][conflict_behavior]
+    /// is `Fail` and the target already exists.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
-    pub fn create_folder<'a>(
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
+    pub fn create_folder_with_option<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
         name: &FileName,
+        option: DriveItemPutOption,
     ) -> Result<DriveItem> {
         #[derive(Serialize)]
         struct Folder {}
@@ -172,19 +175,36 @@ impl DriveClient {
             folder: Folder,
             // https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
-            conflict_behavior: &'a str,
+            conflict_behavior: ConflictBehavior,
         }
 
         self.client
             .post(api_url![&self.drive, &parent_item.into(), "children"])
             .bearer_auth(&self.token)
+            .apply(&option)
             .json(&Request {
                 name: name.as_str(),
                 folder: Folder {},
-                conflict_behavior: "fail", // TODO
+                conflict_behavior: option
+                    .get_conflict_behavior()
+                    .unwrap_or(ConflictBehavior::Fail),
             })
             .send()?
             .parse()
+    }
+
+    /// Shortcut to `create_folder_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`create_folder_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.create_folder_with_option
+    pub fn create_folder<'a>(
+        &self,
+        parent_item: impl Into<ItemLocation<'a>>,
+        name: &FileName,
+    ) -> Result<DriveItem> {
+        self.create_folder_with_option(parent_item.into(), name, Default::default())
     }
 
     const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
@@ -228,21 +248,26 @@ impl DriveClient {
     /// while the upload is in progress.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set
     /// but does not match the item.
+    ///
+    /// # Note
+    /// [`conflict_behavior`][conflict_behavior] is supported.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
-    pub fn new_upload_session<'a>(
+    ///
+    /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
+    pub fn new_upload_session_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        overwrite: bool,
-        if_match: Option<&Tag>,
+        option: DriveItemPutOption,
     ) -> Result<UploadSession> {
         #[derive(Serialize)]
         struct Item {
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
-            conflict_behavior: &'static str,
+            conflict_behavior: ConflictBehavior,
         }
 
         #[derive(Serialize)]
@@ -252,15 +277,30 @@ impl DriveClient {
 
         self.client
             .post(api_url![&self.drive, &item.into(), "createUploadSession"])
-            .opt_header(header::IF_MATCH, if_match)
+            .apply(&option)
             .bearer_auth(&self.token)
             .json(&Request {
                 item: Item {
-                    conflict_behavior: if overwrite { "overwrite" } else { "fail" },
+                    conflict_behavior: option
+                        .get_conflict_behavior()
+                        .unwrap_or(ConflictBehavior::Fail),
                 },
             })
             .send()?
             .parse()
+    }
+
+    /// Shortcut to `new_upload_session_with_option` with `ConflictBehavior::Fail`.
+    ///
+    /// # See also
+    /// [`new_upload_session_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.new_upload_session_with_option
+    pub fn new_upload_session<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+    ) -> Result<UploadSession> {
+        self.new_upload_session_with_option(item.into(), Default::default())
     }
 
     /// Resuming an in-progress upload
@@ -274,10 +314,9 @@ impl DriveClient {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct UploadSessionResponse {
-            // TODO: Incompleted
-            upload_url: Option<String>,
+            // There is no url.
             next_expected_ranges: Vec<ExpectRange>,
-            // expiration_date_time: Timestamp,
+            expiration_date_time: TimestampString,
         }
 
         self.client
@@ -287,6 +326,7 @@ impl DriveClient {
             .map(|resp| UploadSession {
                 upload_url: upload_url.to_owned(),
                 next_expected_ranges: resp.next_expected_ranges,
+                expiration_date_time: resp.expiration_date_time,
             })
     }
 
@@ -323,6 +363,18 @@ impl DriveClient {
     /// size that does not divide evenly by 320 KiB will result in errors committing
     /// some files.
     ///
+    /// # Returns
+    /// - If error occurs, will return `Err`.
+    /// - If the part is uploaded successfully, but the file is not complete yet,
+    ///   will return `Ok(None)`.
+    /// - If this is the last part and it is uploaded successfully,
+    ///   will return `Ok(Some(newly_created_drive_item))`.
+    ///
+    /// # Errors
+    /// When the file is completely uploaded, if an item with the same name is created
+    /// during uploading, the last `upload_to_session` call will return `Err` with
+    /// HTTP CONFLICT.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
     pub fn upload_to_session(
@@ -356,7 +408,7 @@ impl DriveClient {
             .put(&session.upload_url)
             // No auth token
             .header(
-                header::CONTENT_RANGE,
+                ::reqwest::header::CONTENT_RANGE,
                 format!(
                     "bytes {}-{}/{}",
                     remote_range.start,
@@ -374,6 +426,12 @@ impl DriveClient {
     /// Asynchronously creates a copy of an driveItem (including any children),
     /// under a new parent item or with a new name.
     ///
+    /// # Note
+    /// The conflict behavior is not mentioned in Microsoft Docs, and cannot be specified.
+    ///
+    /// But it seems to be `Rename` if the destination folder is just the current
+    /// parent folder, and `Fail` if not.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0)
     pub fn copy<'a, 'b>(
@@ -381,7 +439,7 @@ impl DriveClient {
         source_item: impl Into<ItemLocation<'a>>,
         dest_folder: impl Into<ItemLocation<'b>>,
         dest_name: &FileName,
-    ) -> Result<()> {
+    ) -> Result<CopyProgressMonitor> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Request<'a> {
@@ -389,7 +447,8 @@ impl DriveClient {
             name: &'a str,
         }
 
-        self.client
+        let url = self
+            .client
             .post(api_url![&self.drive, &source_item.into(), "copy"])
             .bearer_auth(&self.token)
             .json(&Request {
@@ -399,7 +458,17 @@ impl DriveClient {
                 name: dest_name.as_str(),
             })
             .send()?
-            .parse_no_content() // TODO: Handle async copy
+            .check_status()?
+            .headers()
+            .get(::reqwest::header::LOCATION)
+            .ok_or_else(|| {
+                Error::unexpected_response("Header `Location` not exists in response of `copy`")
+            })?
+            .to_str()
+            .map_err(|_| Error::unexpected_response("Invalid string header `Location`"))?
+            .to_owned();
+
+        Ok(CopyProgressMonitor::from_url(&self.client, url))
     }
 
     /// Move a DriveItem to a new folder.
@@ -410,65 +479,115 @@ impl DriveClient {
     ///
     /// Note: Items cannot be moved between Drives using this request.
     ///
+    /// # Note
+    /// [`conflict_behavior`][conflict_behavior] is supported.
+    ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set
-    /// but doesn't match the item.
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set
+    /// but it does not match the item.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-move?view=graph-rest-1.0)
-    pub fn move_<'a, 'b>(
+    ///
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
+    /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
+    pub fn move_with_option<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
-        dest_directory: impl Into<ItemLocation<'b>>,
+        dest_folder: impl Into<ItemLocation<'b>>,
         dest_name: Option<&FileName>,
-        if_match: Option<&Tag>,
+        option: DriveItemPutOption,
     ) -> Result<DriveItem> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Request<'a> {
             parent_reference: ItemReference<'a>,
             name: Option<&'a str>,
+            #[serde(rename = "@microsoft.graph.conflictBehavior")]
+            conflict_behavior: ConflictBehavior,
         }
 
         self.client
             .patch(api_url![&self.drive, &source_item.into()])
             .bearer_auth(&self.token)
-            .opt_header(header::IF_MATCH, if_match)
+            .apply(&option)
             .json(&Request {
                 parent_reference: ItemReference {
-                    path: api_path![&self.drive, &dest_directory.into()],
+                    path: api_path![&self.drive, &dest_folder.into()],
                 },
                 name: dest_name.map(FileName::as_str),
+                conflict_behavior: option
+                    .get_conflict_behavior()
+                    .unwrap_or(ConflictBehavior::Fail),
             })
             .send()?
             .parse()
     }
 
-    /// Delete a [`DriveItem`][drive_item].
+    /// Shortcut to `move_with_option` with `ConflictBehavior::Fail`.
+    ///
+    /// # See also
+    /// [`move_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.move_with_option
+    pub fn move_<'a, 'b>(
+        &self,
+        source_item: impl Into<ItemLocation<'a>>,
+        dest_folder: impl Into<ItemLocation<'b>>,
+        dest_name: Option<&FileName>,
+    ) -> Result<DriveItem> {
+        self.move_with_option(
+            source_item.into(),
+            dest_folder.into(),
+            dest_name,
+            Default::default(),
+        )
+    }
+
+    /// Delete a `DriveItem`.
     ///
     /// Delete a [`DriveItem`][drive_item] by using its ID or path. Note that deleting items using
     /// this method will move the items to the recycle bin instead of permanently
     /// deleting the item.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if `if_match` is set but
+    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set but
     /// does not match the item.
+    ///
+    /// # Panic
+    /// `conflict_behavior` is **NOT** supported. Specify it will cause a panic.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
-    pub fn delete<'a>(
+    /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
+    pub fn delete_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        if_match: Option<&Tag>,
+        option: DriveItemPutOption,
     ) -> Result<()> {
+        assert!(
+            option.get_conflict_behavior().is_none(),
+            "`conflict_behavior` is not supported by `delete[_with_option]`",
+        );
+
         self.client
             .delete(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
-            .opt_header(header::IF_MATCH, if_match)
+            .apply(&option)
             .send()?
             .parse_no_content()
+    }
+
+    /// Shortcut to `delete_with_option`.
+    ///
+    /// # See also
+    /// [`delete_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.delete_with_option
+    pub fn delete<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<()> {
+        self.delete_with_option(item.into(), Default::default())
     }
 
     /// Track changes for a folder from initial state (empty state) to snapshot of current states.
@@ -493,14 +612,17 @@ impl DriveClient {
     ) -> Result<TrackChangeFetcher> {
         self.client
             .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
-            .query(&option.params().collect::<Vec<_>>())
+            .apply(&option)
             .bearer_auth(&self.token)
             .send()?
             .parse()
             .map(|resp| TrackChangeFetcher::new(self, resp))
     }
 
-    /// Shortcut to [`track_changes_from_initial_with_option`][with_opt] with default parameters.
+    /// Shortcut to `track_changes_from_initial_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`track_changes_from_initial_with_option`][with_opt]
     ///
     /// [with_opt]: #method.track_changes_from_initial_with_option
     pub fn track_changes_from_initial<'a>(
@@ -529,7 +651,7 @@ impl DriveClient {
     /// Get a delta url representing the snapshot of current states.
     ///
     /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0)
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#retrieving-the-current-deltalink)
     pub fn get_latest_delta_url<'a>(&self, folder: impl Into<ItemLocation<'a>>) -> Result<String> {
         self.client
             .get(&api_url![&self.drive, &folder.into(), "delta"].into_string())
@@ -544,6 +666,101 @@ impl DriveClient {
                     )
                 })
             })
+    }
+}
+
+/// The monitor for checking the progress of a asynchronous `copy` operation.
+///
+/// # See also
+/// [`DriveClient::copy`][copy]
+///
+/// [Microsoft docs](https://docs.microsoft.com/en-us/graph/long-running-actions-overview)
+///
+/// [copy]: ./struct.DriveClient.html#method.copy
+#[derive(Debug)]
+pub struct CopyProgressMonitor {
+    client: ::reqwest::Client,
+    url: String,
+}
+
+/// The progress of a asynchronous `copy` operation.
+///
+/// # See also
+/// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta)
+#[allow(missing_docs)]
+#[derive(Debug)]
+pub struct CopyProgress {
+    pub percentage_complete: f64,
+    pub status: CopyStatus,
+    _private: (),
+}
+
+/// The status of a `copy` operation.
+///
+/// # See also
+/// [`CopyProgress`][copy_progress]
+///
+/// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta#json-representation)
+///
+/// [copy_progress]: ./struct.CopyProgress.html
+#[allow(missing_docs)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CopyStatus {
+    NotStarted,
+    InProgress,
+    Completed,
+    Updating,
+    Failed,
+    DeletePending,
+    DeleteFailed,
+    Waiting,
+}
+
+impl CopyProgressMonitor {
+    /// Make a progress monitor using existing `url`.
+    ///
+    /// The `url` must be get from [`CopyProgressMonitor::get_url`][get_url]
+    ///
+    /// [get_url]: #method.get_url
+    pub fn from_url(client: &::reqwest::Client, url: String) -> Self {
+        Self {
+            client: client.clone(),
+            url,
+        }
+    }
+
+    /// Get the url of this monitor.
+    pub fn get_url(&self) -> &str {
+        &self.url
+    }
+
+    /// Fetch the `copy` progress.
+    ///
+    /// # See also
+    /// [`CopyProgress`][copy_progress]
+    ///
+    /// [copy_progress]: ../struct.CopyProgress.html
+    pub fn fetch_progress(&self) -> Result<CopyProgress> {
+        #[derive(Debug, Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Response {
+            operation: String,
+            percentage_complete: f64,
+            status: CopyStatus,
+        }
+
+        let resp: Response = self.client.get(&self.url).send()?.parse()?;
+
+        if resp.operation != "ItemCopy" {
+            return Err(Error::unexpected_response("Url is not for copy progress"));
+        }
+
+        Ok(CopyProgress {
+            percentage_complete: resp.percentage_complete,
+            status: resp.status,
+            _private: (),
+        })
     }
 }
 
@@ -805,89 +1022,53 @@ struct ItemReference<'a> {
 /// # See also
 /// [`DriveClient::new_upload_session`][get_session]
 ///
-/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0)
 ///
 /// [get_session]: ./struct.DriveClient.html#method.new_upload_session
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadSession {
-    // TODO: Incompleted
     upload_url: String,
     next_expected_ranges: Vec<ExpectRange>,
-    // expiration_date_time: Timestamp,
+    expiration_date_time: TimestampString,
 }
 
 impl UploadSession {
-    /// Get the url for the upload session.
+    /// The URL endpoint accepting PUT requests.
     ///
-    /// It can be used to resume the session using [`DriveClient::get_upload_session`][get_session].
+    /// Directly PUT to this URL is **NOT** encouraged.
+    ///
+    /// It is preferred to use [`DriveClient::get_upload_session`][get_session] to get
+    /// the upload session and then [`DriveClient::upload_to_session`][upload_to_session] to
+    /// perform upload.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
     ///
     /// [get_session]: ./struct.DriveClient.html#method.get_upload_session
+    /// [upload_to_session]: ./struct.DriveClient.html#method.upload_to_session
     pub fn get_url(&self) -> &str {
         &self.upload_url
     }
 
-    /// Get next byte ranges the server expected.
+    /// Get a collection of byte ranges that the server is missing for the file.
     ///
     /// Used for determine what to upload when resuming a session.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
     pub fn get_next_expected_ranges(&self) -> &[ExpectRange] {
         &self.next_expected_ranges
     }
-}
 
-/// A half-open byte range `start..end` or `start..`.
-#[derive(Debug, PartialEq, Eq)]
-pub struct ExpectRange {
-    /// The lower bound of the range (inclusive).
-    pub start: u64,
-    /// The optional upper bound of the range (exclusive).
-    pub end: Option<u64>,
-}
-
-impl<'de> de::Deserialize<'de> for ExpectRange {
-    fn deserialize<D: de::Deserializer<'de>>(
-        deserializer: D,
-    ) -> ::std::result::Result<Self, D::Error> {
-        struct Visitor;
-
-        impl<'de> de::Visitor<'de> for Visitor {
-            type Value = ExpectRange;
-
-            fn expecting(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
-                write!(f, "Expect Range")
-            }
-
-            fn visit_str<E: de::Error>(self, v: &str) -> ::std::result::Result<Self::Value, E> {
-                let parse = || -> Option<ExpectRange> {
-                    let mut it = v.split('-');
-                    let start = it.next()?.parse().ok()?;
-                    let end = match it.next()? {
-                        "" => None,
-                        s => {
-                            let end = s.parse::<u64>().ok()?.checked_add(1)?; // Exclusive.
-                            if end <= start {
-                                return None;
-                            }
-                            Some(end)
-                        }
-                    };
-                    if it.next().is_some() {
-                        return None;
-                    }
-
-                    Some(ExpectRange { start, end })
-                };
-                match parse() {
-                    Some(v) => Ok(v),
-                    None => Err(E::invalid_value(
-                        de::Unexpected::Str(v),
-                        &"`{lower}-` or `{lower}-{upper}`",
-                    )),
-                }
-            }
-        }
-
-        deserializer.deserialize_str(Visitor)
+    /// Get the date and time in UTC that the upload session will expire.
+    ///
+    /// The complete file must be uploaded before this expiration time is reached.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
+    pub fn get_expiration_date_time(&self) -> &TimestampString {
+        &self.expiration_date_time
     }
 }
 
@@ -968,43 +1149,5 @@ mod test {
         assert!(!check_path("a"));
         assert!(!check_path("a/"));
         assert!(!check_path("//"));
-    }
-
-    #[test]
-    fn test_range_parsing() {
-        let cases = [
-            (
-                "42-196",
-                Some(ExpectRange {
-                    start: 42,
-                    end: Some(197),
-                }),
-            ), // [left, right)
-            (
-                "418-",
-                Some(ExpectRange {
-                    start: 418,
-                    end: None,
-                }),
-            ),
-            ("", None),
-            ("42-4", None),
-            ("-9", None),
-            ("-", None),
-            ("1-2-3", None),
-            ("0--2", None),
-            ("-1-2", None),
-        ];
-
-        for &(s, ref expect) in &cases {
-            let ret = serde_json::from_str(&serde_json::to_string(s).unwrap());
-            assert_eq!(
-                ret.as_ref().ok(),
-                expect.as_ref(),
-                "Failed: Got {:?} on {:?}",
-                ret,
-                s,
-            );
-        }
     }
 }
