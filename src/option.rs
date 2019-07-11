@@ -48,7 +48,7 @@ pub struct ObjectOption<Field> {
     access_opt: AccessOption,
     select_buf: String,
     expand_buf: String,
-    _marker: PhantomData<Fn(&Field)>,
+    _marker: PhantomData<dyn Fn(&Field)>,
 }
 
 impl<Field: ResourceField> ObjectOption<Field> {
