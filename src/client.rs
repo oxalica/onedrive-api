@@ -745,16 +745,11 @@ impl CopyProgressMonitor {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct Response {
-            operation: String,
             percentage_complete: f64,
             status: CopyStatus,
         }
 
         let resp: Response = self.client.get(&self.url).send()?.parse()?;
-
-        if resp.operation != "ItemCopy" {
-            return Err(Error::unexpected_response("Url is not for copy progress"));
-        }
 
         Ok(CopyProgress {
             percentage_complete: resp.percentage_complete,
