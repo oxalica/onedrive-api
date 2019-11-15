@@ -12,6 +12,7 @@ readme = "README.md"
 documentation = "https://docs.rs/onedrive-api"
 
 [dependencies]
+failure = { version = "0.1.6", features = ["derive"] }
 lazy_static = "1.4.0"
 reqwest = "0.9.22"
 serde = { version = "1.0.102", features = ["derive"] }

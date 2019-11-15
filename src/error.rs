@@ -1,99 +1,78 @@
-use self::ErrorKind::*;
 use crate::resource::ErrorObject;
+use failure::{self, format_err, Fail};
 use reqwest::StatusCode;
 use std::fmt;
-use std::result::Result as StdResult;
 
 /// An alias to `Result` with `Err` of `onedrive_api::Error`.
-pub type Result<T> = StdResult<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// The error may occur when processing requests.
 #[derive(Debug)]
 pub struct Error {
-    // Make the size of `Error` smaller.
-    inner: Box<InnerError>,
+    inner: Box<ErrorKind>,
 }
 
-#[derive(Debug)]
-struct InnerError {
-    kind: ErrorKind,
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.inner.fmt(f)
+    }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 enum ErrorKind {
+    #[fail(display = "Deserialize error: {}", 0)]
+    DeserializeError(failure::Error),
+    #[fail(display = "Request error: {} (response: {:?})", source, response)]
     RequestError {
         source: reqwest::Error,
         response: Option<ErrorObject>,
     },
-    UnexpectedResponse {
-        reason: &'static str,
-    },
 }
 
 impl Error {
-    pub(crate) fn unexpected_response(reason: &'static str) -> Self {
+    pub(crate) fn from_response(source: reqwest::Error, response: Option<ErrorObject>) -> Self {
         Self {
-            inner: Box::new(InnerError {
-                kind: ErrorKind::UnexpectedResponse { reason },
-            }),
+            inner: Box::new(ErrorKind::RequestError { source, response }),
         }
     }
 
-    pub(crate) fn from_response(source: reqwest::Error, response: Option<ErrorObject>) -> Self {
+    pub(crate) fn unexpected_response(reason: &'static str) -> Self {
         Self {
-            inner: Box::new(InnerError {
-                kind: ErrorKind::RequestError { source, response },
-            }),
+            inner: Box::new(ErrorKind::DeserializeError(format_err!("{}", reason))),
         }
     }
 
     /// Check whether the error may be recovered by retrying.
     pub fn should_retry(&self) -> bool {
-        match &self.inner.kind {
-            RequestError { source, .. } => !source.is_client_error() && !source.is_serialization(),
-            _ => false,
+        match &*self.inner {
+            ErrorKind::DeserializeError(_) => false,
+            ErrorKind::RequestError { source, .. } => {
+                !source.is_client_error() && !source.is_serialization()
+            }
         }
     }
 
     /// Get the url related to the error.
     pub fn url(&self) -> Option<&reqwest::Url> {
-        match &self.inner.kind {
-            RequestError { source, .. } => source.url(),
-            _ => None,
+        match &*self.inner {
+            ErrorKind::DeserializeError(_) => None,
+            ErrorKind::RequestError { source, .. } => source.url(),
         }
     }
 
     /// Get the error response from API if caused by error status code.
     pub fn error_response(&self) -> Option<&ErrorObject> {
-        match &self.inner.kind {
-            RequestError { response, .. } => response.as_ref(),
-            _ => None,
+        match &*self.inner {
+            ErrorKind::DeserializeError(_) => None,
+            ErrorKind::RequestError { response, .. } => response.as_ref(),
         }
     }
 
     /// Get the HTTP status code if caused by error status code.
     pub fn status_code(&self) -> Option<StatusCode> {
-        match &self.inner.kind {
-            RequestError { source, .. } => source.status(),
-            _ => None,
-        }
-    }
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match &self.inner.kind {
-            RequestError { source, .. } => write!(f, "{}", source),
-            UnexpectedResponse { reason } => write!(f, "{}", reason),
-        }
-    }
-}
-
-impl std::error::Error for Error {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match &self.inner.kind {
-            RequestError { source, .. } => Some(source),
-            _ => None,
+        match &*self.inner {
+            ErrorKind::DeserializeError(_) => None,
+            ErrorKind::RequestError { source, .. } => source.status(),
         }
     }
 }
