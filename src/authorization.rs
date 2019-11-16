@@ -1,6 +1,11 @@
-use crate::error::{Error, Result};
-use crate::util::ResponseExt;
+use crate::{
+    api::{new_api, Api},
+    error::Error,
+    util::HttpResponseExt,
+};
+use http::Request;
 use serde::Deserialize;
+use serde_urlencoded;
 
 /// A list of the Microsoft Graph permissions that you want the user to consent to.
 ///
@@ -65,9 +70,9 @@ impl Permission {
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-overview?view=graph-rest-1.0)
+// TODO: Rename to `Authentication`
 #[derive(Debug)]
 pub struct AuthClient {
-    client: ::reqwest::Client,
     client_id: String,
     permission: Permission,
     redirect_uri: String,
@@ -77,7 +82,6 @@ impl AuthClient {
     /// Create a client for authorization.
     pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
         AuthClient {
-            client: ::reqwest::Client::new(),
             client_id,
             permission,
             redirect_uri,
@@ -102,6 +106,7 @@ impl AuthClient {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-service?view=graph-rest-1.0)
+    // TODO: Rename to `token_auth_url`
     pub fn get_token_auth_url(&self) -> String {
         self.get_auth_url("token")
     }
@@ -110,11 +115,16 @@ impl AuthClient {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request)
+    // TODO: Rename to `code_auth_url`
     pub fn get_code_auth_url(&self) -> String {
         self.get_auth_url("code")
     }
 
-    fn request_authorize(&self, require_refresh: bool, params: &[(&str, &str)]) -> Result<Token> {
+    fn request_authorize(
+        &self,
+        require_refresh: bool,
+        params: &[(&str, &str)],
+    ) -> impl Api<Response = Token> {
         #[derive(Deserialize)]
         struct Response {
             // token_type: String,
@@ -124,29 +134,37 @@ impl AuthClient {
             refresh_token: Option<String>,
         }
 
-        let resp: Response = self
-            .client
-            .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
-            .form(params)
-            .send()?
-            .parse()?;
-
-        if require_refresh && resp.refresh_token.is_none() {
-            return Err(Error::unexpected_response("Missing field `refresh_token`"));
-        }
-
-        Ok(Token {
-            token: resp.access_token,
-            refresh_token: resp.refresh_token,
-            _private: (),
-        })
+        new_api(
+            || {
+                Ok(
+                    Request::post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
+                        .body(serde_urlencoded::to_string(params)?.into_bytes())?,
+                )
+            },
+            move |resp| {
+                let resp: Response = resp.parse()?;
+                if !require_refresh || resp.refresh_token.is_some() {
+                    Ok(Token {
+                        token: resp.access_token,
+                        refresh_token: resp.refresh_token,
+                        _private: (),
+                    })
+                } else {
+                    Err(Error::unexpected_response("Missing field `refresh_token`"))
+                }
+            },
+        )
     }
 
     /// Login using a code in code flow authentication.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token)
-    pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
+    pub fn login_with_code(
+        &self,
+        code: &str,
+        client_secret: Option<&str>,
+    ) -> impl Api<Response = Token> {
         self.request_authorize(
             self.permission.offline_access,
             &[
@@ -176,7 +194,7 @@ impl AuthClient {
         &self,
         refresh_token: &str,
         client_secret: Option<&str>,
-    ) -> Result<Token> {
+    ) -> impl Api<Response = Token> {
         assert!(
             self.permission.offline_access,
             "Refresh token requires offline_access permission."
@@ -250,5 +268,4 @@ mod tests {
             }
         }
     }
-
 }

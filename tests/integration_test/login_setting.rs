@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use log::{info, warn};
 use onedrive_api::*;
+use reqwest;
 use serde::{Deserialize, Serialize};
 
 const LOGIN_SETTING_PATH: &str = "tests/login_setting.json";
@@ -18,7 +19,8 @@ struct LoginSetting {
 
 // NOTE: This supports code auth only.
 fn get_token(setting: &mut LoginSetting) -> String {
-    let auth_client = AuthClient::new(
+    let client = reqwest::Client::new();
+    let auth = AuthClient::new(
         setting.client_id.clone(),
         Permission::new_read().offline_access(true),
         setting.redirect_uri.clone(),
@@ -26,7 +28,10 @@ fn get_token(setting: &mut LoginSetting) -> String {
 
     if let Some(code) = setting.code.take() {
         info!("Login with code...");
-        match auth_client.login_with_code(&code, setting.client_secret.as_ref().map(|s| &**s)) {
+        match auth
+            .login_with_code(&code, setting.client_secret.as_ref().map(|s| &**s))
+            .execute(&client)
+        {
             Ok(Token {
                 token,
                 refresh_token,
@@ -51,8 +56,9 @@ fn get_token(setting: &mut LoginSetting) -> String {
 
     if let Some(refresh_token) = &setting.refresh_token {
         info!("Login with refresh token...");
-        match auth_client
+        match auth
             .login_with_refresh_token(&refresh_token, setting.client_secret.as_ref().map(|s| &**s))
+            .execute(&client)
         {
             Ok(Token {
                 token,
@@ -67,7 +73,7 @@ fn get_token(setting: &mut LoginSetting) -> String {
         }
     }
 
-    panic!("Request code auth: {}", auth_client.get_code_auth_url())
+    panic!("Request code auth: {}", auth.get_code_auth_url())
 }
 
 lazy_static! {

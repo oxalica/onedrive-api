@@ -1,5 +1,6 @@
 use crate::error::{Error, Result};
 use crate::resource::{DriveId, ItemId};
+use http;
 use reqwest::{RequestBuilder, Response, StatusCode};
 use serde::{de, Deserialize};
 use url::PathSegmentsMut;
@@ -285,5 +286,30 @@ impl ResponseExt for Response {
     fn parse_no_content(self) -> Result<()> {
         self.check_status()?;
         Ok(())
+    }
+}
+
+pub(crate) trait HttpResponseExt: Sized {
+    fn check_status(self) -> Result<Self>;
+    fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
+}
+
+impl HttpResponseExt for http::Response<Vec<u8>> {
+    fn check_status(self) -> Result<Self> {
+        if self.status().is_success() {
+            return Ok(self);
+        }
+
+        #[derive(Deserialize)]
+        struct ErrorResponse {
+            error: crate::resource::ErrorObject,
+        }
+
+        let resp: ErrorResponse = serde_json::from_slice(self.body())?;
+        Err(Error::from_error_response(self.status(), resp.error))
+    }
+
+    fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
+        Ok(serde_json::from_slice(self.check_status()?.body())?)
     }
 }

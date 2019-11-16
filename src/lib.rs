@@ -38,6 +38,7 @@
 #![deny(missing_docs)]
 use serde::{de, Serialize};
 
+mod api;
 mod authorization;
 mod client;
 mod error;
@@ -45,15 +46,17 @@ pub mod option;
 pub mod resource;
 mod util;
 
-pub use self::authorization::{AuthClient, Permission, Token};
-pub use self::client::DriveClient;
-pub use self::client::{
-    CopyProgress, CopyProgressMonitor, CopyStatus, ListChildrenFetcher, TrackChangeFetcher,
-    UploadSession,
+pub use self::{
+    api::{Api, Client},
+    authorization::{AuthClient, Permission, Token},
+    client::{
+        CopyProgress, CopyProgressMonitor, CopyStatus, DriveClient, ListChildrenFetcher,
+        TrackChangeFetcher, UploadSession,
+    },
+    error::{Error, Result},
+    resource::{DriveId, ItemId, Tag},
+    util::{DriveLocation, FileName, ItemLocation},
 };
-pub use self::error::{Error, Result};
-pub use self::resource::{DriveId, ItemId, Tag};
-pub use self::util::{DriveLocation, FileName, ItemLocation};
 
 /// The conflict resolution behavior for actions that create a new item.
 ///

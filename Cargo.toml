@@ -13,10 +13,12 @@ documentation = "https://docs.rs/onedrive-api"
 
 [dependencies]
 failure = { version = "0.1.6", features = ["derive"] }
+http = "0.1.19"
 lazy_static = "1.4.0"
 reqwest = "0.9.22"
 serde = { version = "1.0.102", features = ["derive"] }
 serde_json = "1.0.41"
+serde_urlencoded = "0.6.1"
 url = "1.7.2"
 
 [dev-dependencies]
