@@ -4,7 +4,7 @@ use http;
 type RawRequest = http::Request<Vec<u8>>;
 type RawResponse = http::Response<Vec<u8>>;
 
-pub(crate) mod sealed {
+mod sealed {
     pub trait Sealed {}
 }
 
@@ -28,14 +28,14 @@ pub trait Api: sealed::Sealed + Send + Sync + Sized {
     /// Panic if called twice.
     ///
     /// [execute]: #method.execute
-    fn to_request(&mut self) -> Result<RawRequest>;
+    fn get_request(&mut self) -> Result<RawRequest>;
 
     /// Parse the raw response.
     ///
     /// At most time, you should call [`execute`][execute] instead of calling this directly.
     ///
     /// [execute]: #method.execute
-    fn parse(&self, resp: RawResponse) -> Result<Self::Response>;
+    fn parse(self, resp: RawResponse) -> Result<Self::Response>;
 
     /// Perform the operation through an HTTP [`Client`][client].
     ///
@@ -45,32 +45,60 @@ pub trait Api: sealed::Sealed + Send + Sync + Sized {
     }
 }
 
-pub(crate) struct TheApi<P> {
+pub(crate) struct TrivialApi {
     request: Option<Result<RawRequest>>,
-    parser: P,
 }
 
-impl<P> sealed::Sealed for TheApi<P> {}
+impl sealed::Sealed for TrivialApi {}
 
-impl<Resp, P: Fn(RawResponse) -> Result<Resp> + Send + Sync> Api for TheApi<P> {
-    type Response = Resp;
+impl Api for TrivialApi {
+    type Response = RawResponse;
 
-    fn to_request(&mut self) -> Result<RawRequest> {
+    fn get_request(&mut self) -> Result<RawRequest> {
         self.request.take().unwrap()
     }
 
-    fn parse(&self, resp: RawResponse) -> Result<Self::Response> {
-        (self.parser)(resp)
+    fn parse(self, resp: RawResponse) -> Result<Self::Response> {
+        Ok(resp)
     }
 }
 
-pub(crate) fn new_api<Parsed, P: Fn(RawResponse) -> Result<Parsed> + Send + Sync>(
-    builder: impl FnOnce() -> Result<RawRequest>,
-    parser: P,
-) -> TheApi<P> {
-    TheApi {
-        request: Some(builder()),
-        parser,
+impl TrivialApi {
+    pub(crate) fn new(req: Result<RawRequest>) -> Self {
+        Self { request: Some(req) }
+    }
+}
+
+pub(crate) trait ApiExt: Api {
+    fn and_then<T, F>(self, f: F) -> AndThen<Self, F>
+    where
+        F: FnOnce(Self::Response) -> Result<T> + Send + Sync,
+    {
+        AndThen { api: self, f }
+    }
+}
+
+impl<A: Api> ApiExt for A {}
+
+pub(crate) struct AndThen<A, F> {
+    api: A,
+    f: F,
+}
+
+impl<A, F> sealed::Sealed for AndThen<A, F> {}
+
+impl<A: Api, T, F> Api for AndThen<A, F>
+where
+    F: FnOnce(A::Response) -> Result<T> + Send + Sync,
+{
+    type Response = T;
+
+    fn get_request(&mut self) -> Result<RawRequest> {
+        self.api.get_request()
+    }
+
+    fn parse(self, resp: RawResponse) -> Result<Self::Response> {
+        (self.f)(self.api.parse(resp)?)
     }
 }
 
@@ -104,7 +132,7 @@ fn from_reqwest_response(mut resp: ::reqwest::Response) -> Result<RawResponse> {
 #[cfg(feature = "reqwest")]
 impl Client for ::reqwest::Client {
     fn execute_api<A: Api>(&self, mut api: A) -> Result<A::Response> {
-        let req = to_reqwest_request(api.to_request()?);
+        let req = to_reqwest_request(api.get_request()?);
         let resp = self.execute(req)?;
         let resp = from_reqwest_response(resp)?;
         api.parse(resp)

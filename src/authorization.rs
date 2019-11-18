@@ -1,5 +1,5 @@
 use crate::{
-    api::{new_api, Api},
+    api::{Api, ApiExt, TrivialApi},
     error::Error,
     util::HttpResponseExt,
 };
@@ -126,7 +126,7 @@ impl AuthClient {
         params: &[(&str, &str)],
     ) -> impl Api<Response = Token> {
         #[derive(Deserialize)]
-        struct Response {
+        struct Resp {
             // token_type: String,
             // expires_in: u64,
             // scope: String,
@@ -134,26 +134,24 @@ impl AuthClient {
             refresh_token: Option<String>,
         }
 
-        new_api(
-            || {
-                Ok(
-                    Request::post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
-                        .body(serde_urlencoded::to_string(params)?.into_bytes())?,
-                )
-            },
-            move |resp| {
-                let resp: Response = resp.parse()?;
-                if !require_refresh || resp.refresh_token.is_some() {
-                    Ok(Token {
-                        token: resp.access_token,
-                        refresh_token: resp.refresh_token,
-                        _private: (),
-                    })
-                } else {
-                    Err(Error::unexpected_response("Missing field `refresh_token`"))
-                }
-            },
-        )
+        TrivialApi::new((|| {
+            Ok(
+                Request::post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
+                    .body(serde_urlencoded::to_string(params)?.into_bytes())?,
+            )
+        })())
+        .and_then(move |resp| {
+            let resp: Resp = resp.parse()?;
+            if !require_refresh || resp.refresh_token.is_some() {
+                Ok(Token {
+                    token: resp.access_token,
+                    refresh_token: resp.refresh_token,
+                    _private: (),
+                })
+            } else {
+                Err(Error::unexpected_response("Missing field `refresh_token`"))
+            }
+        })
     }
 
     /// Login using a code in code flow authentication.
