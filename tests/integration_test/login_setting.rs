@@ -47,8 +47,8 @@ fn get_token(setting: &mut LoginSetting) -> String {
 
     if let Some(token) = &setting.token {
         info!("Login with token...");
-        let client = DriveClient::new(token.to_owned(), DriveLocation::me());
-        match client.get_drive() {
+        let drive = DriveClient::new(token.to_owned(), DriveLocation::me());
+        match drive.get_drive().execute(&client) {
             Ok(_) => return token.to_owned(),
             Err(err) => warn!("Failed: {:?}", err),
         }

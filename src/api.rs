@@ -1,10 +1,10 @@
 use crate::error::Result;
 use http;
 
-type RawRequest = http::Request<Vec<u8>>;
-type RawResponse = http::Response<Vec<u8>>;
+pub(crate) type RawRequest = http::Request<Vec<u8>>;
+pub(crate) type RawResponse = http::Response<Vec<u8>>;
 
-mod sealed {
+pub(crate) mod sealed {
     pub trait Sealed {}
 }
 
@@ -25,7 +25,7 @@ pub trait Api: sealed::Sealed + Send + Sync + Sized {
     /// At most time, you should call [`execute`][execute] instead of calling this directly.
     ///
     /// # Panic
-    /// Panic if called twice.
+    /// May panic if called twice.
     ///
     /// [execute]: #method.execute
     fn get_request(&mut self) -> Result<RawRequest>;

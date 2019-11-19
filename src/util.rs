@@ -1,8 +1,12 @@
-use crate::error::{Error, Result};
-use crate::resource::{DriveId, ItemId};
-use http;
+use crate::{
+    api,
+    error::{Error, Result},
+    resource::{DriveId, ItemId},
+};
+use http::{self, header, HttpTryFrom};
 use reqwest::{RequestBuilder, Response, StatusCode};
-use serde::{de, Deserialize};
+use serde::{de, Deserialize, Serialize};
+use std::fmt;
 use url::PathSegmentsMut;
 
 /// Specify the location of a `Drive` resource.
@@ -289,12 +293,57 @@ impl ResponseExt for Response {
     }
 }
 
+// TODO: Rename to `RequestBuilderExt`
+pub(crate) trait HttpRequestBuilderExt: Sized {
+    fn opt_header<V>(&mut self, key: http::header::HeaderName, value: Option<V>) -> &mut Self
+    where
+        header::HeaderValue: HttpTryFrom<V>;
+    fn apply(&mut self, f: &impl RequestBuilderTransformer) -> &mut Self;
+    fn bearer_auth(&mut self, token: impl fmt::Display) -> &mut Self;
+    fn empty_body(&mut self) -> Result<api::RawRequest>;
+    fn json_body(&mut self, value: &impl Serialize) -> Result<api::RawRequest>;
+}
+
+impl HttpRequestBuilderExt for http::request::Builder {
+    fn opt_header<V>(&mut self, key: http::header::HeaderName, value: Option<V>) -> &mut Self
+    where
+        header::HeaderValue: HttpTryFrom<V>,
+    {
+        match value {
+            Some(value) => self.header(key, value),
+            None => self,
+        }
+    }
+
+    fn apply(&mut self, f: &impl RequestBuilderTransformer) -> &mut Self {
+        // TODO
+        self
+    }
+
+    fn bearer_auth(&mut self, token: impl fmt::Display) -> &mut Self {
+        self.header(header::AUTHORIZATION, format!("Bearer {}", token))
+    }
+
+    fn empty_body(&mut self) -> Result<api::RawRequest> {
+        Ok(self.body(vec![])?)
+    }
+
+    fn json_body(&mut self, value: &impl Serialize) -> Result<api::RawRequest> {
+        Ok(self
+            .header(header::CONTENT_TYPE, "application/json")
+            .body(serde_json::to_vec(value).unwrap())?)
+    }
+}
+
+// TODO: Rename to `ResponseExt`
 pub(crate) trait HttpResponseExt: Sized {
     fn check_status(self) -> Result<Self>;
     fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
+    fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>>;
+    fn parse_no_content(self) -> Result<()>;
 }
 
-impl HttpResponseExt for http::Response<Vec<u8>> {
+impl HttpResponseExt for api::RawResponse {
     fn check_status(self) -> Result<Self> {
         if self.status().is_success() {
             return Ok(self);
@@ -311,5 +360,17 @@ impl HttpResponseExt for http::Response<Vec<u8>> {
 
     fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
         Ok(serde_json::from_slice(self.check_status()?.body())?)
+    }
+
+    fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>> {
+        match self.status() {
+            StatusCode::NOT_MODIFIED | StatusCode::ACCEPTED => Ok(None),
+            _ => Ok(Some(self.parse()?)),
+        }
+    }
+
+    fn parse_no_content(self) -> Result<()> {
+        self.check_status()?;
+        Ok(())
     }
 }
