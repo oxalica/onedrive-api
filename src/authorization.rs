@@ -1,5 +1,5 @@
 use crate::{
-    api::{Api, ApiExt, TrivialApi},
+    api::{Api, ApiExt, SimpleApi},
     error::Error,
     util::HttpResponseExt,
 };
@@ -134,7 +134,7 @@ impl AuthClient {
             refresh_token: Option<String>,
         }
 
-        TrivialApi::new((|| {
+        SimpleApi::new((|| {
             Ok(
                 Request::post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
                     .body(serde_urlencoded::to_string(params)?.into_bytes())?,

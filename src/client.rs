@@ -1,5 +1,5 @@
 use crate::{
-    api::{self, Api, ApiExt, TrivialApi},
+    api::{self, Api, ApiExt, SimpleApi},
     error::{Error, Result},
     option::{CollectionOption, DriveItemPutOption, ObjectOption},
     resource::*,
@@ -73,7 +73,7 @@ impl DriveClient {
         &self,
         option: ObjectOption<DriveField>,
     ) -> impl Api<Response = Drive> {
-        TrivialApi::new(
+        SimpleApi::new(
             Request::get(api_url![&self.drive])
                 .apply(&option)
                 .bearer_auth(&self.token)
@@ -105,18 +105,22 @@ impl DriveClient {
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
-    pub fn list_children_with_option<'a>(
-        &self,
+    // TODO: Fix docs
+    pub fn list_children_with_option<'t, 'a>(
+        &'t self,
         item: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
-    ) -> ListChildrenFetcher<'_> {
-        ListChildrenFetcher::new(
-            &self.token,
+    ) -> impl Api<Response = Option<ListChildrenFetcher<'t>>> {
+        SimpleApi::new(
             Request::get(api_url![&self.drive, &item.into(), "children"])
                 .apply(&option)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
+        .and_then(move |resp| {
+            let opt_resp: Option<DriveItemCollectionResponse> = resp.parse_optional()?;
+            Ok(opt_resp.map(move |resp| ListChildrenFetcher::new(&self.token, resp)))
+        })
     }
 
     /// Shortcut to `list_children_with_option` with default params and fetch all.
@@ -126,8 +130,33 @@ impl DriveClient {
     ///
     /// [with_opt]: #method.list_children_with_option
     // TODO: Fix docs
-    pub fn list_children<'a>(&self, item: impl Into<ItemLocation<'a>>) -> ListChildrenFetcher<'_> {
-        self.list_children_with_option(item.into(), Default::default())
+    // FIXME: https://github.com/rust-lang/rust/issues/42940
+    pub fn list_children<'a, 's>(
+        &'s self,
+        item: impl Into<ItemLocation<'a>> + 's,
+    ) -> impl Api<Response = Vec<DriveItem>> + 's {
+        struct ListChildren<A> {
+            api: A,
+        }
+
+        impl<A> api::sealed::Sealed for ListChildren<A> {}
+
+        impl<'b, A: Api<Response = Option<ListChildrenFetcher<'b>>>> Api for ListChildren<A> {
+            type Response = Vec<DriveItem>;
+
+            fn execute(self, client: &impl api::Client) -> Result<Self::Response> {
+                let mut fetcher = self.api.execute(client)?.unwrap();
+                let mut buf = vec![];
+                while let Some(chunk) = fetcher.fetch_next_page().execute(client)? {
+                    buf.extend(chunk);
+                }
+                Ok(buf)
+            }
+        }
+
+        ListChildren {
+            api: self.list_children_with_option(item, Default::default()),
+        }
     }
 
     /// Get a `DriveItem` resource.
@@ -147,7 +176,7 @@ impl DriveClient {
         item: impl Into<ItemLocation<'a>>,
         option: ObjectOption<DriveItemField>,
     ) -> impl Api<Response = Option<DriveItem>> {
-        TrivialApi::new(
+        SimpleApi::new(
             Request::get(api_url![&self.drive, &item.into()])
                 .apply(&option)
                 .bearer_auth(&self.token)
@@ -201,7 +230,7 @@ impl DriveClient {
             conflict_behavior: ConflictBehavior,
         }
 
-        TrivialApi::new(
+        SimpleApi::new(
             Request::post(api_url![&self.drive, &parent_item.into(), "children"])
                 .bearer_auth(&self.token)
                 .apply(&option)
@@ -254,7 +283,7 @@ impl DriveClient {
             Self::UPLOAD_SMALL_LIMIT,
         );
 
-        TrivialApi::new(
+        SimpleApi::new(
             Request::put(api_url![&self.drive, &item.into(), "content"])
                 .bearer_auth(&self.token)
                 .body(data.to_owned())
@@ -299,7 +328,7 @@ impl DriveClient {
             item: Item,
         }
 
-        TrivialApi::new(
+        SimpleApi::new(
             Request::post(api_url![&self.drive, &item.into(), "createUploadSession"])
                 .apply(&option)
                 .bearer_auth(&self.token)
@@ -344,7 +373,7 @@ impl DriveClient {
         }
 
         let upload_url = upload_url.to_owned();
-        TrivialApi::new(Request::get(upload_url.clone()).empty_body()).and_then(move |resp| {
+        SimpleApi::new(Request::get(upload_url.clone()).empty_body()).and_then(move |resp| {
             let resp: Resp = resp.parse()?;
             Ok(UploadSession {
                 upload_url,
@@ -367,7 +396,7 @@ impl DriveClient {
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session)
     pub fn delete_upload_session(&self, sess: &UploadSession) -> impl Api<Response = ()> {
-        TrivialApi::new(Request::delete(&sess.upload_url).empty_body())
+        SimpleApi::new(Request::delete(&sess.upload_url).empty_body())
             .and_then(|resp| resp.parse_no_content())
     }
 
@@ -426,7 +455,7 @@ impl DriveClient {
             Self::UPLOAD_SESSION_PART_LIMIT,
         );
 
-        TrivialApi::new(
+        SimpleApi::new(
             Request::put(&session.upload_url)
                 // No auth token
                 .header(
@@ -470,7 +499,7 @@ impl DriveClient {
             name: &'a str,
         }
 
-        TrivialApi::new(
+        SimpleApi::new(
             Request::post(api_url![&self.drive, &source_item.into(), "copy"])
                 .bearer_auth(&self.token)
                 .json_body(&Req {
@@ -531,7 +560,7 @@ impl DriveClient {
             conflict_behavior: ConflictBehavior,
         }
 
-        TrivialApi::new(
+        SimpleApi::new(
             Request::patch(api_url![&self.drive, &source_item.into()])
                 .bearer_auth(&self.token)
                 .apply(&option)
@@ -591,7 +620,7 @@ impl DriveClient {
             "`conflict_behavior` is not supported by `delete[_with_option]`",
         );
 
-        TrivialApi::new(
+        SimpleApi::new(
             Request::delete(api_url![&self.drive, &item.into()])
                 .bearer_auth(&self.token)
                 .apply(&option)
@@ -630,14 +659,17 @@ impl DriveClient {
         &self,
         folder: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
-    ) -> TrackChangeFetcher<'_> {
-        TrackChangeFetcher::new(
-            &self.token,
+    ) -> impl Api<Response = TrackChangeFetcher<'_>> {
+        SimpleApi::new(
             Request::get(api_url![&self.drive, &folder.into(), "delta"])
                 .apply(&option)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
+        .and_then(move |resp| {
+            let resp: DriveItemCollectionResponse = resp.parse()?;
+            Ok(TrackChangeFetcher::new(&self.token, resp))
+        })
     }
 
     /// Shortcut to `track_changes_from_initial_with_option` with default parameters.
@@ -650,7 +682,7 @@ impl DriveClient {
     pub fn track_changes_from_initial<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
-    ) -> TrackChangeFetcher<'_> {
+    ) -> impl Api<Response = TrackChangeFetcher<'_>> {
         self.track_changes_from_initial_with_option(folder, Default::default())
     }
 
@@ -660,13 +692,19 @@ impl DriveClient {
     /// [`DriveClient::track_changes_from_initial_with_option`][track_initial]
     ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
-    pub fn track_changes_from_delta_url<'t>(&'t self, delta_url: &str) -> TrackChangeFetcher<'_> {
-        TrackChangeFetcher::new(
-            &self.token,
+    pub fn track_changes_from_delta_url<'t>(
+        &'t self,
+        delta_url: &str,
+    ) -> impl Api<Response = TrackChangeFetcher<'_>> {
+        SimpleApi::new(
             Request::get(delta_url)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
+        .and_then(move |resp| {
+            let resp: DriveItemCollectionResponse = resp.parse()?;
+            Ok(TrackChangeFetcher::new(&self.token, resp))
+        })
     }
 
     /// Get a delta url representing the snapshot of current states.
@@ -677,7 +715,7 @@ impl DriveClient {
         &self,
         folder: impl Into<ItemLocation<'a>>,
     ) -> impl Api<Response = String> {
-        TrivialApi::new(
+        SimpleApi::new(
             Request::get(api_url![
                 &self.drive, &folder.into(), "delta";
                 url => {
@@ -775,7 +813,7 @@ impl<'t> CopyProgressMonitor<'t> {
             status: CopyStatus,
         }
 
-        TrivialApi::new(Request::get(&self.url).empty_body())
+        SimpleApi::new(Request::get(&self.url).empty_body())
             .and_then(|resp| resp.parse())
             .and_then(|resp: Resp| {
                 Ok(CopyProgress {
@@ -799,60 +837,89 @@ struct DriveItemCollectionResponse {
 #[derive(Debug)]
 struct DriveItemFetcher<'t> {
     token: &'t str,
-    next_url: Option<String>,
-    delta_url: Option<String>,
-    first_request: Option<Result<api::RawRequest>>,
+    last_response: DriveItemCollectionResponse,
 }
 
 impl<'t> DriveItemFetcher<'t> {
-    fn new(token: &'t str, first_request: Result<api::RawRequest>) -> Self {
+    fn new(token: &'t str, first_response: DriveItemCollectionResponse) -> Self {
         Self {
             token,
-            next_url: None,
-            delta_url: None,
-            first_request: Some(first_request),
+            last_response: first_response,
         }
     }
 
     fn resume_from(token: &'t str, next_url: String) -> Self {
-        Self {
+        Self::new(
             token,
-            next_url: Some(next_url),
-            delta_url: None,
-            first_request: None,
-        }
+            DriveItemCollectionResponse {
+                value: None,
+                next_url: Some(next_url),
+                delta_url: None,
+            },
+        )
     }
 
     // TODO: Rename
     fn get_next_url(&self) -> Option<&str> {
-        self.next_url.as_ref().map(|s| &**s)
+        self.last_response.next_url.as_ref().map(|s| &**s)
     }
 
     // TODO: Rename
     fn get_delta_url(&self) -> Option<&str> {
-        self.delta_url.as_ref().map(|s| &**s)
+        self.last_response.delta_url.as_ref().map(|s| &**s)
     }
 
-    fn fetch_next(&mut self) -> impl Api<Response = Option<Vec<DriveItem>>> + '_ {
-        let req = self
-            .first_request
-            .take()
-            .or_else(|| {
-                // Do not `take` next_url eagerly. It should be kept if request failed.
-                let url = self.next_url.as_ref()?;
-                Some(Request::get(url).bearer_auth(self.token).empty_body())
-            })
-            .expect("Cannot fetch after done");
+    fn fetch_next_page(&mut self) -> impl Api<Response = Option<Vec<DriveItem>>> + '_ {
+        struct FetchNextPage<'s> {
+            token: &'s str,
+            last_response: &'s mut DriveItemCollectionResponse,
+        }
 
-        // https://github.com/rust-lang/rust/issues/66551
-        let next_url = &mut self.next_url;
-        let delta_url = &mut self.delta_url;
-        TrivialApi::new(req).and_then(move |resp| {
-            let resp: DriveItemCollectionResponse = resp.parse()?;
-            *next_url = resp.next_url;
-            *delta_url = resp.delta_url;
-            Ok(resp.value)
-        })
+        impl api::sealed::Sealed for FetchNextPage<'_> {}
+
+        impl Api for FetchNextPage<'_> {
+            type Response = Option<Vec<DriveItem>>;
+
+            fn execute(self, client: &impl api::Client) -> Result<Self::Response> {
+                if let Some(items) = self.last_response.value.take() {
+                    return Ok(Some(items));
+                }
+                let req = match self.last_response.next_url.as_ref() {
+                    None => return Ok(None),
+                    Some(url) => Request::get(url).bearer_auth(self.token).empty_body()?,
+                };
+                let resp = client.execute_api(req)?;
+                *self.last_response = resp.parse()?;
+                Ok(Some(self.last_response.value.take().unwrap_or_default()))
+            }
+        }
+
+        FetchNextPage {
+            token: &self.token,
+            last_response: &mut self.last_response,
+        }
+    }
+
+    fn fetch_all(self) -> impl Api<Response = (Vec<DriveItem>, Option<String>)> + 't {
+        struct FetchAll<'t> {
+            fetcher: DriveItemFetcher<'t>,
+        }
+
+        impl api::sealed::Sealed for FetchAll<'_> {}
+
+        impl Api for FetchAll<'_> {
+            type Response = (Vec<DriveItem>, Option<String>);
+
+            fn execute(mut self, client: &impl api::Client) -> Result<Self::Response> {
+                let mut buf = vec![];
+                while let Some(items) = self.fetcher.fetch_next_page().execute(client)? {
+                    buf.extend(items);
+                }
+                Ok((buf, self.fetcher.get_delta_url().map(|s| s.to_owned())))
+            }
+        }
+
+        FetchAll { fetcher: self }
     }
 }
 
@@ -868,9 +935,9 @@ pub struct ListChildrenFetcher<'t> {
 }
 
 impl<'t> ListChildrenFetcher<'t> {
-    fn new(token: &'t str, first_request: Result<api::RawRequest>) -> Self {
+    fn new(token: &'t str, first_response: DriveItemCollectionResponse) -> Self {
         Self {
-            fetcher: DriveItemFetcher::new(token, first_request),
+            fetcher: DriveItemFetcher::new(token, first_response),
         }
     }
 
@@ -902,8 +969,13 @@ impl<'t> ListChildrenFetcher<'t> {
     }
 
     // TODO: Docs
-    pub fn fetch_next(&mut self) -> impl Api<Response = Option<Vec<DriveItem>>> + '_ {
-        self.fetcher.fetch_next()
+    pub fn fetch_next_page(&mut self) -> impl Api<Response = Option<Vec<DriveItem>>> + '_ {
+        self.fetcher.fetch_next_page()
+    }
+
+    // TODO: Docs
+    pub fn fetch_all(self) -> impl Api<Response = Vec<DriveItem>> + 't {
+        self.fetcher.fetch_all().and_then(|(items, _)| Ok(items))
     }
 }
 
@@ -922,9 +994,9 @@ pub struct TrackChangeFetcher<'t> {
 }
 
 impl<'t> TrackChangeFetcher<'t> {
-    fn new(token: &'t str, first_request: Result<api::RawRequest>) -> Self {
+    fn new(token: &'t str, first_response: DriveItemCollectionResponse) -> Self {
         Self {
-            fetcher: DriveItemFetcher::new(token, first_request),
+            fetcher: DriveItemFetcher::new(token, first_response),
         }
     }
 
@@ -974,6 +1046,19 @@ impl<'t> TrackChangeFetcher<'t> {
     // TODO: Rename to `delta_url`
     pub fn get_delta_url(&self) -> Option<&str> {
         self.fetcher.get_delta_url()
+    }
+
+    pub fn fetch_next_page(&mut self) -> impl Api<Response = Option<Vec<DriveItem>>> + '_ {
+        self.fetcher.fetch_next_page()
+    }
+
+    pub fn fetch_all(self) -> impl Api<Response = (Vec<DriveItem>, String)> + 't {
+        self.fetcher.fetch_all().and_then(|(items, opt_delta_url)| {
+            let delta_url = opt_delta_url.ok_or_else(|| {
+                Error::unexpected_response("Missing `@odata.deltaLink` for the last page")
+            })?;
+            Ok((items, delta_url))
+        })
     }
 }
 

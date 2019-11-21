@@ -4,7 +4,7 @@ use onedrive_api::resource::*;
 use onedrive_api::*;
 use reqwest::{self, StatusCode};
 use std::collections::{HashMap, HashSet};
-use std::iter::{empty, FromIterator};
+use std::iter::{self, FromIterator};
 
 use crate::login_setting::TOKEN;
 
@@ -448,26 +448,47 @@ fn test_list_children() {
             };
             let check_page_eq = |url: String, expected: &[DriveItem]| {
                 let mut fetcher_ = ListChildrenFetcher::resume_from(&drive.token(), url);
-                let page_ = fetcher_.next().unwrap().expect("Failed to re-get page");
+                let page_ = fetcher_
+                    .fetch_next_page()
+                    .execute(&*CLIENT)
+                    .unwrap()
+                    .expect("Failed to re-get page");
                 assert_eq!(etags_of(&page_), etags_of(&expected));
             };
 
             // Cannot get next_url for the first page.
             assert!(fetcher.get_next_url().is_none());
-            let page1 = fetcher.next().unwrap().expect("Failed to fetch page 1");
+            let page1 = fetcher
+                .fetch_next_page()
+                .execute(&*CLIENT)
+                .unwrap()
+                .expect("Failed to fetch page 1");
+            dbg!(&page1);
             assert_eq!(page1.len(), PAGE1_COUNT);
 
             let url2 = fetcher.get_next_url().unwrap().to_owned();
-            let page2 = fetcher.next().unwrap().expect("Failed to fetch page 2");
+            let page2 = fetcher
+                .fetch_next_page()
+                .execute(&*CLIENT)
+                .unwrap()
+                .expect("Failed to fetch page 2");
             assert_eq!(page2.len(), PAGE2_COUNT);
             check_page_eq(url2, &page2);
 
             assert!(fetcher.get_next_url().is_none());
-            assert!(fetcher.next().is_none());
+            assert!(fetcher
+                .fetch_next_page()
+                .execute(&*CLIENT)
+                .unwrap()
+                .is_none());
             assert!(fetcher.get_next_url().is_none());
-            assert!(fetcher.next().is_none()); // Check fused.
+            assert!(fetcher
+                .fetch_next_page()
+                .execute(&*CLIENT)
+                .unwrap()
+                .is_none()); // Check fused.
 
-            empty()
+            iter::empty()
                 .chain(page1.iter())
                 .chain(page2.iter())
                 .for_each(|item| {
@@ -541,18 +562,26 @@ fn test_track_changes() {
             assert!(fetcher.get_next_url().is_none()); // None for the first page.
 
             let mut delta_ids = HashSet::new();
-            for (i, items) in fetcher.by_ref().enumerate() {
-                for item in
-                    items.unwrap_or_else(|e| panic!("Failed to fetch page {}: {}", i + 1, e))
-                {
+            let mut i = 0;
+            while let Some(page) = fetcher
+                .fetch_next_page()
+                .execute(&*CLIENT)
+                .unwrap_or_else(|e| panic!("Failed to fetch page {}: {}", i + 1, e))
+            {
+                for item in page {
                     assert!(item.e_tag.is_none()); // Not selected.
                                                    // Items may duplicate.
                                                    // See: https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#remarks
                     delta_ids.insert(item.id.unwrap());
                 }
+                i += 1;
             }
             assert!(fetcher.get_next_url().is_none());
-            assert!(fetcher.next().is_none()); // Assert fused.
+            assert!(fetcher
+                .fetch_next_page()
+                .execute(&*CLIENT)
+                .unwrap()
+                .is_none()); // Assert fused.
 
             // Note that the one of the item is the root folder itself.
             assert_eq!(
@@ -580,7 +609,7 @@ fn test_track_changes() {
             let (v, _) = drive
                 .track_changes_from_delta_url(&delta_url)
                 .execute(&*CLIENT)
-                .and_then(|fetcher| fetcher.fetch_all())
+                .and_then(|fetcher| fetcher.fetch_all().execute(&*CLIENT))
                 .expect("Failed to track changes with delta url");
             assert_eq!(
                 v.into_iter()
