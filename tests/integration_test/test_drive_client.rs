@@ -1,3 +1,4 @@
+#![cfg(feature = "reqwest")]
 use lazy_static::lazy_static;
 use onedrive_api::option::*;
 use onedrive_api::resource::*;

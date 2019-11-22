@@ -1,11 +1,11 @@
 use crate::{
     api::{Api, ApiExt as _, SimpleApi},
     error::Error,
-    util::ResponseExt as _,
+    util::{RequestBuilder as Builder, ResponseExt as _},
 };
-use http::Request;
+use http::{header, Method};
 use serde::Deserialize;
-use serde_urlencoded;
+use url::form_urlencoded;
 
 /// A list of the Microsoft Graph permissions that you want the user to consent to.
 ///
@@ -134,12 +134,19 @@ impl AuthClient {
             refresh_token: Option<String>,
         }
 
-        SimpleApi::new((|| {
-            Ok(
-                Request::post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
-                    .body(serde_urlencoded::to_string(params)?.into_bytes())?,
+        SimpleApi::new(
+            Builder::new(
+                Method::POST,
+                "https://login.microsoftonline.com/common/oauth2/v2.0/token",
             )
-        })())
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .bytes_body(
+                form_urlencoded::Serializer::new(String::new())
+                    .extend_pairs(params)
+                    .finish()
+                    .into_bytes(),
+            ),
+        )
         .and_then(move |resp| {
             let resp: Resp = resp.parse()?;
             if !require_refresh || resp.refresh_token.is_some() {

@@ -525,7 +525,7 @@ impl DriveClient {
             let url = resp
                 .check_status()?
                 .headers()
-                .get(::reqwest::header::LOCATION)
+                .get(header::LOCATION)
                 .ok_or_else(|| {
                     Error::unexpected_response("Header `Location` not exists in response of `copy`")
                 })?
