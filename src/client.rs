@@ -1,18 +1,22 @@
 use crate::{
-    api::{self, Api, ApiExt, SimpleApi},
+    api::{self, Api, ApiExt as _, SimpleApi},
     error::{Error, Result},
     option::{CollectionOption, DriveItemPutOption, ObjectOption},
     resource::*,
-    util::*,
+    util::{
+        ApiPathComponent, DriveLocation, FileName, ItemLocation, RequestBuilder as Builder,
+        ResponseExt as _,
+    },
     {ConflictBehavior, ExpectRange},
 };
-use http::{header, Request, Uri};
+use http::{header, Method};
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 macro_rules! api_url {
     (@$init:expr; $($seg:expr),* $(,)? $(; $bind:ident => $extra:block)?) => {{
         // TODO: Change to `http::uri`
-        let mut url = ::url::Url::parse($init).unwrap();
+        let mut url = Url::parse($init).unwrap();
         {
             let mut buf = url.path_segments_mut().unwrap();
             $(ApiPathComponent::extend_into($seg, &mut buf);)*
@@ -21,7 +25,7 @@ macro_rules! api_url {
             let $bind = &mut url;
             $extra;
         })?
-        url.as_str().parse::<Uri>().unwrap()
+        url
     }};
     ($($t:tt)*) => {
         api_url!(@"https://graph.microsoft.com/v1.0"; $($t)*)
@@ -31,7 +35,7 @@ macro_rules! api_url {
 macro_rules! api_path {
     ($($seg:expr),* $(,)?) => {
         {
-            let mut url = ::url::Url::parse("path://").unwrap();
+            let mut url = Url::parse("path://").unwrap();
             {
                 let mut buf = url.path_segments_mut().unwrap();
                 $(ApiPathComponent::extend_into($seg, &mut buf);)*
@@ -74,8 +78,8 @@ impl DriveClient {
         option: ObjectOption<DriveField>,
     ) -> impl Api<Response = Drive> {
         SimpleApi::new(
-            Request::get(api_url![&self.drive])
-                .apply(&option)
+            Builder::new(Method::GET, api_url![&self.drive])
+                .apply(option)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
@@ -112,8 +116,8 @@ impl DriveClient {
         option: CollectionOption<DriveItemField>,
     ) -> impl Api<Response = Option<ListChildrenFetcher<'t>>> {
         SimpleApi::new(
-            Request::get(api_url![&self.drive, &item.into(), "children"])
-                .apply(&option)
+            Builder::new(Method::GET, api_url![&self.drive, &item.into(), "children"])
+                .apply(option)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
@@ -177,8 +181,8 @@ impl DriveClient {
         option: ObjectOption<DriveItemField>,
     ) -> impl Api<Response = Option<DriveItem>> {
         SimpleApi::new(
-            Request::get(api_url![&self.drive, &item.into()])
-                .apply(&option)
+            Builder::new(Method::GET, api_url![&self.drive, &item.into()])
+                .apply(option)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
@@ -230,17 +234,21 @@ impl DriveClient {
             conflict_behavior: ConflictBehavior,
         }
 
+        let conflict_behavior = option
+            .get_conflict_behavior()
+            .unwrap_or(ConflictBehavior::Fail);
         SimpleApi::new(
-            Request::post(api_url![&self.drive, &parent_item.into(), "children"])
-                .bearer_auth(&self.token)
-                .apply(&option)
-                .json_body(&Req {
-                    name: name.as_str(),
-                    folder: Folder {},
-                    conflict_behavior: option
-                        .get_conflict_behavior()
-                        .unwrap_or(ConflictBehavior::Fail),
-                }),
+            Builder::new(
+                Method::POST,
+                api_url![&self.drive, &parent_item.into(), "children"],
+            )
+            .bearer_auth(&self.token)
+            .apply(option)
+            .json_body(&Req {
+                name: name.as_str(),
+                folder: Folder {},
+                conflict_behavior,
+            }),
         )
         .and_then(|resp| resp.parse())
     }
@@ -284,9 +292,9 @@ impl DriveClient {
         );
 
         SimpleApi::new(
-            Request::put(api_url![&self.drive, &item.into(), "content"])
+            Builder::new(Method::PUT, api_url![&self.drive, &item.into(), "content"])
                 .bearer_auth(&self.token)
-                .body(data.to_owned())
+                .bytes_body(data.to_owned())
                 .map_err(Into::into),
         )
         .and_then(|resp| resp.parse())
@@ -328,17 +336,19 @@ impl DriveClient {
             item: Item,
         }
 
+        let conflict_behavior = option
+            .get_conflict_behavior()
+            .unwrap_or(ConflictBehavior::Fail);
         SimpleApi::new(
-            Request::post(api_url![&self.drive, &item.into(), "createUploadSession"])
-                .apply(&option)
-                .bearer_auth(&self.token)
-                .json_body(&Req {
-                    item: Item {
-                        conflict_behavior: option
-                            .get_conflict_behavior()
-                            .unwrap_or(ConflictBehavior::Fail),
-                    },
-                }),
+            Builder::new(
+                Method::POST,
+                api_url![&self.drive, &item.into(), "createUploadSession"],
+            )
+            .apply(option)
+            .bearer_auth(&self.token)
+            .json_body(&Req {
+                item: Item { conflict_behavior },
+            }),
         )
         .and_then(|resp| resp.parse())
     }
@@ -373,7 +383,7 @@ impl DriveClient {
         }
 
         let upload_url = upload_url.to_owned();
-        SimpleApi::new(Request::get(upload_url.clone()).empty_body()).and_then(move |resp| {
+        SimpleApi::new(Builder::new(Method::GET, &upload_url).empty_body()).and_then(move |resp| {
             let resp: Resp = resp.parse()?;
             Ok(UploadSession {
                 upload_url,
@@ -396,7 +406,7 @@ impl DriveClient {
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session)
     pub fn delete_upload_session(&self, sess: &UploadSession) -> impl Api<Response = ()> {
-        SimpleApi::new(Request::delete(&sess.upload_url).empty_body())
+        SimpleApi::new(Builder::new(Method::DELETE, &sess.upload_url).empty_body())
             .and_then(|resp| resp.parse_no_content())
     }
 
@@ -456,7 +466,7 @@ impl DriveClient {
         );
 
         SimpleApi::new(
-            Request::put(&session.upload_url)
+            Builder::new(Method::PUT, &session.upload_url)
                 // No auth token
                 .header(
                     header::CONTENT_RANGE,
@@ -467,8 +477,7 @@ impl DriveClient {
                         total_size
                     ),
                 )
-                .body(data.to_owned())
-                .map_err(Into::into),
+                .bytes_body(data.to_owned()),
         )
         .and_then(|resp| resp.parse_optional())
     }
@@ -500,14 +509,17 @@ impl DriveClient {
         }
 
         SimpleApi::new(
-            Request::post(api_url![&self.drive, &source_item.into(), "copy"])
-                .bearer_auth(&self.token)
-                .json_body(&Req {
-                    parent_reference: ItemReference {
-                        path: api_path![&self.drive, &dest_folder.into()],
-                    },
-                    name: dest_name.as_str(),
-                }),
+            Builder::new(
+                Method::POST,
+                api_url![&self.drive, &source_item.into(), "copy"],
+            )
+            .bearer_auth(&self.token)
+            .json_body(&Req {
+                parent_reference: ItemReference {
+                    path: api_path![&self.drive, &dest_folder.into()],
+                },
+                name: dest_name.as_str(),
+            }),
         )
         .and_then(move |resp| {
             let url = resp
@@ -560,18 +572,19 @@ impl DriveClient {
             conflict_behavior: ConflictBehavior,
         }
 
+        let conflict_behavior = option
+            .get_conflict_behavior()
+            .unwrap_or(ConflictBehavior::Fail);
         SimpleApi::new(
-            Request::patch(api_url![&self.drive, &source_item.into()])
+            Builder::new(Method::PATCH, api_url![&self.drive, &source_item.into()])
                 .bearer_auth(&self.token)
-                .apply(&option)
+                .apply(option)
                 .json_body(&Req {
                     parent_reference: ItemReference {
                         path: api_path![&self.drive, &dest_folder.into()],
                     },
                     name: dest_name.map(FileName::as_str),
-                    conflict_behavior: option
-                        .get_conflict_behavior()
-                        .unwrap_or(ConflictBehavior::Fail),
+                    conflict_behavior,
                 }),
         )
         .and_then(|resp| resp.parse())
@@ -621,9 +634,9 @@ impl DriveClient {
         );
 
         SimpleApi::new(
-            Request::delete(api_url![&self.drive, &item.into()])
+            Builder::new(Method::DELETE, api_url![&self.drive, &item.into()])
                 .bearer_auth(&self.token)
-                .apply(&option)
+                .apply(option)
                 .empty_body(),
         )
         .and_then(|resp| resp.parse_no_content())
@@ -661,8 +674,8 @@ impl DriveClient {
         option: CollectionOption<DriveItemField>,
     ) -> impl Api<Response = TrackChangeFetcher<'_>> {
         SimpleApi::new(
-            Request::get(api_url![&self.drive, &folder.into(), "delta"])
-                .apply(&option)
+            Builder::new(Method::GET, api_url![&self.drive, &folder.into(), "delta"])
+                .apply(option)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
@@ -697,7 +710,7 @@ impl DriveClient {
         delta_url: &str,
     ) -> impl Api<Response = TrackChangeFetcher<'_>> {
         SimpleApi::new(
-            Request::get(delta_url)
+            Builder::new(Method::GET, delta_url)
                 .bearer_auth(&self.token)
                 .empty_body(),
         )
@@ -716,12 +729,15 @@ impl DriveClient {
         folder: impl Into<ItemLocation<'a>>,
     ) -> impl Api<Response = String> {
         SimpleApi::new(
-            Request::get(api_url![
-                &self.drive, &folder.into(), "delta";
-                url => {
-                    url.query_pairs_mut().append_pair("token", "latest");
-                }
-            ])
+            Builder::new(
+                Method::GET,
+                api_url![
+                    &self.drive, &folder.into(), "delta";
+                    url => {
+                        url.query_pairs_mut().append_pair("token", "latest");
+                    }
+                ],
+            )
             .bearer_auth(&self.token)
             .empty_body(),
         )
@@ -813,7 +829,7 @@ impl<'t> CopyProgressMonitor<'t> {
             status: CopyStatus,
         }
 
-        SimpleApi::new(Request::get(&self.url).empty_body())
+        SimpleApi::new(Builder::new(Method::GET, &self.url).empty_body())
             .and_then(|resp| resp.parse())
             .and_then(|resp: Resp| {
                 Ok(CopyProgress {
@@ -861,7 +877,16 @@ impl<'t> DriveItemFetcher<'t> {
 
     // TODO: Rename
     fn get_next_url(&self) -> Option<&str> {
-        self.last_response.next_url.as_ref().map(|s| &**s)
+        // Return `None` for the first page, or it will
+        // lost items of the first page when resumed.
+        match &self.last_response {
+            DriveItemCollectionResponse {
+                value: None,
+                next_url: Some(next_url),
+                ..
+            } => Some(next_url),
+            _ => None,
+        }
     }
 
     // TODO: Rename
@@ -886,7 +911,9 @@ impl<'t> DriveItemFetcher<'t> {
                 }
                 let req = match self.last_response.next_url.as_ref() {
                     None => return Ok(None),
-                    Some(url) => Request::get(url).bearer_auth(self.token).empty_body()?,
+                    Some(url) => Builder::new(Method::GET, url)
+                        .bearer_auth(self.token)
+                        .empty_body()?,
                 };
                 let resp = client.execute_api(req)?;
                 *self.last_response = resp.parse()?;

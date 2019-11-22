@@ -1,7 +1,7 @@
 use crate::{
-    api::{Api, ApiExt, SimpleApi},
+    api::{Api, ApiExt as _, SimpleApi},
     error::Error,
-    util::HttpResponseExt,
+    util::ResponseExt as _,
 };
 use http::Request;
 use serde::Deserialize;

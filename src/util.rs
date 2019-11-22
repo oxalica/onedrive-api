@@ -3,11 +3,10 @@ use crate::{
     error::{Error, Result},
     resource::{DriveId, ItemId},
 };
-use http::{self, header, HttpTryFrom};
-use reqwest::{RequestBuilder, Response, StatusCode};
+use http::{self, header, HttpTryFrom, Method, StatusCode};
 use serde::{de, Deserialize, Serialize};
 use std::fmt;
-use url::PathSegmentsMut;
+use url::{PathSegmentsMut, Url};
 
 /// Specify the location of a `Drive` resource.
 ///
@@ -231,81 +230,29 @@ impl ApiPathComponent for str {
     }
 }
 
-pub(crate) trait RequestBuilderTransformer {
-    fn trans(&self, req: RequestBuilder) -> RequestBuilder;
+pub(crate) struct RequestBuilder {
+    method: Method,
+    url: Option<Result<Url>>,
+    header_map: Option<http::HeaderMap>,
 }
 
-pub(crate) trait RequestBuilderExt: Sized {
-    fn opt_header(self, key: impl AsRef<str>, value: Option<impl AsRef<str>>) -> Self;
-    fn apply(self, f: &impl RequestBuilderTransformer) -> Self;
-}
-
-impl RequestBuilderExt for RequestBuilder {
-    fn opt_header(self, key: impl AsRef<str>, value: Option<impl AsRef<str>>) -> Self {
-        match value {
-            Some(v) => self.header(key.as_ref(), v.as_ref()),
-            None => self,
+impl RequestBuilder {
+    pub fn new(method: Method, url: impl AsRef<str>) -> Self {
+        Self {
+            method,
+            url: Some(Url::parse(url.as_ref()).map_err(Into::into)),
+            header_map: Some(http::HeaderMap::new()),
         }
     }
 
-    fn apply(self, f: &impl RequestBuilderTransformer) -> Self {
-        f.trans(self)
-    }
-}
-
-pub(crate) trait ResponseExt: Sized {
-    fn check_status(self) -> Result<Self>;
-    fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
-    fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>>;
-    fn parse_no_content(self) -> Result<()>;
-}
-
-impl ResponseExt for Response {
-    fn check_status(mut self) -> Result<Self> {
-        match self.error_for_status_ref() {
-            Ok(_) => Ok(self),
-            Err(source) => {
-                #[derive(Deserialize)]
-                struct ErrorResponse {
-                    error: crate::resource::ErrorObject,
-                }
-
-                let response: ErrorResponse = self.json()?; // Throw network or serialization error first.
-                Err(Error::from_response(source, Some(response.error)))
-            }
+    pub fn query(&mut self, params: &[(&str, &str)]) -> &mut Self {
+        if let Ok(url) = self.url.as_mut().unwrap().as_mut() {
+            url.query_pairs_mut().extend_pairs(params);
         }
+        self
     }
 
-    fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
-        Ok(self.check_status()?.json()?)
-    }
-
-    fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>> {
-        match self.status() {
-            StatusCode::NOT_MODIFIED | StatusCode::ACCEPTED => Ok(None),
-            _ => Ok(Some(self.parse()?)),
-        }
-    }
-
-    fn parse_no_content(self) -> Result<()> {
-        self.check_status()?;
-        Ok(())
-    }
-}
-
-// TODO: Rename to `RequestBuilderExt`
-pub(crate) trait HttpRequestBuilderExt: Sized {
-    fn opt_header<V>(&mut self, key: http::header::HeaderName, value: Option<V>) -> &mut Self
-    where
-        header::HeaderValue: HttpTryFrom<V>;
-    fn apply(&mut self, f: &impl RequestBuilderTransformer) -> &mut Self;
-    fn bearer_auth(&mut self, token: impl fmt::Display) -> &mut Self;
-    fn empty_body(&mut self) -> Result<api::RawRequest>;
-    fn json_body(&mut self, value: &impl Serialize) -> Result<api::RawRequest>;
-}
-
-impl HttpRequestBuilderExt for http::request::Builder {
-    fn opt_header<V>(&mut self, key: http::header::HeaderName, value: Option<V>) -> &mut Self
+    pub fn opt_header<V>(&mut self, key: header::HeaderName, value: Option<V>) -> &mut Self
     where
         header::HeaderValue: HttpTryFrom<V>,
     {
@@ -315,35 +262,60 @@ impl HttpRequestBuilderExt for http::request::Builder {
         }
     }
 
-    fn apply(&mut self, f: &impl RequestBuilderTransformer) -> &mut Self {
-        // TODO
+    pub fn header<V>(&mut self, key: header::HeaderName, value: V) -> &mut Self
+    where
+        header::HeaderValue: HttpTryFrom<V>,
+    {
+        self.header_map.as_mut().unwrap().insert(
+            key,
+            header::HeaderValue::try_from(value)
+                .ok()
+                .expect("Invalid header"),
+        );
         self
     }
 
-    fn bearer_auth(&mut self, token: impl fmt::Display) -> &mut Self {
+    pub fn bearer_auth(&mut self, token: impl fmt::Display) -> &mut Self {
         self.header(header::AUTHORIZATION, format!("Bearer {}", token))
     }
 
-    fn empty_body(&mut self) -> Result<api::RawRequest> {
-        Ok(self.body(vec![])?)
+    pub fn bytes_body(&mut self, body: Vec<u8>) -> Result<api::RawRequest> {
+        let mut b = http::request::Builder::new();
+        *b.headers_mut().unwrap() = self.header_map.take().unwrap();
+        b.method(self.method.clone())
+            .uri(self.url.take().unwrap()?.to_string())
+            .body(body)
+            .map_err(Into::into)
     }
 
-    fn json_body(&mut self, value: &impl Serialize) -> Result<api::RawRequest> {
+    pub fn empty_body(&mut self) -> Result<api::RawRequest> {
+        Ok(self.bytes_body(vec![])?)
+    }
+
+    pub fn json_body(&mut self, value: &impl Serialize) -> Result<api::RawRequest> {
         Ok(self
             .header(header::CONTENT_TYPE, "application/json")
-            .body(serde_json::to_vec(value).unwrap())?)
+            .bytes_body(serde_json::to_vec(value).unwrap())?)
+    }
+
+    pub fn apply(&mut self, transformer: impl RequestBuilderTransformer) -> &mut Self {
+        transformer.trans(self)
     }
 }
 
+pub(crate) trait RequestBuilderTransformer {
+    fn trans(self, req: &mut RequestBuilder) -> &mut RequestBuilder;
+}
+
 // TODO: Rename to `ResponseExt`
-pub(crate) trait HttpResponseExt: Sized {
+pub(crate) trait ResponseExt: Sized {
     fn check_status(self) -> Result<Self>;
     fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
     fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>>;
     fn parse_no_content(self) -> Result<()>;
 }
 
-impl HttpResponseExt for api::RawResponse {
+impl ResponseExt for api::RawResponse {
     fn check_status(self) -> Result<Self> {
         if self.status().is_success() {
             return Ok(self);

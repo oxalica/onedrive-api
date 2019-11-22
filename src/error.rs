@@ -28,6 +28,8 @@ enum ErrorKind {
     DeserializeError(failure::Error),
     #[fail(display = "HTTP error: {}", 0)]
     HttpError(http::Error),
+    #[fail(display = "HTTP error: {}", 0)]
+    UrlParseError(url::ParseError),
     #[fail(display = "Api request failed with {}: {:?}", status, error)]
     ErrorResponse {
         status: StatusCode,
@@ -85,7 +87,8 @@ impl Error {
         match &*self.inner {
             ErrorKind::SerializeError(_)
             | ErrorKind::HttpError(_)
-            | ErrorKind::DeserializeError(_) => None,
+            | ErrorKind::DeserializeError(_)
+            | ErrorKind::UrlParseError(_) => None,
             ErrorKind::ErrorResponse { error, .. } => Some(error),
             ErrorKind::RequestError { response, .. } => response.as_ref(),
         }
@@ -96,7 +99,8 @@ impl Error {
         match &*self.inner {
             ErrorKind::SerializeError(_)
             | ErrorKind::DeserializeError(_)
-            | ErrorKind::HttpError(_) => None,
+            | ErrorKind::HttpError(_)
+            | ErrorKind::UrlParseError(_) => None,
             ErrorKind::ErrorResponse { status, .. } => Some(*status),
             ErrorKind::RequestError { source, .. } => source.status(),
         }
@@ -130,5 +134,13 @@ impl From<http::Error> for Error {
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self::from_response(source, None)
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(source: url::ParseError) -> Self {
+        Self {
+            inner: Box::new(ErrorKind::UrlParseError(source)),
+        }
     }
 }
