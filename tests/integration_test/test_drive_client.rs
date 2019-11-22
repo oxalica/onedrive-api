@@ -11,6 +11,7 @@ use crate::login_setting::TOKEN;
 
 lazy_static! {
     static ref CLIENT: reqwest::Client = reqwest::Client::new();
+    static ref DRIVE: OneDrive = OneDrive::new(TOKEN.clone(), DriveLocation::me());
 }
 
 fn gen_filename() -> &'static FileName {
@@ -71,8 +72,7 @@ fn download(url: &str) -> Vec<u8> {
 #[test]
 #[ignore]
 fn test_get_drive() {
-    let drive = DriveClient::new(TOKEN.clone(), DriveLocation::me());
-    let drive1 = drive
+    let drive1 = DRIVE
         .get_drive()
         .execute(&*CLIENT)
         .expect("Cannot get drive #1");
@@ -81,7 +81,7 @@ fn test_get_drive() {
     let drive1_id = drive1.id.unwrap();
     println!("Quota: {}", drive1.quota.unwrap());
 
-    let drive2 = DriveClient::new(TOKEN.clone(), drive1_id.clone())
+    let drive2 = OneDrive::new(TOKEN.clone(), drive1_id.clone())
         .get_drive_with_option(ObjectOption::new().select(&[DriveField::id, DriveField::owner]))
         .execute(&*CLIENT)
         .expect("Cannot get drive #2");
@@ -89,14 +89,14 @@ fn test_get_drive() {
     println!("Owner: {}", drive1.owner.unwrap());
     assert!(drive2.quota.is_none()); // Assert not selected.
 
-    let root_item = drive
+    let root_item = DRIVE
         .get_item(ItemLocation::root())
         .execute(&*CLIENT)
         .expect("Cannot get root item");
     assert!(root_item.id.is_some());
     assert!(root_item.e_tag.is_some());
 
-    let root_item2 = drive
+    let root_item2 = DRIVE
         .get_item_with_option(
             ItemLocation::root(),
             ObjectOption::new().select(&[DriveItemField::e_tag]),
@@ -126,14 +126,12 @@ fn test_get_drive() {
 #[test]
 #[ignore]
 fn test_folder() {
-    let drive = DriveClient::new(TOKEN.clone(), DriveLocation::me());
-
     let folder1_name = gen_filename();
     let folder2_name = gen_filename();
     let folder2_location = rooted_location(folder2_name);
 
     let (folder1_id, folder1_e_tag) = {
-        let c = drive
+        let c = DRIVE
             .create_folder(ItemLocation::root(), folder1_name)
             .execute(&*CLIENT)
             .expect("Failed to create folder");
@@ -143,7 +141,7 @@ fn test_folder() {
     try_finally(
         || {
             assert_eq!(
-                drive
+                DRIVE
                     .create_folder(ItemLocation::root(), folder1_name)
                     .execute(&*CLIENT)
                     .expect_err("Re-create folder should fail")
@@ -152,7 +150,7 @@ fn test_folder() {
             );
 
             assert_eq!(
-                drive
+                DRIVE
                     .delete(folder2_location)
                     .execute(&*CLIENT)
                     .expect_err("Should not delete a file does not exist")
@@ -161,7 +159,7 @@ fn test_folder() {
             );
 
             assert!(
-                drive
+                DRIVE
                     .list_children_with_option(
                         &folder1_id,
                         CollectionOption::new().if_none_match(&folder1_e_tag),
@@ -172,7 +170,7 @@ fn test_folder() {
                 "Folder should be 'not modified'",
             );
 
-            let folder2 = drive
+            let folder2 = DRIVE
                 .create_folder(&folder1_id, folder2_name)
                 .execute(&*CLIENT)
                 .expect("Failed to create sub-folder");
@@ -180,7 +178,7 @@ fn test_folder() {
             assert!(folder2.name.is_some());
             assert!(folder2.e_tag.is_some());
 
-            let children = drive
+            let children = DRIVE
                 .list_children(&folder1_id)
                 .execute(&*CLIENT)
                 .expect("Failed to list children");
@@ -191,7 +189,7 @@ fn test_folder() {
             assert_eq!(child.name, folder2.name);
             assert_eq!(child.e_tag, folder2.e_tag);
 
-            let item_children = drive
+            let item_children = DRIVE
                 .get_item_with_option(
                     &folder1_id,
                     ObjectOption::new().expand(DriveItemField::children, Some(&["id"])),
@@ -208,12 +206,12 @@ fn test_folder() {
             assert!(item.e_tag.is_none());
         },
         || {
-            drive.delete(&folder1_id).execute(&*CLIENT).unwrap();
+            DRIVE.delete(&folder1_id).execute(&*CLIENT).unwrap();
         },
     );
 
     assert_eq!(
-        drive
+        DRIVE
             .list_children(&folder1_id)
             .execute(&*CLIENT)
             .expect_err("Folder should be already deleted")
@@ -236,13 +234,11 @@ fn test_folder() {
 #[test]
 #[ignore]
 fn test_file_upload_small_and_move() {
-    let drive = DriveClient::new(TOKEN.clone(), DriveLocation::me());
-
     const CONTENT: &[u8] = b"hello, world";
     let file1_location = rooted_location(gen_filename());
     let file2_name = gen_filename();
 
-    let file1_id = drive
+    let file1_id = DRIVE
         .upload_small(file1_location, CONTENT)
         .execute(&*CLIENT)
         .expect("Failed to upload small file")
@@ -252,7 +248,7 @@ fn test_file_upload_small_and_move() {
     let is_moved = std::cell::Cell::new(false);
     let file2_id = try_finally(
         || {
-            let file2 = drive
+            let file2 = DRIVE
                 .move_(&file1_id, ItemLocation::root(), Some(file2_name))
                 .execute(&*CLIENT)
                 .expect("Failed to move file");
@@ -261,14 +257,14 @@ fn test_file_upload_small_and_move() {
         },
         || {
             if !is_moved.get() {
-                drive.delete(&file1_id).execute(&*CLIENT).unwrap();
+                DRIVE.delete(&file1_id).execute(&*CLIENT).unwrap();
             }
         },
     );
 
     try_finally(
         || {
-            let file2_download_url = drive
+            let file2_download_url = DRIVE
                 .get_item(&file2_id)
                 .execute(&*CLIENT)
                 .expect("Failed to get download url of small file")
@@ -278,7 +274,7 @@ fn test_file_upload_small_and_move() {
             assert_eq!(download(&file2_download_url), CONTENT);
         },
         || {
-            drive.delete(&file2_id).execute(&*CLIENT).unwrap();
+            DRIVE.delete(&file2_id).execute(&*CLIENT).unwrap();
         },
     );
 }
@@ -301,15 +297,13 @@ fn test_file_upload_small_and_move() {
 #[test]
 #[ignore]
 fn test_file_upload_session() {
-    let drive = DriveClient::new(TOKEN.clone(), DriveLocation::me());
-
     type Range = std::ops::Range<usize>;
     const CONTENT: &[u8] = b"12345678";
     const RANGE1: Range = 0..2;
     const RANGE2_ERROR: Range = 6..8;
     const RANGE2: Range = 2..8;
 
-    let upload_session = drive
+    let upload_session = DRIVE
         .new_upload_session(rooted_location(gen_filename()))
         .execute(&*CLIENT)
         .expect("Failed to create upload session");
@@ -320,7 +314,7 @@ fn test_file_upload_session() {
     );
 
     assert!(
-        drive
+        DRIVE
             .upload_to_session(&upload_session, &CONTENT[RANGE1], RANGE1, CONTENT.len())
             .execute(&*CLIENT)
             .expect("Failed to upload part 1")
@@ -328,11 +322,11 @@ fn test_file_upload_session() {
         "Uploading part 1 should not complete",
     );
 
-    let upload_session = drive
+    let upload_session = DRIVE
         .get_upload_session(upload_session.get_url())
         .execute(&*CLIENT)
         .expect("Failed to get upload session");
-    let next_ranges = upload_session.get_next_expected_ranges();
+    let next_ranges = upload_session.next_expected_ranges();
     assert_eq!(
         next_ranges.len(),
         1,
@@ -351,7 +345,7 @@ fn test_file_upload_session() {
     );
 
     assert_eq!(
-        drive
+        DRIVE
             .upload_to_session(
                 &upload_session,
                 &CONTENT[RANGE2_ERROR],
@@ -364,7 +358,7 @@ fn test_file_upload_session() {
         Some(StatusCode::RANGE_NOT_SATISFIABLE),
     );
 
-    let file3_id = drive
+    let file3_id = DRIVE
         .upload_to_session(&upload_session, &CONTENT[RANGE2], RANGE2, CONTENT.len())
         .execute(&*CLIENT)
         .expect("Failed to upload part 2")
@@ -374,7 +368,7 @@ fn test_file_upload_session() {
 
     try_finally(
         || {
-            let file3_download_url = drive
+            let file3_download_url = DRIVE
                 .get_item(&file3_id)
                 .execute(&*CLIENT)
                 .expect("Failed to get download url of large file")
@@ -384,7 +378,7 @@ fn test_file_upload_session() {
             assert_eq!(download(&file3_download_url), CONTENT);
         },
         || {
-            drive.delete(&file3_id).execute(&*CLIENT).unwrap();
+            DRIVE.delete(&file3_id).execute(&*CLIENT).unwrap();
         },
     );
 }
@@ -401,14 +395,12 @@ fn test_file_upload_session() {
 #[test]
 #[ignore]
 fn test_list_children() {
-    let drive = DriveClient::new(TOKEN.clone(), DriveLocation::me());
-
     const TOTAL_COUNT: usize = 2;
     const PAGE_SIZE: usize = 1;
     const PAGE1_COUNT: usize = 1;
     const PAGE2_COUNT: usize = 1;
 
-    let folder_id = drive
+    let folder_id = DRIVE
         .create_folder(ItemLocation::root(), gen_filename())
         .execute(&*CLIENT)
         .expect("Failed to create container folder")
@@ -421,7 +413,7 @@ fn test_list_children() {
             let mut files: HashMap<String, Tag> = (0..TOTAL_COUNT)
                 .map(|i| {
                     let name = gen_filename();
-                    let item = drive
+                    let item = DRIVE
                         .create_folder(folder_location, name)
                         .execute(&*CLIENT)
                         .unwrap_or_else(|e| {
@@ -431,7 +423,7 @@ fn test_list_children() {
                 })
                 .collect();
 
-            let mut fetcher: ListChildrenFetcher = drive
+            let mut fetcher: ListChildrenFetcher = DRIVE
                 .list_children_with_option(
                     folder_location,
                     CollectionOption::new()
@@ -448,7 +440,7 @@ fn test_list_children() {
                     .collect()
             };
             let check_page_eq = |url: String, expected: &[DriveItem]| {
-                let mut fetcher_ = ListChildrenFetcher::resume_from(&drive.token(), url);
+                let mut fetcher_ = ListChildrenFetcher::resume_from(&DRIVE.token(), url);
                 let page_ = fetcher_
                     .fetch_next_page()
                     .execute(&*CLIENT)
@@ -458,7 +450,7 @@ fn test_list_children() {
             };
 
             // Cannot get next_url for the first page.
-            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next_url().is_none());
             let page1 = fetcher
                 .fetch_next_page()
                 .execute(&*CLIENT)
@@ -467,7 +459,7 @@ fn test_list_children() {
             dbg!(&page1);
             assert_eq!(page1.len(), PAGE1_COUNT);
 
-            let url2 = fetcher.get_next_url().unwrap().to_owned();
+            let url2 = fetcher.next_url().unwrap().to_owned();
             let page2 = fetcher
                 .fetch_next_page()
                 .execute(&*CLIENT)
@@ -476,13 +468,13 @@ fn test_list_children() {
             assert_eq!(page2.len(), PAGE2_COUNT);
             check_page_eq(url2, &page2);
 
-            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next_url().is_none());
             assert!(fetcher
                 .fetch_next_page()
                 .execute(&*CLIENT)
                 .unwrap()
                 .is_none());
-            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next_url().is_none());
             assert!(fetcher
                 .fetch_next_page()
                 .execute(&*CLIENT)
@@ -502,7 +494,7 @@ fn test_list_children() {
             assert!(files.is_empty()); // All matched
         },
         || {
-            drive
+            DRIVE
                 .delete(folder_location)
                 .execute(&*CLIENT)
                 .expect("Failed to delete container folder");
@@ -524,9 +516,7 @@ fn test_list_children() {
 #[test]
 #[ignore]
 fn test_track_changes() {
-    let drive = DriveClient::new(TOKEN.clone(), DriveLocation::me());
-
-    let container_id = drive
+    let container_id = DRIVE
         .create_folder(ItemLocation::root(), gen_filename())
         .execute(&*CLIENT)
         .expect("Failed to create container folder")
@@ -536,20 +526,20 @@ fn test_track_changes() {
 
     try_finally(
         || {
-            let folder1_id = drive
+            let folder1_id = DRIVE
                 .create_folder(container_location, gen_filename())
                 .execute(&*CLIENT)
                 .expect("Failed to create folder1")
                 .id
                 .unwrap();
-            let folder2_id = drive
+            let folder2_id = DRIVE
                 .create_folder(container_location, gen_filename())
                 .execute(&*CLIENT)
                 .expect("Failed to create folder2")
                 .id
                 .unwrap();
 
-            let mut fetcher = drive
+            let mut fetcher = DRIVE
                 .track_changes_from_initial_with_option(
                     container_location,
                     CollectionOption::new()
@@ -559,8 +549,8 @@ fn test_track_changes() {
                 .execute(&*CLIENT)
                 .expect("Failed to track initial changes");
 
-            assert!(fetcher.get_delta_url().is_none());
-            assert!(fetcher.get_next_url().is_none()); // None for the first page.
+            assert!(fetcher.delta_url().is_none());
+            assert!(fetcher.next_url().is_none()); // None for the first page.
 
             let mut delta_ids = HashSet::new();
             let mut i = 0;
@@ -577,7 +567,7 @@ fn test_track_changes() {
                 }
                 i += 1;
             }
-            assert!(fetcher.get_next_url().is_none());
+            assert!(fetcher.next_url().is_none());
             assert!(fetcher
                 .fetch_next_page()
                 .execute(&*CLIENT)
@@ -594,20 +584,20 @@ fn test_track_changes() {
                 ]),
             );
 
-            assert!(fetcher.get_delta_url().is_some());
-            let delta_url = drive
+            assert!(fetcher.delta_url().is_some());
+            let delta_url = DRIVE
                 .get_latest_delta_url(container_location)
                 .execute(&*CLIENT)
                 .expect("Failed to get latest track change delta url");
 
-            let folder3_id = drive
+            let folder3_id = DRIVE
                 .create_folder(ItemLocation::from_id(&folder1_id), gen_filename())
                 .execute(&*CLIENT)
                 .expect("Failed to create folder3")
                 .id
                 .unwrap();
 
-            let (v, _) = drive
+            let (v, _) = DRIVE
                 .track_changes_from_delta_url(&delta_url)
                 .execute(&*CLIENT)
                 .and_then(|fetcher| fetcher.fetch_all().execute(&*CLIENT))
@@ -620,7 +610,7 @@ fn test_track_changes() {
             );
         },
         || {
-            drive
+            DRIVE
                 .delete(container_location)
                 .execute(&*CLIENT)
                 .expect("Failed to delete container folder");
@@ -646,14 +636,12 @@ fn test_track_changes() {
 #[test]
 #[ignore]
 fn test_copy_and_conflict_behavior() {
-    let drive = DriveClient::new(TOKEN.clone(), DriveLocation::me());
-
     const FILE_CONTENT: &[u8] = b"1";
 
     let name1 = gen_filename();
     let name2 = gen_filename();
 
-    let file1_id = drive
+    let file1_id = DRIVE
         .upload_small(rooted_location(name1), FILE_CONTENT)
         .execute(&*CLIENT)
         .expect("Failed to create file 1")
@@ -662,7 +650,7 @@ fn test_copy_and_conflict_behavior() {
 
     try_finally(
         || {
-            let monitor = drive
+            let monitor = DRIVE
                 .copy(&file1_id, ItemLocation::root(), name2)
                 .execute(&*CLIENT)
                 .expect("Failed to start copy");
@@ -679,7 +667,7 @@ fn test_copy_and_conflict_behavior() {
                 }
             }
 
-            let file2_id = drive
+            let file2_id = DRIVE
                 .get_item(rooted_location(name2))
                 .execute(&*CLIENT)
                 .expect("Copy should be done")
@@ -691,7 +679,7 @@ fn test_copy_and_conflict_behavior() {
             try_finally(
                 || {
                     let move_with = |opt| {
-                        drive.move_with_option(
+                        DRIVE.move_with_option(
                             &file1_id,
                             ItemLocation::root(),
                             Some(name2),
@@ -701,7 +689,7 @@ fn test_copy_and_conflict_behavior() {
 
                     // Default to be `ConflictBehavior::Fail`
                     assert_eq!(
-                        drive
+                        DRIVE
                             .move_(&file1_id, ItemLocation::root(), Some(name2))
                             .execute(&*CLIENT)
                             .expect_err("Move to an existing item should fail")
@@ -718,7 +706,7 @@ fn test_copy_and_conflict_behavior() {
                     assert_ne!(name1.as_str(), renamed_name2);
                     assert_ne!(name2.as_str(), renamed_name2);
 
-                    drive
+                    DRIVE
                         .get_item(&file1_id)
                         .execute(&*CLIENT)
                         .expect("Rename should not replace the target");
@@ -731,7 +719,7 @@ fn test_copy_and_conflict_behavior() {
                     assert_eq!(name2.as_str(), replaced_name2);
 
                     assert_eq!(
-                        drive
+                        DRIVE
                             .get_item(&file2_id)
                             .execute(&*CLIENT)
                             .expect_err("The old file should be replaced")
@@ -743,7 +731,7 @@ fn test_copy_and_conflict_behavior() {
                 },
                 || {
                     if !file2_gone.get() {
-                        drive
+                        DRIVE
                             .delete(&file2_id)
                             .execute(&*CLIENT)
                             .expect("Failed to delete folder2");
@@ -752,7 +740,7 @@ fn test_copy_and_conflict_behavior() {
             );
         },
         || {
-            drive
+            DRIVE
                 .delete(&file1_id)
                 .execute(&*CLIENT)
                 .expect("Failed to delete folder 1");

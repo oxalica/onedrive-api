@@ -35,21 +35,9 @@ enum ErrorKind {
     #[cfg(feature = "reqwest")]
     #[fail(display = "Request error: {}", 0)]
     RequestError(reqwest::Error),
-    // #[fail(display = "Request error: {} (response: {:?})", source, response)]
-    // RequestError {
-    //     source: reqwest::Error,
-    //     response: Option<ErrorObject>,
-    // },
 }
 
 impl Error {
-    // // TODO: Remove this
-    // pub(crate) fn from_response(source: reqwest::Error, response: Option<ErrorObject>) -> Self {
-    //     Self {
-    //         inner: Box::new(ErrorKind::RequestError { source, response }),
-    //     }
-    // }
-
     pub(crate) fn from_error_response(status: StatusCode, error: ErrorObject) -> Self {
         Self {
             inner: Box::new(ErrorKind::ErrorResponse { status, error }),
@@ -103,19 +91,19 @@ impl From<http::Error> for Error {
     }
 }
 
+impl From<url::ParseError> for Error {
+    fn from(source: url::ParseError) -> Self {
+        Self {
+            inner: Box::new(ErrorKind::UrlParseError(source)),
+        }
+    }
+}
+
 #[cfg(feature = "reqwest")]
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self {
             inner: Box::new(ErrorKind::RequestError(source)),
-        }
-    }
-}
-
-impl From<url::ParseError> for Error {
-    fn from(source: url::ParseError) -> Self {
-        Self {
-            inner: Box::new(ErrorKind::UrlParseError(source)),
         }
     }
 }

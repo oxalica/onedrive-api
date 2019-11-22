@@ -21,7 +21,7 @@ struct LoginSetting {
 // NOTE: This supports code auth only.
 fn get_token(setting: &mut LoginSetting) -> String {
     let client = reqwest::Client::new();
-    let auth = AuthClient::new(
+    let auth = Authentication::new(
         setting.client_id.clone(),
         Permission::new_read().offline_access(true),
         setting.redirect_uri.clone(),
@@ -48,7 +48,7 @@ fn get_token(setting: &mut LoginSetting) -> String {
 
     if let Some(token) = &setting.token {
         info!("Login with token...");
-        let drive = DriveClient::new(token.to_owned(), DriveLocation::me());
+        let drive = OneDrive::new(token.to_owned(), DriveLocation::me());
         match drive.get_drive().execute(&client) {
             Ok(_) => return token.to_owned(),
             Err(err) => warn!("Failed: {:?}", err),
@@ -74,7 +74,7 @@ fn get_token(setting: &mut LoginSetting) -> String {
         }
     }
 
-    panic!("Request code auth: {}", auth.get_code_auth_url())
+    panic!("Request code auth: {}", auth.code_auth_url())
 }
 
 lazy_static! {

@@ -15,7 +15,6 @@ use url::Url;
 
 macro_rules! api_url {
     (@$init:expr; $($seg:expr),* $(,)? $(; $bind:ident => $extra:block)?) => {{
-        // TODO: Change to `http::uri`
         let mut url = Url::parse($init).unwrap();
         {
             let mut buf = url.path_segments_mut().unwrap();
@@ -47,20 +46,21 @@ macro_rules! api_path {
 
 /// The authorized client to access OneDrive resources in a specified Drive.
 #[derive(Debug)]
-pub struct DriveClient {
+pub struct OneDrive {
     token: String,
     drive: DriveLocation,
 }
 
-impl DriveClient {
-    /// Create a DriveClient to perform operations in a Drive.
+impl OneDrive {
+    /// Create a OneDrive to perform operations in a Drive.
     pub fn new(token: String, drive: impl Into<DriveLocation>) -> Self {
-        DriveClient {
+        OneDrive {
             token,
             drive: drive.into(),
         }
     }
 
+    /// Get the token used to create the OneDrive instance.
     pub fn token(&self) -> &str {
         &self.token
     }
@@ -702,7 +702,7 @@ impl DriveClient {
     /// Track changes for a folder from snapshot (delta url) to snapshot of current states.
     ///
     /// # See also
-    /// [`DriveClient::track_changes_from_initial_with_option`][track_initial]
+    /// [`OneDrive::track_changes_from_initial_with_option`][track_initial]
     ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
     pub fn track_changes_from_delta_url<'t>(
@@ -755,11 +755,11 @@ impl DriveClient {
 /// The monitor for checking the progress of a asynchronous `copy` operation.
 ///
 /// # See also
-/// [`DriveClient::copy`][copy]
+/// [`OneDrive::copy`][copy]
 ///
 /// [Microsoft docs](https://docs.microsoft.com/en-us/graph/long-running-actions-overview)
 ///
-/// [copy]: ./struct.DriveClient.html#method.copy
+/// [copy]: ./struct.OneDrive.html#method.copy
 #[derive(Debug)]
 pub struct CopyProgressMonitor<'t> {
     token: &'t str,
@@ -875,8 +875,7 @@ impl<'t> DriveItemFetcher<'t> {
         )
     }
 
-    // TODO: Rename
-    fn get_next_url(&self) -> Option<&str> {
+    fn next_url(&self) -> Option<&str> {
         // Return `None` for the first page, or it will
         // lost items of the first page when resumed.
         match &self.last_response {
@@ -889,8 +888,7 @@ impl<'t> DriveItemFetcher<'t> {
         }
     }
 
-    // TODO: Rename
-    fn get_delta_url(&self) -> Option<&str> {
+    fn delta_url(&self) -> Option<&str> {
         self.last_response.delta_url.as_ref().map(|s| &**s)
     }
 
@@ -942,7 +940,7 @@ impl<'t> DriveItemFetcher<'t> {
                 while let Some(items) = self.fetcher.fetch_next_page().execute(client)? {
                     buf.extend(items);
                 }
-                Ok((buf, self.fetcher.get_delta_url().map(|s| s.to_owned())))
+                Ok((buf, self.fetcher.delta_url().map(|s| s.to_owned())))
             }
         }
 
@@ -953,9 +951,9 @@ impl<'t> DriveItemFetcher<'t> {
 /// The page fetcher for children listing operation with `Iterator` interface.
 ///
 /// # See also
-/// [`DriveClient::list_childre_with_option`][list_children_with_opt]
+/// [`OneDrive::list_children_with_option`][list_children_with_opt]
 ///
-/// [list_children_with_opt]: ./struct.DriveClient.html#method.list_children_with_option
+/// [list_children_with_opt]: ./struct.OneDrive.html#method.list_children_with_option
 #[derive(Debug)]
 pub struct ListChildrenFetcher<'t> {
     fetcher: DriveItemFetcher<'t>,
@@ -986,21 +984,25 @@ impl<'t> ListChildrenFetcher<'t> {
     /// Will success only if there are more pages and the first page is already readed.
     ///
     /// # Note
-    /// The first page data from [`DriveClient::list_children_with_option`][list_children_with_opt]
+    /// The first page data from [`OneDrive::list_children_with_option`][list_children_with_opt]
     /// will be cached and have no idempotent url to resume/re-fetch.
     ///
-    /// [list_children_with_opt]: ./struct.DriveClient.html#method.list_children_with_option
-    // TODO: Rename
-    pub fn get_next_url(&self) -> Option<&str> {
-        self.fetcher.get_next_url()
+    /// [list_children_with_opt]: ./struct.OneDrive.html#method.list_children_with_option
+    pub fn next_url(&self) -> Option<&str> {
+        self.fetcher.next_url()
     }
 
-    // TODO: Docs
+    /// Fetch the next page, or `None` if reaches the end.
     pub fn fetch_next_page(&mut self) -> impl Api<Response = Option<Vec<DriveItem>>> + '_ {
         self.fetcher.fetch_next_page()
     }
 
-    // TODO: Docs
+    /// Fetch all rest pages and return all items collected.
+    ///
+    /// # Errors
+    ///
+    /// Return `Err` if any error occurs during fetching.
+    /// You will lose all progress unless all requests are success.
     pub fn fetch_all(self) -> impl Api<Response = Vec<DriveItem>> + 't {
         self.fetcher.fetch_all().and_then(|(items, _)| Ok(items))
     }
@@ -1009,12 +1011,12 @@ impl<'t> ListChildrenFetcher<'t> {
 /// The page fetcher for tracking operations with `Iterator` interface.
 ///
 /// # See also
-/// [`DriveClient::track_changes_from_initial`][track_initial]
+/// [`OneDrive::track_changes_from_initial`][track_initial]
 ///
-/// [`DriveClient::track_changes_from_delta_url`][track_delta]
+/// [`OneDrive::track_changes_from_delta_url`][track_delta]
 ///
-/// [track_initial]: ./struct.DriveClient.html#method.track_changes_from_initial_with_option
-/// [track_delta]: ./struct.DriveClient.html#method.track_changes_from_delta_url
+/// [track_initial]: ./struct.OneDrive.html#method.track_changes_from_initial_with_option
+/// [track_delta]: ./struct.OneDrive.html#method.track_changes_from_delta_url
 #[derive(Debug)]
 pub struct TrackChangeFetcher<'t> {
     fetcher: DriveItemFetcher<'t>,
@@ -1047,38 +1049,43 @@ impl<'t> TrackChangeFetcher<'t> {
     ///
     /// # Note
     /// The first page data from
-    /// [`DriveClient::track_changes_from_initial_with_option`][track_initial]
+    /// [`OneDrive::track_changes_from_initial_with_option`][track_initial]
     /// will be cached and have no idempotent url to resume/re-fetch.
     ///
-    /// [track_initial]: ./struct.DriveClient.html#method.track_changes_from_initial
-    // TODO: Rename
-    pub fn get_next_url(&self) -> Option<&str> {
-        self.fetcher.get_next_url()
+    /// [track_initial]: ./struct.OneDrive.html#method.track_changes_from_initial
+    pub fn next_url(&self) -> Option<&str> {
+        self.fetcher.next_url()
     }
 
     /// Try to the delta url representing a snapshot of current track change operation.
     ///
     /// Used for tracking changes from this snapshot (rather than initial) later,
-    /// using [`DriveClient::track_changes_from_delta_url`][track_delta].
+    /// using [`OneDrive::track_changes_from_delta_url`][track_delta].
     ///
     /// # Error
     /// Will success only if there are no more pages.
     ///
     /// # See also
-    /// [`DriveClient::track_changes_from_delta_url`][track_delta]
+    /// [`OneDrive::track_changes_from_delta_url`][track_delta]
     ///
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#example-last-page-in-a-set)
     ///
-    /// [track_delta]: ./struct.DriveClient.html#method.track_changes_from_delta_url
-    // TODO: Rename to `delta_url`
-    pub fn get_delta_url(&self) -> Option<&str> {
-        self.fetcher.get_delta_url()
+    /// [track_delta]: ./struct.OneDrive.html#method.track_changes_from_delta_url
+    pub fn delta_url(&self) -> Option<&str> {
+        self.fetcher.delta_url()
     }
 
+    /// Fetch the next page, or `None` if reaches the end.
     pub fn fetch_next_page(&mut self) -> impl Api<Response = Option<Vec<DriveItem>>> + '_ {
         self.fetcher.fetch_next_page()
     }
 
+    /// Fetch all rest pages and return all items collected.
+    ///
+    /// # Errors
+    ///
+    /// Return `Err` if any error occurs during fetching.
+    /// You will lose all progress unless all requests are success.
     pub fn fetch_all(self) -> impl Api<Response = (Vec<DriveItem>, String)> + 't {
         self.fetcher.fetch_all().and_then(|(items, opt_delta_url)| {
             let delta_url = opt_delta_url.ok_or_else(|| {
@@ -1097,11 +1104,11 @@ struct ItemReference<'a> {
 /// An upload session for resumable file uploading process.
 ///
 /// # See also
-/// [`DriveClient::new_upload_session`][get_session]
+/// [`OneDrive::new_upload_session`][get_session]
 ///
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0)
 ///
-/// [get_session]: ./struct.DriveClient.html#method.new_upload_session
+/// [get_session]: ./struct.OneDrive.html#method.new_upload_session
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UploadSession {
@@ -1115,15 +1122,15 @@ impl UploadSession {
     ///
     /// Directly PUT to this URL is **NOT** encouraged.
     ///
-    /// It is preferred to use [`DriveClient::get_upload_session`][get_session] to get
-    /// the upload session and then [`DriveClient::upload_to_session`][upload_to_session] to
+    /// It is preferred to use [`OneDrive::get_upload_session`][get_session] to get
+    /// the upload session and then [`OneDrive::upload_to_session`][upload_to_session] to
     /// perform upload.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
     ///
-    /// [get_session]: ./struct.DriveClient.html#method.get_upload_session
-    /// [upload_to_session]: ./struct.DriveClient.html#method.upload_to_session
+    /// [get_session]: ./struct.OneDrive.html#method.get_upload_session
+    /// [upload_to_session]: ./struct.OneDrive.html#method.upload_to_session
     pub fn get_url(&self) -> &str {
         &self.upload_url
     }
@@ -1134,7 +1141,7 @@ impl UploadSession {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
-    pub fn get_next_expected_ranges(&self) -> &[ExpectRange] {
+    pub fn next_expected_ranges(&self) -> &[ExpectRange] {
         &self.next_expected_ranges
     }
 

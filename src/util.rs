@@ -307,7 +307,6 @@ pub(crate) trait RequestBuilderTransformer {
     fn trans(self, req: &mut RequestBuilder) -> &mut RequestBuilder;
 }
 
-// TODO: Rename to `ResponseExt`
 pub(crate) trait ResponseExt: Sized {
     fn check_status(self) -> Result<Self>;
     fn parse<T: de::DeserializeOwned>(self) -> Result<T>;

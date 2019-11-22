@@ -39,21 +39,21 @@
 use serde::{de, Serialize};
 
 mod api;
-mod authorization;
-mod client;
+mod auth;
 mod error;
+mod onedrive;
 pub mod option;
 pub mod resource;
 mod util;
 
 pub use self::{
     api::{Api, Client},
-    authorization::{AuthClient, Permission, Token},
-    client::{
-        CopyProgress, CopyProgressMonitor, CopyStatus, DriveClient, ListChildrenFetcher,
+    auth::{Authentication, Permission, Token},
+    error::{Error, Result},
+    onedrive::{
+        CopyProgress, CopyProgressMonitor, CopyStatus, ListChildrenFetcher, OneDrive,
         TrackChangeFetcher, UploadSession,
     },
-    error::{Error, Result},
     resource::{DriveId, ItemId, Tag},
     util::{DriveLocation, FileName, ItemLocation},
 };

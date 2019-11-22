@@ -5,7 +5,7 @@ use crate::{
 };
 use http::{header, Method};
 use serde::Deserialize;
-use url::form_urlencoded;
+use url::{form_urlencoded, Url};
 
 /// A list of the Microsoft Graph permissions that you want the user to consent to.
 ///
@@ -49,20 +49,14 @@ impl Permission {
         self
     }
 
-    fn to_scope_str(&self) -> &'static str {
-        macro_rules! cond_concat {
-            ($($s:literal,)*) => { concat!($($s),*) };
-            ($($s:literal,)* ($cond:expr, $t:literal, $f:literal), $($tt:tt)*) => {
-                if $cond { cond_concat!($($s,)* $t, $($tt)*) }
-                else { cond_concat!($($s,)* $f, $($tt)*) }
-            };
-        }
-
-        cond_concat![
-            (self.offline_access, "offline_access ", ""), // Postfix space here.
-            (self.write, "files.readwrite", "files.read"),
-            (self.access_shared, ".all", ""),
-        ]
+    #[rustfmt::skip]
+    fn to_scope_string(&self) -> String {
+        format!(
+            "{}{}{}",
+            if self.write { "files.readwrite" } else { "files.read" },
+            if self.access_shared { ".all" } else { "" },
+            if self.offline_access { " offline_access" } else { "" },
+        )
     }
 }
 
@@ -70,30 +64,29 @@ impl Permission {
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-overview?view=graph-rest-1.0)
-// TODO: Rename to `Authentication`
 #[derive(Debug)]
-pub struct AuthClient {
+pub struct Authentication {
     client_id: String,
     permission: Permission,
     redirect_uri: String,
 }
 
-impl AuthClient {
+impl Authentication {
     /// Create a client for authorization.
     pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
-        AuthClient {
+        Self {
             client_id,
             permission,
             redirect_uri,
         }
     }
 
-    fn get_auth_url(&self, response_type: &str) -> String {
-        ::url::Url::parse_with_params(
+    fn auth_url(&self, response_type: &str) -> String {
+        Url::parse_with_params(
             "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
             &[
-                ("client_id", &self.client_id as &str),
-                ("scope", self.permission.to_scope_str()),
+                ("client_id", &*self.client_id),
+                ("scope", &self.permission.to_scope_string()),
                 ("redirect_uri", &self.redirect_uri),
                 ("response_type", response_type),
             ],
@@ -106,18 +99,16 @@ impl AuthClient {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-service?view=graph-rest-1.0)
-    // TODO: Rename to `token_auth_url`
-    pub fn get_token_auth_url(&self) -> String {
-        self.get_auth_url("token")
+    pub fn token_auth_url(&self) -> String {
+        self.auth_url("token")
     }
 
     /// Get the URL for web browser for code flow authentication.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request)
-    // TODO: Rename to `code_auth_url`
-    pub fn get_code_auth_url(&self) -> String {
-        self.get_auth_url("code")
+    pub fn code_auth_url(&self) -> String {
+        self.auth_url("code")
     }
 
     fn request_authorize(
@@ -237,40 +228,4 @@ pub struct Token {
     /// [offline_access]: ./struct.Permission.html#method.offline_access
     pub refresh_token: Option<String>,
     _private: (),
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_scope_string() {
-        for &write in &[false, true] {
-            for &shared in &[false, true] {
-                for &offline in &[false, true] {
-                    assert_eq!(
-                        Permission::new_read()
-                            .write(write)
-                            .access_shared(shared)
-                            .offline_access(offline)
-                            .to_scope_str(),
-                        format!(
-                            "{}{}{}",
-                            if offline { "offline_access " } else { "" }, // Postfix space here.
-                            if write {
-                                "files.readwrite"
-                            } else {
-                                "files.read"
-                            },
-                            if shared { ".all" } else { "" },
-                        ),
-                        "When testing write={}, shared={}, offline={}",
-                        write,
-                        shared,
-                        offline,
-                    );
-                }
-            }
-        }
-    }
 }
