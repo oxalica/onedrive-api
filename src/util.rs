@@ -204,7 +204,7 @@ impl ApiPathComponent for DriveLocation {
     fn extend_into(&self, buf: &mut PathSegmentsMut) {
         use self::DriveLocationEnum::*;
         match &self.inner {
-            Me => buf.push("drive"),
+            Me => buf.extend(&["me", "drive"]),
             User(id) => buf.extend(&["users", id, "drive"]),
             Group(id) => buf.extend(&["groups", id, "drive"]),
             Site(id) => buf.extend(&["sites", id, "drive"]),

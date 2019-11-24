@@ -31,17 +31,15 @@ macro_rules! api_url {
     };
 }
 
+/// FIXME: More efficient impl.
 macro_rules! api_path {
-    ($($seg:expr),* $(,)?) => {
-        {
-            let mut url = Url::parse("path://").unwrap();
-            {
-                let mut buf = url.path_segments_mut().unwrap();
-                $(ApiPathComponent::extend_into($seg, &mut buf);)*
-            }
-            url
-        }.path()
-    };
+    ($item:expr) => {{
+        let mut url = Url::parse("path:///drive").unwrap();
+        let item: &ItemLocation = $item;
+        ApiPathComponent::extend_into(item, &mut url.path_segments_mut().unwrap());
+        url
+    }
+    .path()};
 }
 
 /// The authorized client to access OneDrive resources in a specified Drive.
@@ -200,7 +198,7 @@ impl OneDrive {
         item: impl Into<ItemLocation<'a>>,
     ) -> impl Api<Response = DriveItem> {
         self.get_item_with_option(item, Default::default())
-            .and_then(|v| Ok(v.unwrap()))
+            .and_then(|v| Ok(v.expect("Empty response while If-None-Match is not specified")))
     }
 
     /// Create a new folder in a drive
@@ -516,7 +514,7 @@ impl OneDrive {
             .bearer_auth(&self.token)
             .json_body(&Req {
                 parent_reference: ItemReference {
-                    path: api_path![&self.drive, &dest_folder.into()],
+                    path: api_path!(&dest_folder.into()),
                 },
                 name: dest_name.as_str(),
             }),
@@ -581,7 +579,7 @@ impl OneDrive {
                 .apply(option)
                 .json_body(&Req {
                     parent_reference: ItemReference {
-                        path: api_path![&self.drive, &dest_folder.into()],
+                        path: api_path!(&dest_folder.into()),
                     },
                     name: dest_name.map(FileName::as_str),
                     conflict_behavior,
@@ -1161,20 +1159,15 @@ mod test {
     use super::*;
     #[test]
     fn test_api_url() {
+        let mock_item_id = ItemId::new("1234".to_owned());
         assert_eq!(
-            api_url!["a", &DriveLocation::me(), "b"].path(),
-            "/v1.0/a/drive/b",
-        );
-
-        let mock_drive_id = DriveId::new("1234".to_owned());
-        assert_eq!(
-            api_path![&DriveLocation::from_id(mock_drive_id)],
-            "/drives/1234",
+            api_path!(&ItemLocation::from_id(&mock_item_id)),
+            "/drive/items/1234",
         );
 
         assert_eq!(
-            api_path![&ItemLocation::from_path("/dir/file name").unwrap()],
-            "/root:%2Fdir%2Ffile%20name:",
+            api_path!(&ItemLocation::from_path("/dir/file name").unwrap()),
+            "/drive/root:%2Fdir%2Ffile%20name:",
         );
     }
 
