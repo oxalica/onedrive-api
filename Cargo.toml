@@ -11,6 +11,10 @@ edition = "2018"
 readme = "README.md"
 documentation = "https://docs.rs/onedrive-api"
 
+[features]
+default = []
+test_rw = ["reqwest"]
+
 [dependencies]
 failure = { version = "0.1.6", features = ["derive"] }
 http = "0.1.19"
@@ -25,5 +29,6 @@ optional = true
 
 [dev-dependencies]
 env_logger = "0.7.1"
+insta = "0.12.0"
 log = "0.4.8"
 rand = "0.7.2"
