@@ -77,27 +77,7 @@ Drive {
             },
         ),
     ),
-    quota: Some(
-        Object(
-            {
-                "deleted": Number(
-                    0,
-                ),
-                "remaining": Number(
-                    1099269674659,
-                ),
-                "state": String(
-                    "normal",
-                ),
-                "total": Number(
-                    1099511627776,
-                ),
-                "used": Number(
-                    106330475,
-                ),
-            },
-        ),
-    ),
+    quota: None,
     root: None,
     sharepoint_ids: None,
     special: None,

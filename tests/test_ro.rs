@@ -15,11 +15,12 @@ fn test_get_drive(drive: &OneDrive, client: &impl Client) {
         .get_drive()
         .execute(client)
         .expect("Cannot get drive #1");
-    // Urls are mutable.
-    drive1.web_url = None;
-    assert_debug_snapshot!(&drive1);
     assert!(drive1.quota.is_some());
     assert!(drive1.owner.is_some());
+    // Mutable fields.
+    drive1.web_url = None;
+    drive1.quota = None;
+    assert_debug_snapshot!(&drive1);
 
     let drive_id = drive1.id.as_ref().expect("drive1 has no id");
 
