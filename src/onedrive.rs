@@ -826,15 +826,15 @@ pub enum CopyStatus {
 impl<'t> CopyProgressMonitor<'t> {
     /// Make a progress monitor using existing `url`.
     ///
-    /// The `url` must be get from [`CopyProgressMonitor::get_url`][get_url]
+    /// The `url` must be get from [`CopyProgressMonitor::url`][url]
     ///
-    /// [get_url]: #method.get_url
+    /// [url]: #method.url
     pub fn from_url(token: &'t str, url: String) -> Self {
         Self { token, url }
     }
 
     /// Get the url of this monitor.
-    pub fn get_url(&self) -> &str {
+    pub fn url(&self) -> &str {
         &self.url
     }
 
@@ -1154,7 +1154,7 @@ impl UploadSession {
     ///
     /// [get_session]: ./struct.OneDrive.html#method.get_upload_session
     /// [upload_to_session]: ./struct.OneDrive.html#method.upload_to_session
-    pub fn get_url(&self) -> &str {
+    pub fn upload_url(&self) -> &str {
         &self.upload_url
     }
 
@@ -1174,7 +1174,7 @@ impl UploadSession {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
-    pub fn get_expiration_date_time(&self) -> &TimestampString {
+    pub fn expiration_date_time(&self) -> &TimestampString {
         &self.expiration_date_time
     }
 }
