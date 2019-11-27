@@ -50,7 +50,7 @@ pub struct OneDrive {
 }
 
 impl OneDrive {
-    /// Create a OneDrive to perform operations in a Drive.
+    /// Create a new OneDrive instance with token to perform operations in a Drive.
     pub fn new(token: String, drive: impl Into<DriveLocation>) -> Self {
         OneDrive {
             token,
@@ -63,7 +63,7 @@ impl OneDrive {
         &self.token
     }
 
-    /// Get `Drive`.
+    /// Get current `Drive`.
     ///
     /// Retrieve the properties and relationships of a [`resource::Drive`][drive] resource.
     ///
@@ -96,18 +96,21 @@ impl OneDrive {
 
     /// List children of a `DriveItem`.
     ///
-    /// Return a collection of [`resource::DriveItem`][drive_item]s in the children relationship
+    /// Retrieve a collection of [`resource::DriveItem`][drive_item]s in the children relationship
     /// of the given one.
     ///
-    /// # Note
-    /// Will return `Ok(None)` if [`if_none_match`][if_none_match] is set and it matches the item tag.
+    /// # Response
+    /// If successful, respond a [fetcher][fetcher] for fetching changes from initial state (empty) to the snapshot of
+    /// current states. See [`ListChildrenFetcher`][fetcher] for more details.
+    ///
+    /// If [`if_none_match`][if_none_match] is set and it matches the item tag, return an `None`.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-list-children?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
-    // TODO: Fix docs
+    /// [fetcher]: ./struct.ListChildrenFetcher.html
     pub fn list_children_with_option<'t, 'a>(
         &'t self,
         item: impl Into<ItemLocation<'a>>,
@@ -125,13 +128,13 @@ impl OneDrive {
         })
     }
 
-    /// Shortcut to `list_children_with_option` with default params and fetch all.
+    /// Shortcut to `list_children_with_option` with default params,
+    /// and fetch and collect all children.
     ///
     /// # See also
     /// [`list_children_with_option`][with_opt]
     ///
     /// [with_opt]: #method.list_children_with_option
-    // TODO: Fix docs
     // FIXME: https://github.com/rust-lang/rust/issues/42940
     pub fn list_children<'a, 's>(
         &'s self,
@@ -201,19 +204,20 @@ impl OneDrive {
             .and_then(|v| Ok(v.expect("Empty response while If-None-Match is not specified")))
     }
 
-    /// Create a new folder in a drive
+    /// Create a new folder under an DriveItem
     ///
     /// Create a new folder [`DriveItem`][drive_item] with a specified parent item or path.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP CONFLICT if [`conflict_behavior`][conflict_behavior]
-    /// is `Fail` and the target already exists.
+    /// Will result in `Err` with HTTP 409 CONFLICT if [`conflict_behavior`][conflict_behavior]
+    /// is set to [`Fail`][conflict_fail] and the target already exists.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-post-children?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
+    /// [conflict_fail]: ./enum.ConflictBehavior.html#variant.Fail
     pub fn create_folder_with_option<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
@@ -251,7 +255,7 @@ impl OneDrive {
         .and_then(|resp| resp.parse())
     }
 
-    /// Shortcut to `create_folder_with_option` with default parameters.
+    /// Shortcut to `create_folder_with_option` with default options.
     ///
     /// # See also
     /// [`create_folder_with_option`][with_opt]
@@ -267,11 +271,14 @@ impl OneDrive {
 
     const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
 
-    /// Upload or replace the contents of a [`DriveItem`][drive_item]
+    /// Upload or replace the contents of a `DriveItem` file.
     ///
     /// The simple upload API allows you to provide the contents of a new file or
     /// update the contents of an existing file in a single API call. This method
     /// only supports files up to 4MB in size.
+    ///
+    /// # Panic
+    /// Panic if `data` is larger than 4 MB (4,000,000 bytes).
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0)
@@ -307,7 +314,7 @@ impl OneDrive {
     /// while the upload is in progress.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set
+    /// Will return `Err` with HTTP 412 PRECONDITION_FAILED if [`if_match`][if_match] is set
     /// but does not match the item.
     ///
     /// # Note
@@ -391,7 +398,7 @@ impl OneDrive {
         })
     }
 
-    /// Cancel the upload session
+    /// Cancel an upload session
     ///
     /// This cleans up the temporary file holding the data previously uploaded.
     /// This should be used in scenarios where the upload is aborted, for example,
@@ -410,7 +417,7 @@ impl OneDrive {
 
     const UPLOAD_SESSION_PART_LIMIT: usize = 60 << 20; // 60 MiB
 
-    /// Upload bytes to the upload session
+    /// Upload bytes to an upload session
     ///
     /// You can upload the entire file, or split the file into multiple byte ranges,
     /// as long as the maximum bytes in any given request is less than 60 MiB.
@@ -422,17 +429,20 @@ impl OneDrive {
     /// size that does not divide evenly by 320 KiB will result in errors committing
     /// some files.
     ///
-    /// # Returns
-    /// - If error occurs, will return `Err`.
+    /// # Response
     /// - If the part is uploaded successfully, but the file is not complete yet,
-    ///   will return `Ok(None)`.
+    ///   will respond `None`.
     /// - If this is the last part and it is uploaded successfully,
-    ///   will return `Ok(Some(newly_created_drive_item))`.
+    ///   will return `Some(<newly_created_drive_item>)`.
     ///
-    /// # Errors
+    /// # Error
     /// When the file is completely uploaded, if an item with the same name is created
     /// during uploading, the last `upload_to_session` call will return `Err` with
-    /// HTTP CONFLICT.
+    /// HTTP 409 CONFLICT.
+    ///
+    /// # Panic
+    /// Panic if `remote_range` is invalid, not match the length of `data`, or
+    /// `data` is larger than 60 MiB (62,914,560 bytes).
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
@@ -488,11 +498,14 @@ impl OneDrive {
     /// # Note
     /// The conflict behavior is not mentioned in Microsoft Docs, and cannot be specified.
     ///
-    /// But it seems to be `Rename` if the destination folder is just the current
-    /// parent folder, and `Fail` if not.
+    /// But it seems to behave as [`Rename`][conflict_rename] if the destination folder is just the current
+    /// parent folder, and [`Fail`][conflict_fail] overwise.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0)
+    ///
+    /// [conflict_rename]: ./enum.ConflictBehavior.html#variant.Rename
+    /// [conflict_fail]: ./enum.ConflictBehavior.html#variant.Fail
     pub fn copy<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
@@ -546,7 +559,7 @@ impl OneDrive {
     /// [`conflict_behavior`][conflict_behavior] is supported.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set
+    /// Will return `Err` with HTTP 412 PRECONDITION_FAILED if [`if_match`][if_match] is set
     /// but it does not match the item.
     ///
     /// # See also
@@ -609,18 +622,19 @@ impl OneDrive {
     /// this method will move the items to the recycle bin instead of permanently
     /// deleting the item.
     ///
-    /// # Errors
-    /// Will return `Err` with HTTP PRECONDITION_FAILED if [`if_match`][if_match] is set but
+    /// # Error
+    /// Will result in error with HTTP 412 PRECONDITION_FAILED if [`if_match`][if_match] is set but
     /// does not match the item.
     ///
     /// # Panic
-    /// `conflict_behavior` is **NOT** supported. Specify it will cause a panic.
+    /// [`conflict_behavior`][conflict_behavior] is **NOT** supported. Set it will cause a panic.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delete?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
     pub fn delete_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -659,13 +673,14 @@ impl OneDrive {
     /// Note: you should only delete a folder locally if it is empty after
     /// syncing all the changes.
     ///
-    /// # Return
-    /// The fetcher for fetching all changes from initial state (empty) to the snapshot of
-    /// current states.
+    /// # Response
+    /// Respond a [fetcher][fetcher] for fetching changes from initial state (empty) to the snapshot of
+    /// current states. See [`TrackChangeFetcher`][fetcher] for more details.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0)
-    // TODO: Update docs
+    ///
+    /// [fetcher]: ./struct.TrackChangeFetcher.html
     pub fn track_changes_from_initial_with_option<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
@@ -688,8 +703,10 @@ impl OneDrive {
     /// # See also
     /// [`track_changes_from_initial_with_option`][with_opt]
     ///
+    /// [`TrackChangeFetcher`][fetcher]
+    ///
     /// [with_opt]: #method.track_changes_from_initial_with_option
-    // TODO: Fix docs
+    /// [fetcher]: ./struct.TrackChangeFetcher.html
     pub fn track_changes_from_initial<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
@@ -702,7 +719,10 @@ impl OneDrive {
     /// # See also
     /// [`OneDrive::track_changes_from_initial_with_option`][track_initial]
     ///
+    /// [`TrackChangeFetcher`][fetcher]
+    ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
+    /// [fetcher]: ./struct.TrackChangeFetcher.html
     pub fn track_changes_from_delta_url<'t>(
         &'t self,
         delta_url: &str,
@@ -720,8 +740,13 @@ impl OneDrive {
 
     /// Get a delta url representing the snapshot of current states.
     ///
+    /// The delta url can be used in [`track_changes_from_delta_url`][track_from_delta] later
+    /// to get diffs between two snapshots of states.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#retrieving-the-current-deltalink)
+    ///
+    /// [track_from_delta]: #method.track_changes_from_delta_url
     pub fn get_latest_delta_url<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
@@ -946,7 +971,7 @@ impl<'t> DriveItemFetcher<'t> {
     }
 }
 
-/// The page fetcher for children listing operation with `Iterator` interface.
+/// The page fetcher for listing children
 ///
 /// # See also
 /// [`OneDrive::list_children_with_option`][list_children_with_opt]
@@ -965,9 +990,9 @@ impl<'t> ListChildrenFetcher<'t> {
     }
 
     /// Resume a fetching process from url from
-    /// [`ListChildrenFetcher::get_next_url`][get_next_url].
+    /// [`ListChildrenFetcher::next_url`][next_url].
     ///
-    /// [get_next_url]: #method.get_next_url
+    /// [next_url]: #method.next_url
     pub fn resume_from(token: &'t str, next_url: String) -> Self {
         Self {
             fetcher: DriveItemFetcher::resume_from(token, next_url),
@@ -995,12 +1020,12 @@ impl<'t> ListChildrenFetcher<'t> {
         self.fetcher.fetch_next_page()
     }
 
-    /// Fetch all rest pages and return all items collected.
+    /// Fetch all rest pages and collect all items.
     ///
     /// # Errors
     ///
-    /// Return `Err` if any error occurs during fetching.
-    /// You will lose all progress unless all requests are success.
+    /// Any error occurs when fetching will lead to an failure, and
+    /// all progress will be lost.
     pub fn fetch_all(self) -> impl Api<Response = Vec<DriveItem>> + 't {
         self.fetcher.fetch_all().and_then(|(items, _)| Ok(items))
     }
@@ -1029,9 +1054,9 @@ impl<'t> TrackChangeFetcher<'t> {
 
     /// Resume a fetching process from url.
     ///
-    /// The url should be from [`TrackChangeFetcher::get_next_url`][get_next_url].
+    /// The url should be from [`TrackChangeFetcher::next_url`][next_url].
     ///
-    /// [get_next_url]: #method.get_next_url
+    /// [next_url]: #method.next_url
     pub fn resume_from(token: &'t str, next_url: String) -> Self {
         Self {
             fetcher: DriveItemFetcher::resume_from(token, next_url),
@@ -1078,12 +1103,12 @@ impl<'t> TrackChangeFetcher<'t> {
         self.fetcher.fetch_next_page()
     }
 
-    /// Fetch all rest pages and return all items collected.
+    /// Fetch all rest pages, collect all items, and also return `delta_url`.
     ///
     /// # Errors
     ///
-    /// Return `Err` if any error occurs during fetching.
-    /// You will lose all progress unless all requests are success.
+    /// Any error occurs when fetching will lead to an failure, and
+    /// all progress will be lost.
     pub fn fetch_all(self) -> impl Api<Response = (Vec<DriveItem>, String)> + 't {
         self.fetcher.fetch_all().and_then(|(items, opt_delta_url)| {
             let delta_url = opt_delta_url.ok_or_else(|| {

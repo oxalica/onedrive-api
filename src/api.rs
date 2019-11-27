@@ -11,13 +11,13 @@ pub(crate) mod sealed {
 /// An abstract API request, conbining constructed HTTP request and response parser.
 ///
 /// The operation of API will **only** be performed when it is [`execute`][execute]d
-/// by an HTTP [`Client`][client].
+/// on an HTTP [`Client`][client].
 ///
-/// [execute]: #method.execute
+/// [execute]: #tymethod.execute
 /// [client]: trait.Client.html
 #[must_use = "Api do nothing unless you `execute` them"]
 pub trait Api: sealed::Sealed + Send + Sync + Sized {
-    /// The response of this API endpoint.
+    /// The parsed response type of the API endpoint.
     type Response;
 
     /// Perform the operation through an HTTP [`Client`][client].
@@ -25,7 +25,7 @@ pub trait Api: sealed::Sealed + Send + Sync + Sized {
     /// Note that some `Api` may execute zero or more than one requests.
     /// See the documentation of the api function for more detail.
     ///
-    /// [execute]: #method.execute
+    /// [client]: ./trait.Client.html
     fn execute(self, client: &impl Client) -> Result<Self::Response>;
 }
 
@@ -79,8 +79,23 @@ where
 }
 
 /// Abstract synchronous HTTP client
+///
+/// Any HTTP backend implemented this trait can be [`execute`][api_execute]d by [`Api`][api].
+///
+/// Enable feature `reqwest` to get implementation for `reqwest::Client` to work together
+/// with [`reqwest`][reqwest].
+///
+/// [api]: ./trait.Api.html
+/// [api_execute]: ./trait.Api.html#tymethod.execute
+/// [reqwest]: https://crates.io/crates/reqwest
 pub trait Client {
-    /// Perform the operation of this API and get the result.
+    /// Execute an [`http`][http] `Request` and get `Response`.
+    ///
+    /// This will be called by [`Api::execute`][api_execute] internally to perform
+    /// operation.
+    ///
+    /// [http]: https://crates.io/crates/http
+    /// [api_execute]: ./trait.Api.html#tymethod.execute
     fn execute_api(&self, req: RawRequest) -> Result<RawResponse>;
 }
 

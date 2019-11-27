@@ -40,10 +40,12 @@ impl Permission {
 
     /// Set whether allows offline access.
     ///
-    /// This permission is required to get a refresh_token for long time access.
+    /// This permission is required to get a [refresh_token][refresh_token] for long time access.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-21)
+    ///
+    /// [refresh_token]: ./struct.Token.html#structfield.refresh_token
     pub fn offline_access(mut self, offline_access: bool) -> Self {
         self.offline_access = offline_access;
         self
@@ -60,10 +62,10 @@ impl Permission {
     }
 }
 
-/// The client for requests relative to authentication.
+/// Authentication to Microsoft Graph API
 ///
 /// # See also
-/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-overview?view=graph-rest-1.0)
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth/auth-concepts?view=graph-rest-1.0)
 #[derive(Debug)]
 pub struct Authentication {
     client_id: String,
@@ -72,7 +74,7 @@ pub struct Authentication {
 }
 
 impl Authentication {
-    /// Create a client for authorization.
+    /// Create an new instance for authentication with specified client identifier and permission.
     pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
         Self {
             client_id,
@@ -175,17 +177,19 @@ impl Authentication {
 
     /// Login using a refresh token.
     ///
-    /// This requires offline access, and will always returns new refresh token if success.
+    /// This requires [`offline_access`][offline_access], and will **ALWAYS** return
+    /// a new [`refresh_token`][refresh_token] if success.
     ///
     /// # Panic
-    /// Panic if the current [`AuthClient`][auth_client] is created with no
+    /// Panic if the current [`Authentication`][auth] is created with no
     /// [`offline_access`][offline_access] permission.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token)
     ///
-    /// [auth_client]: #
+    /// [auth]: ./struct.Authentication.html
     /// [offline_access]: ./struct.Permission.html#method.offline_access
+    /// [refresh_token]: ./struct.Token.html#structfield.refresh_token
     pub fn login_with_refresh_token(
         &self,
         refresh_token: &str,
@@ -209,7 +213,7 @@ impl Authentication {
     }
 }
 
-/// Access tokens from AuthClient.
+/// Access tokens
 #[derive(Debug)]
 pub struct Token {
     /// The access token used for authorization in requests.
@@ -219,8 +223,7 @@ pub struct Token {
     pub token: String,
     /// The refresh token for refreshing (re-get) an access token when the previous one expired.
     ///
-    /// This is only provided in code authorization flow with
-    /// [`offline_access`][offline_acccess] permission.
+    /// This is only returned in code auth flow with [`offline_access`][offline_access] permission.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token)

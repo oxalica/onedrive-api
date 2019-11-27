@@ -4,10 +4,12 @@ use http::{self, StatusCode};
 use serde_json;
 use std::fmt;
 
-/// An alias to `Result` with `Err` of `onedrive_api::Error`.
+/// An alias to `Result` of [`Error`][error].
+///
+/// [error]: ./struct.Error.html
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// The error may occur when processing requests.
+/// Error of API request
 #[derive(Debug)]
 pub struct Error {
     inner: Box<ErrorKind>,

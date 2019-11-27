@@ -1,11 +1,11 @@
-//! Configurable options which can be used to customize behaviors or responses.
+//! Configurable options which can be used to customize API behaviors or responses.
 //!
 //! # Note
 //! Some requests do not support all of these parameters,
 //! and using them will cause an error.
 //!
-//! Be careful and read the document of the requests
-//! from Microsoft first.
+//! Be careful and read the documentation of API from Microsoft before
+//! applying any options.
 //!
 //! # See also
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters)
@@ -90,11 +90,15 @@ impl<Field: ResourceField> ObjectOption<Field> {
 
     /// Select only some fields of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # Note
     /// If called more than once, all fields mentioned will be selected.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#select-parameter)
+    ///
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn select(mut self, fields: &[Field]) -> Self {
         for sel in fields {
             self = self.select_raw(&[sel.api_field_name()]);
@@ -111,11 +115,15 @@ impl<Field: ResourceField> ObjectOption<Field> {
 
     /// Expand a field of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # Note
     /// If called more than once, all fields mentioned will be expanded.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter)
+    ///
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn expand(self, field: Field, select_children: Option<&[&str]>) -> Self {
         self.expand_raw(field.api_field_name(), select_children)
     }
@@ -197,10 +205,13 @@ impl<Field: ResourceField> CollectionOption<Field> {
 
     /// Select only some fields of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # See also
     /// [`ObjectOption::select`][select]
     ///
     /// [select]: ./struct.ObjectOption.html#method.select
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn select(mut self, fields: &[Field]) -> Self {
         self.obj_option = self.obj_option.select(fields);
         self
@@ -208,10 +219,13 @@ impl<Field: ResourceField> CollectionOption<Field> {
 
     /// Expand a field of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # See also
     /// [`ObjectOption::expand`][expand]
     ///
     /// [expand]: ./struct.ObjectOption.html#method.expand
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn expand(mut self, field: Field, select_children: Option<&[&str]>) -> Self {
         self.obj_option = self.obj_option.expand(field, select_children);
         self
