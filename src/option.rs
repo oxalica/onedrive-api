@@ -1,21 +1,21 @@
-//! Configurable options which can be used to customize behaviors or responses.
+//! Configurable options which can be used to customize API behaviors or responses.
 //!
 //! # Note
 //! Some requests do not support all of these parameters,
 //! and using them will cause an error.
 //!
-//! Be careful and read the document of the requests
-//! from Microsoft first.
+//! Be careful and read the documentation of API from Microsoft before
+//! applying any options.
 //!
 //! # See also
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters)
-use crate::resource::{ResourceField, Tag};
-use crate::util::{RequestBuilderExt, RequestBuilderTransformer};
-use crate::ConflictBehavior;
-use reqwest::{header, RequestBuilder};
-use std::default::Default;
-use std::fmt::Write;
-use std::marker::PhantomData;
+use crate::{
+    resource::{ResourceField, Tag},
+    util::{RequestBuilder, RequestBuilderTransformer},
+    ConflictBehavior,
+};
+use http::header;
+use std::{default::Default, fmt::Write, marker::PhantomData};
 
 #[derive(Debug, Default)]
 struct AccessOption {
@@ -36,9 +36,9 @@ impl AccessOption {
 }
 
 impl RequestBuilderTransformer for AccessOption {
-    fn trans(&self, req: RequestBuilder) -> RequestBuilder {
-        req.opt_header(header::IF_MATCH, self.if_match.as_ref())
-            .opt_header(header::IF_NONE_MATCH, self.if_none_match.as_ref())
+    fn trans(self, req: &mut RequestBuilder) -> &mut RequestBuilder {
+        req.opt_header(header::IF_MATCH, self.if_match)
+            .opt_header(header::IF_NONE_MATCH, self.if_none_match)
     }
 }
 
@@ -90,11 +90,15 @@ impl<Field: ResourceField> ObjectOption<Field> {
 
     /// Select only some fields of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # Note
     /// If called more than once, all fields mentioned will be selected.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#select-parameter)
+    ///
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn select(mut self, fields: &[Field]) -> Self {
         for sel in fields {
             self = self.select_raw(&[sel.api_field_name()]);
@@ -111,11 +115,15 @@ impl<Field: ResourceField> ObjectOption<Field> {
 
     /// Expand a field of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # Note
     /// If called more than once, all fields mentioned will be expanded.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter)
+    ///
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn expand(self, field: Field, select_children: Option<&[&str]>) -> Self {
         self.expand_raw(field.api_field_name(), select_children)
     }
@@ -135,13 +143,13 @@ impl<Field: ResourceField> ObjectOption<Field> {
 }
 
 impl<Field: ResourceField> RequestBuilderTransformer for ObjectOption<Field> {
-    fn trans(&self, mut req: RequestBuilder) -> RequestBuilder {
-        req = self.access_opt.trans(req);
+    fn trans(self, req: &mut RequestBuilder) -> &mut RequestBuilder {
+        self.access_opt.trans(req);
         if let Some(s) = self.select_buf.get(1..) {
-            req = req.query(&[("$select", s)]);
+            req.query(&[("$select", s)]);
         }
         if let Some(s) = self.expand_buf.get(1..) {
-            req = req.query(&[("$expand", s)]);
+            req.query(&[("$expand", s)]);
         }
         req
     }
@@ -197,10 +205,13 @@ impl<Field: ResourceField> CollectionOption<Field> {
 
     /// Select only some fields of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # See also
     /// [`ObjectOption::select`][select]
     ///
     /// [select]: ./struct.ObjectOption.html#method.select
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn select(mut self, fields: &[Field]) -> Self {
         self.obj_option = self.obj_option.select(fields);
         self
@@ -208,10 +219,13 @@ impl<Field: ResourceField> CollectionOption<Field> {
 
     /// Expand a field of the resource object.
     ///
+    /// See documentation of module [`onedrive_api::resource`][resource] for more details.
+    ///
     /// # See also
     /// [`ObjectOption::expand`][expand]
     ///
     /// [expand]: ./struct.ObjectOption.html#method.expand
+    /// [resource]: ../resource/index.html#field-descriptors
     pub fn expand(mut self, field: Field, select_children: Option<&[&str]>) -> Self {
         self.obj_option = self.obj_option.expand(field, select_children);
         self
@@ -261,17 +275,17 @@ impl<Field: ResourceField> CollectionOption<Field> {
 }
 
 impl<Field: ResourceField> RequestBuilderTransformer for CollectionOption<Field> {
-    fn trans(&self, mut req: RequestBuilder) -> RequestBuilder {
-        req = self.obj_option.trans(req);
+    fn trans(self, req: &mut RequestBuilder) -> &mut RequestBuilder {
+        self.obj_option.trans(req);
         if let Some(s) = &self.order_buf {
-            req = req.query(&[("$orderby", s)]);
+            req.query(&[("$orderby", s)]);
         }
         if let Some(s) = &self.page_size_buf {
-            req = req.query(&[("$top", s)]);
+            req.query(&[("$top", s)]);
         }
         if let Some(v) = self.get_count_buf {
             let v = if v { "true" } else { "false" };
-            req = req.query(&[("$count", v)]);
+            req.query(&[("$count", v)]);
         }
         req
     }
@@ -340,7 +354,7 @@ impl DriveItemPutOption {
 }
 
 impl RequestBuilderTransformer for DriveItemPutOption {
-    fn trans(&self, req: RequestBuilder) -> RequestBuilder {
+    fn trans(self, req: &mut RequestBuilder) -> &mut RequestBuilder {
         self.access_opt.trans(req)
     }
 }

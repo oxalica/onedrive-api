@@ -1,0 +1,87 @@
+---
+source: tests/test_ro.rs
+expression: "&drive1"
+---
+Drive {
+    id: Some(
+        DriveId(
+            "b!-RIj2DuyvEyV1T4NlOaMHk8XkS_I8MdFlUCq1BlcjgmhRfAj3-Z8RY2VpuvV_tpd",
+        ),
+    ),
+    created_by: Some(
+        Object(
+            {
+                "user": Object(
+                    {
+                        "displayName": String(
+                            "System Account",
+                        ),
+                    },
+                ),
+            },
+        ),
+    ),
+    created_date_time: Some(
+        "2017-07-27T02:41:36Z",
+    ),
+    description: Some(
+        "",
+    ),
+    drive_type: Some(
+        String(
+            "business",
+        ),
+    ),
+    items: None,
+    last_modified_by: Some(
+        Object(
+            {
+                "user": Object(
+                    {
+                        "displayName": String(
+                            "Megan Bowen",
+                        ),
+                        "email": String(
+                            "MeganB@M365x214355.onmicrosoft.com",
+                        ),
+                        "id": String(
+                            "48d31887-5fad-4d73-a9f5-3c356e68a038",
+                        ),
+                    },
+                ),
+            },
+        ),
+    ),
+    last_modified_date_time: Some(
+        "2018-03-27T07:34:38Z",
+    ),
+    name: Some(
+        "OneDrive",
+    ),
+    owner: Some(
+        Object(
+            {
+                "user": Object(
+                    {
+                        "displayName": String(
+                            "Megan Bowen",
+                        ),
+                        "email": String(
+                            "MeganB@M365x214355.onmicrosoft.com",
+                        ),
+                        "id": String(
+                            "48d31887-5fad-4d73-a9f5-3c356e68a038",
+                        ),
+                    },
+                ),
+            },
+        ),
+    ),
+    quota: None,
+    root: None,
+    sharepoint_ids: None,
+    special: None,
+    system: None,
+    web_url: None,
+    _private: (),
+}

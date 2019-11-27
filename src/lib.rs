@@ -1,59 +1,82 @@
 //! # onedrive-api
 //!
-//! The `onedrive-api` crate provides a middle-level HTTP [`Client`][client] to the
-//! [OneDrive][onedrive] API through [Microsoft Graph][graph], and also [`AuthClient`][auth_client]
-//! with utilities for authorization to it.
+//! `onedrive-api` crate provides middle-level HTTP APIs [`OneDrive`][one_drive] to the
+//! [OneDrive][ms_onedrive] API through [Microsoft Graph][ms_graph], and also [`Authentication`][auth]
+//! with utilities for authentication.
 //!
-//! The [`onedrive_api::DriveClient`][client] and [`onedrive_api::AuthClient`][auth_client]
-//! are synchronous by using `reqwest::Client`. Async support is TODO.
+//! HTTP APIs are provided by methods returning type [`impl Api`][api], which can be [`execute`][api_execute]d
+//! on any HTTP backends implementing [`trait Client`][client].
+//! You can implement the trait on any custom HTTP backends to execute APIs, or simply enable feature flags to
+//! get support to work with famous HTTP crates.
+//! We currently support:
+//!
+//! - _feature `reqwest`_: [`reqwest`][reqwest]
+//!
+//! Async support is TODO.
 //!
 //! ## Example
 //! ```
-//! use onedrive_api::{DriveClient, FileName, DriveLocation, ItemLocation};
-//! # fn run() -> onedrive_api::Result<()> {
+//! // With feature `reqwest` enabled.
+//! use onedrive_api::{OneDrive, Api as _, FileName, DriveLocation, ItemLocation};
+//! use reqwest;
 //!
-//! let client = DriveClient::new(
+//! # fn run() -> onedrive_api::Result<()> {
+//! let client = reqwest::Client::new();
+//! let drive = OneDrive::new(
 //!     "<...TOKEN...>".to_owned(), // Login token to Microsoft Graph.
 //!     DriveLocation::me(),
 //! );
-//! let folder_item = client.create_folder(
-//!     ItemLocation::root(),
-//!     FileName::new("test_folder").unwrap(),
-//! )?;
-//! client.upload_small(
-//!     folder_item.id.as_ref().unwrap(),
-//!     b"Hello, world",
-//! )?;
 //!
-//! Ok(())
+//! let folder_item = drive
+//!     .create_folder(
+//!         ItemLocation::root(),
+//!         FileName::new("test_folder").unwrap(),
+//!     )
+//!     .execute(&client)?;
+//!
+//! drive
+//!     .upload_small(
+//!         folder_item.id.as_ref().unwrap(),
+//!         b"Hello, world",
+//!     )
+//!     .execute(&client)?;
+//!
+//! # Ok(())
 //! # }
 //! ```
 //!
-//! [client]: ./struct.DriveClient.html
-//! [auth_client]: ./struct.AuthClient.html
-//! [onedrive]: https://onedrive.live.com/about
-//! [graph]: https://docs.microsoft.com/graph/overview
+//! [ms_onedrive]: https://onedrive.live.com/about
+//! [ms_graph]: https://docs.microsoft.com/graph/overview
+//! [reqwest]: https://crates.io/crates/reqwest
+//! [one_drive]: ./struct.OneDrive.html
+//! [auth]: ./struct.Authentication.html
+//! [api]: ./trait.Api.html
+//! [api_execute]: ./trait.Api.html#tymethod.execute
+//! [client]: ./trait.Client.html
 #![deny(warnings)]
 #![deny(missing_debug_implementations)]
 #![deny(missing_docs)]
 use serde::{de, Serialize};
 
-mod authorization;
-mod client;
+mod api;
+mod auth;
 mod error;
+mod onedrive;
 pub mod option;
 pub mod resource;
 mod util;
 
-pub use self::authorization::{AuthClient, Permission, Token};
-pub use self::client::DriveClient;
-pub use self::client::{
-    CopyProgress, CopyProgressMonitor, CopyStatus, ListChildrenFetcher, TrackChangeFetcher,
-    UploadSession,
+pub use self::{
+    api::{Api, Client},
+    auth::{Authentication, Permission, Token},
+    error::{Error, Result},
+    onedrive::{
+        CopyProgress, CopyProgressMonitor, CopyStatus, ListChildrenFetcher, OneDrive,
+        TrackChangeFetcher, UploadSession,
+    },
+    resource::{DriveId, ItemId, Tag},
+    util::{DriveLocation, FileName, ItemLocation},
 };
-pub use self::error::{Error, Result};
-pub use self::resource::{DriveId, ItemId, Tag};
-pub use self::util::{DriveLocation, FileName, ItemLocation};
 
 /// The conflict resolution behavior for actions that create a new item.
 ///
@@ -62,7 +85,7 @@ pub use self::util::{DriveLocation, FileName, ItemLocation};
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ConflictBehavior {
-    /// Make the request fail. Usually cause HTTP CONFLICT.
+    /// Make the request fail. Usually cause HTTP 409 CONFLICT.
     Fail,
     /// **DANGER**: Replace the existing item.
     Replace,

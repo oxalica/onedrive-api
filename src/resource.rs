@@ -1,34 +1,39 @@
 //! Resource Objects defined in the OneDrive API.
 //!
-//! # Field descriper
+//! # Field descriptors
 //!
 //! Resource object `struct`s have field descriper `enum`s representing
 //! all controlable fields of it, which may be used
 //! in [`onedrive_api::option`][option] to [`select`][select] or [`expand`][expand] it using
-//! `with_option` version API of [`DriveClient`][drive_client].
+//! `with_option` version API of [`OneDrive`][one_drive].
 //!
 //! ## Example
 //! Here is an example to use [`resource::DriveItemField`][drive_item_field].
 //! ```
-//! use onedrive_api::{DriveClient, ItemLocation, option::ObjectOption};
+//! use onedrive_api::{OneDrive, Api as _, ItemLocation, option::ObjectOption};
 //! use onedrive_api::resource::*;
 //!
-//! // let client: DriveClient;
-//! # fn run(client: &DriveClient) -> onedrive_api::Result<()> {
-//! let item: Option<DriveItem> = client
+//! # fn run(drive: &OneDrive, client: impl onedrive_api::Client) -> onedrive_api::Result<()> {
+//! // let drive: OneDrive;
+//! // let client: impl onedrive_api::Client;
+//! let item: Option<DriveItem> = drive
 //!     .get_item_with_option(
 //!         ItemLocation::root(),
 //!         ObjectOption::new()
-//!             .if_none_match(&Tag::new("<abcd ... 1234>".to_owned()))
+//!             .if_none_match(&Tag::new("<abcdABCD1234>".to_owned()))
 //!             // Only response `id` and `e_tag` to reduce data transmission.
 //!             .select(&[DriveItemField::id, DriveItemField::e_tag]),
-//!     )?;
-//! // `item` is `None` if it matches the tag.
-//!
-//! Ok(())
+//!     )
+//!     .execute(&client)?;
+//! match item {
+//!     None => println!("Tag matched"),
+//!     Some(item) => {
+//!         println!("id: {:?}, e_tag: {:?}", item.id.unwrap(), item.e_tag.unwrap());
+//!     }
+//! }
+//! # Ok(())
 //! # }
 //! ```
-//!
 //!
 //! # See also
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/onedrive/developer/rest-api/resources/?view=odsp-graph-online)
@@ -36,7 +41,7 @@
 //! [option]: ../option/index.html
 //! [select]: ../option/struct.ObjectOption.html#method.select
 //! [expand]: ../option/struct.ObjectOption.html#method.expand
-//! [drive_client]: ../struct.DriveClient.html
+//! [one_drive]: ../struct.OneDrive.html
 //! [drive_item_field]: ./enum.DriveItemField.html
 use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
@@ -56,6 +61,7 @@ macro_rules! define_string_wrapper {
         #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
         $vis struct $name(String);
 
+        // TODO: Provide `to_string`
         impl $name {
             /// Wrap a string.
             ///
@@ -138,6 +144,7 @@ macro_rules! define_resource_object {
             /// More details in [mod documentation][mod].
             ///
             /// [mod]: ./index.html
+            // FIXME: Should be `#[non_exhaustive]`
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
             $vis enum $field_enum_name {
                 $(
@@ -259,12 +266,12 @@ define_resource_object! {
         /// The pre-authorized url for downloading the content.
         ///
         /// It is **NOT** selectable through [`ObjectOption::select`][select] and
-        /// only provided in the result of [`DriveClient::get_item`][get_item]
-        /// (or [`DriveClient::get_item_with_option`][get_item_with_opt]).
+        /// only provided in the result of [`OneDrive::get_item`][get_item]
+        /// (or [`OneDrive::get_item_with_option`][get_item_with_opt]).
         ///
         /// [select]: ../option/struct.ObjectOption.html#method.select
-        /// [get_item]: ../struct.DriveClient.html#method.get_item
-        /// [get_item_with_opt]: ../struct.DriveClient.html#method.get_item_with_option
+        /// [get_item]: ../struct.OneDrive.html#method.get_item
+        /// [get_item_with_opt]: ../struct.OneDrive.html#method.get_item_with_option
         [unselectable]
         pub download_url @"@microsoft.graph.downloadUrl": Option<Url>,
 
