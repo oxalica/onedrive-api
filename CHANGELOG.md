@@ -1,3 +1,23 @@
+# v0.5.0
+## Huge Breaking Changes
+- Refactor all APIs with new `Api` and `Client` interfaces and strip dependency to `reqwest`.
+  See docs for more details.
+- `Error::{should_retry,url}` are removed.
+- Rename `AuthClient` to `Authentication`, and `DriveClient` to `OneDrive`.
+- Rename `UploadSession::{get_url,get_next_expected_ranges,get_expiration_date_time}` to `{upload_url,next_expected_ranges,expiration_date_time}`.
+- Rename `ListChildrenFetcher::get_next_url` to `next_url`
+- Rename `TrackChangeFetcher::{get_next_url,get_delta_url` to `{next_url,delta_url}`
+- Rename `ListChildrenFetcher` and `TrackChangeFetcher` are no longer `Iterator`.
+  See docs for more details.
+
+## Features
+- Refactor and add more tests.
+- Support custom HTTP backend.
+
+## Fixes
+- Request changes of beta api `CopyProgressMonitor::fetch_progress`
+- Documentations
+
 # v0.4.0
 ## Breaking Changes
 - Renane mod `query_option` to `option`.

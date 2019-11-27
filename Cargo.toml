@@ -1,18 +1,19 @@
 [package]
 name = "onedrive-api"
-version = "0.4.0"
+version = "0.5.0"
 authors = ["oxalica <oxalicc@pm.me>"]
 repository = "https://github.com/oxalica/onedrive-api"
 license = "MIT"
 categories = ["api-bindings"]
-keywords = ["onedrive", "http", "client", "api"]
-description = "OneDrive REST API Client"
+keywords = ["onedrive", "http", "api"]
+description = "OneDrive HTTP REST API"
 edition = "2018"
 readme = "README.md"
 documentation = "https://docs.rs/onedrive-api"
 
 [features]
 default = []
+# Enable tests of read-write APIs. See tests/test_rw.rs for more details.
 test_rw = ["reqwest"]
 
 [dependencies]
@@ -28,7 +29,8 @@ version = "0.9.22"
 optional = true
 
 [dev-dependencies]
-env_logger = "0.7.1"
 insta = "0.12.0"
-log = "0.4.8"
 rand = "0.7.2"
+
+[package.metadata.docs.rs]
+features = ["reqwest"]
