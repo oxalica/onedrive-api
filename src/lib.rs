@@ -15,7 +15,7 @@
 //! Async support is TODO.
 //!
 //! ## Example
-//! ```
+//! ```ignore
 //! // With feature `reqwest` enabled.
 //! use onedrive_api::{OneDrive, Api as _, FileName, DriveLocation, ItemLocation};
 //! use reqwest;
