@@ -125,11 +125,12 @@ macro_rules! define_resource_object {
     )*) => {
         $(
             $(#[$meta])*
-            #[derive(Deserialize)]
+            #[derive(Debug, Default, Deserialize, Serialize)]
             #[serde(rename_all = "camelCase")]
             $vis struct $struct_name {
                 $(
                     #[allow(missing_docs)]
+                    #[serde(skip_serializing_if="Option::is_none")]
                     $(#[$field_meta])*
                     $($(#[serde(rename = $field_rename)])? pub $unsel_field_name)?
                     $(pub $sel_field_name)?
@@ -183,7 +184,6 @@ define_resource_object! {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0)
-    #[derive(Debug)]
     pub struct Drive #DriveField {
         pub id: Option<DriveId>,
         pub created_by: Option<JsonValue>,
@@ -210,7 +210,6 @@ define_resource_object! {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0)
-    #[derive(Debug)]
     pub struct DriveItem #DriveItemField {
 
         // Drive item

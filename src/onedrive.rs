@@ -269,6 +269,49 @@ impl OneDrive {
         self.create_folder_with_option(parent_item, name, Default::default())
     }
 
+    /// Update DriveItem properties
+    ///
+    /// Update the metadata for a [`DriveItem`][drive_item].
+    ///
+    /// If you want to rename or move an [`DriveItem`][drive_item] to another place,
+    /// you should use [`move_`][move_] (or [`move_with_option`][move_with_opt]) instead of this, which is a wrapper
+    /// to this API endpoint to make things easier.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-update?view=graph-rest-1.0)
+    ///
+    /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [move_]: #method.move_
+    /// [move_with_opt]: #method.move_with_option
+    pub fn update_item_with_option<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+        patch: &DriveItem,
+        option: ObjectOption<DriveItemField>,
+    ) -> impl Api<Response = DriveItem> {
+        SimpleApi::new(
+            Builder::new(Method::PATCH, api_url![&self.drive, &item.into()])
+                .bearer_auth(&self.token)
+                .apply(option)
+                .json_body(patch),
+        )
+        .and_then(|resp| resp.parse())
+    }
+
+    /// Shortcut to `update_item_with_option` with default options.
+    ///
+    /// # See also
+    /// [`update_item_with_option`][with_opt]
+    ///
+    /// [with_opt]: #method.update_item_with_option
+    pub fn update_item<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+        patch: &DriveItem,
+    ) -> impl Api<Response = DriveItem> {
+        self.update_item_with_option(item, patch, Default::default())
+    }
+
     const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
 
     /// Upload or replace the contents of a `DriveItem` file.

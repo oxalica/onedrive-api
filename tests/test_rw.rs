@@ -16,6 +16,7 @@
 extern crate onedrive_api;
 use onedrive_api::{option::*, resource::*, *};
 use reqwest::{self, StatusCode};
+use serde_json::json;
 
 use self::utils::*;
 
@@ -52,6 +53,56 @@ fn test_folder_create_and_delete(drive: &OneDrive, client: &impl Client) {
             .status_code(),
         Some(StatusCode::NOT_FOUND),
     );
+
+    // #4
+    drop(guard);
+}
+
+/// 4 requests
+fn test_folder_create_and_update(drive: &OneDrive, client: &impl Client) {
+    const FAKE_TIME: &str = "2017-01-01T00:00:00Z";
+
+    let folder_name = gen_filename();
+    let folder_loc = rooted_location(folder_name);
+
+    fn get_bmtime(item: &DriveItem) -> Option<(&str, &str)> {
+        let fs_info = item.file_system_info.as_ref()?.as_object()?;
+        Some((
+            fs_info.get("createdDateTime")?.as_str()?,
+            fs_info.get("lastModifiedDateTime")?.as_str()?,
+        ))
+    }
+
+    // #1
+    let item_before = drive
+        .create_folder(ItemLocation::root(), folder_name)
+        .execute(client)
+        .expect("Cannot create folder");
+    let guard = AutoDelete::new(drive, client, folder_loc);
+
+    let (btime_before, mtime_before) =
+        get_bmtime(&item_before).expect("Invalid file_system_info before update");
+    assert_ne!(btime_before, FAKE_TIME);
+    assert_ne!(mtime_before, FAKE_TIME);
+
+    // #2
+    let mut patch = DriveItem::default();
+    patch.file_system_info = Some(Box::new(json!({
+        "createdDateTime": FAKE_TIME,
+        "lastModifiedDateTime": FAKE_TIME,
+    })));
+    let item_response = drive
+        .update_item(folder_loc, &patch)
+        .execute(client)
+        .expect("Cannot update folder metadata");
+    assert_eq!(get_bmtime(&item_response), Some((FAKE_TIME, FAKE_TIME)));
+
+    // #3
+    let item_after = drive
+        .get_item(folder_loc)
+        .execute(client)
+        .expect("Cannot get folder before update");
+    assert_eq!(get_bmtime(&item_after), Some((FAKE_TIME, FAKE_TIME)));
 
     // #4
     drop(guard);
@@ -560,6 +611,7 @@ mod rw {
 
     test_fns! {
         test_folder_create_and_delete;
+        test_folder_create_and_update;
         test_file_upload_small_and_move;
         test_file_upload_small_and_copy;
         test_file_upload_session;
