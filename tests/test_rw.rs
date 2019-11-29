@@ -187,7 +187,7 @@ fn test_file_upload_session(drive: &OneDrive, client: &impl Client) {
 
     println!(
         "Upload session will expire at {:?}",
-        sess.get_expiration_date_time(),
+        sess.expiration_date_time(),
     );
     let guard = AutoDelete::new_sess(drive, client, &sess);
 
@@ -203,7 +203,7 @@ fn test_file_upload_session(drive: &OneDrive, client: &impl Client) {
 
     // #3
     let sess = drive
-        .get_upload_session(sess.get_url())
+        .get_upload_session(sess.upload_url())
         .execute(client)
         .expect("Cannot re-get upload session");
     let next_ranges = sess.next_expected_ranges();
