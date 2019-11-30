@@ -6,12 +6,27 @@ rust:
   - beta
   - nightly
 
+before_install:
+  - rustup component add rustfmt
+
+script:
+  - export FEATURES="reqwest"
+  - cargo build --verbose --features "$FEATURES"
+  - cargo test --verbose --features "$FEATURES" -- -Z unstable-options --include-ignored
+
 jobs:
   include:
     - rust: stable
       os: osx
     - rust: stable
       os: windows
+
+    # No run
+    - name: "Build with all features"
+      script: cargo build --verbose --all-features
+
+    - name: "Format check"
+      script: cargo fmt -- --check
 
   allow_failures:
     - rust: nightly
