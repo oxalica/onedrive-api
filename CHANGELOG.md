@@ -1,3 +1,16 @@
+# v0.5.2
+
+# Features
+- Add new api `OneDrive::update_item[_with_option]`
+- Derive `Serialize` and `Default` for resource objects in `onedrive_api::resource`
+
+## Fixes
+- Tests
+
+# v0.5.1
+## Fixes
+- Tests
+
 # v0.5.0
 ## Huge Breaking Changes
 - Refactor all APIs with new `Api` and `Client` interfaces and strip dependency to `reqwest`.
