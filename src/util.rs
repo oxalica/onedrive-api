@@ -1,12 +1,11 @@
 use crate::{
-    api,
     error::{Error, Result},
     resource::{DriveId, ItemId},
 };
-use http::{self, header, HttpTryFrom, Method, StatusCode};
-use serde::{de, Deserialize, Serialize};
-use std::fmt;
-use url::{PathSegmentsMut, Url};
+use http::{self, StatusCode};
+use reqwest::{RequestBuilder, Response};
+use serde::{de, Deserialize};
+use url::PathSegmentsMut;
 
 /// Specify the location of a `Drive` resource.
 ///
@@ -230,92 +229,29 @@ impl ApiPathComponent for str {
     }
 }
 
-pub(crate) struct RequestBuilder {
-    method: Method,
-    url: Option<Result<Url>>,
-    header_map: Option<http::HeaderMap>,
-}
-
-impl RequestBuilder {
-    pub fn new(method: Method, url: impl AsRef<str>) -> Self {
-        Self {
-            method,
-            url: Some(Url::parse(url.as_ref()).map_err(Into::into)),
-            header_map: Some(http::HeaderMap::new()),
-        }
-    }
-
-    pub fn query(&mut self, params: &[(&str, &str)]) -> &mut Self {
-        if let Ok(url) = self.url.as_mut().unwrap().as_mut() {
-            url.query_pairs_mut().extend_pairs(params);
-        }
-        self
-    }
-
-    pub fn opt_header<V>(&mut self, key: header::HeaderName, value: Option<V>) -> &mut Self
-    where
-        header::HeaderValue: HttpTryFrom<V>,
-    {
-        match value {
-            Some(value) => self.header(key, value),
-            None => self,
-        }
-    }
-
-    pub fn header<V>(&mut self, key: header::HeaderName, value: V) -> &mut Self
-    where
-        header::HeaderValue: HttpTryFrom<V>,
-    {
-        self.header_map.as_mut().unwrap().insert(
-            key,
-            header::HeaderValue::try_from(value)
-                .ok()
-                .expect("Invalid header"),
-        );
-        self
-    }
-
-    pub fn bearer_auth(&mut self, token: impl fmt::Display) -> &mut Self {
-        self.header(header::AUTHORIZATION, format!("Bearer {}", token))
-    }
-
-    pub fn bytes_body(&mut self, body: Vec<u8>) -> Result<api::RawRequest> {
-        let mut b = http::request::Builder::new();
-        *b.headers_mut().unwrap() = self.header_map.take().unwrap();
-        b.method(self.method.clone())
-            .uri(self.url.take().unwrap()?.to_string())
-            .body(body)
-            .map_err(Into::into)
-    }
-
-    pub fn empty_body(&mut self) -> Result<api::RawRequest> {
-        Ok(self.bytes_body(vec![])?)
-    }
-
-    pub fn json_body(&mut self, value: &impl Serialize) -> Result<api::RawRequest> {
-        Ok(self
-            .header(header::CONTENT_TYPE, "application/json")
-            .bytes_body(serde_json::to_vec(value).unwrap())?)
-    }
-
-    pub fn apply(&mut self, transformer: impl RequestBuilderTransformer) -> &mut Self {
-        transformer.trans(self)
-    }
-}
-
 pub(crate) trait RequestBuilderTransformer {
-    fn trans(self, req: &mut RequestBuilder) -> &mut RequestBuilder;
+    fn trans(self, req: RequestBuilder) -> RequestBuilder;
+}
+
+pub(crate) trait RequestBuilderExt: Sized {
+    fn apply(self, trans: impl RequestBuilderTransformer) -> Self;
+}
+
+impl RequestBuilderExt for RequestBuilder {
+    fn apply(self, trans: impl RequestBuilderTransformer) -> Self {
+        trans.trans(self)
+    }
 }
 
 pub(crate) trait ResponseExt: Sized {
-    fn check_status(self) -> Result<Self>;
+    fn handle_error_response(self) -> Result<Self>;
     fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
     fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>>;
     fn parse_no_content(self) -> Result<()>;
 }
 
-impl ResponseExt for api::RawResponse {
-    fn check_status(self) -> Result<Self> {
+impl ResponseExt for Response {
+    fn handle_error_response(mut self) -> Result<Self> {
         if self.status().is_success() {
             return Ok(self);
         }
@@ -325,12 +261,12 @@ impl ResponseExt for api::RawResponse {
             error: crate::resource::ErrorObject,
         }
 
-        let resp: ErrorResponse = serde_json::from_slice(self.body())?;
+        let resp: ErrorResponse = self.json()?;
         Err(Error::from_error_response(self.status(), resp.error))
     }
 
     fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
-        Ok(serde_json::from_slice(self.check_status()?.body())?)
+        Ok(self.handle_error_response()?.json()?)
     }
 
     fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>> {
@@ -341,7 +277,7 @@ impl ResponseExt for api::RawResponse {
     }
 
     fn parse_no_content(self) -> Result<()> {
-        self.check_status()?;
+        self.handle_error_response()?;
         Ok(())
     }
 }

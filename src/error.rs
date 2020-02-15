@@ -34,7 +34,6 @@ enum ErrorKind {
         status: StatusCode,
         error: ErrorObject,
     },
-    #[cfg(feature = "reqwest")]
     #[fail(display = "Request error: {}", 0)]
     RequestError(reqwest::Error),
 }
@@ -59,7 +58,6 @@ impl Error {
             | ErrorKind::DeserializeError(_)
             | ErrorKind::UrlParseError(_) => None,
             ErrorKind::ErrorResponse { error, .. } => Some(error),
-            #[cfg(feature = "reqwest")]
             ErrorKind::RequestError(_) => None,
         }
     }
@@ -71,7 +69,6 @@ impl Error {
             | ErrorKind::HttpError(_)
             | ErrorKind::UrlParseError(_) => None,
             ErrorKind::ErrorResponse { status, .. } => Some(*status),
-            #[cfg(feature = "reqwest")]
             ErrorKind::RequestError(source) => source.status(),
         }
     }
@@ -101,7 +98,6 @@ impl From<url::ParseError> for Error {
     }
 }
 
-#[cfg(feature = "reqwest")]
 impl From<reqwest::Error> for Error {
     fn from(source: reqwest::Error) -> Self {
         Self {

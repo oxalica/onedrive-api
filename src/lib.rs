@@ -53,12 +53,11 @@
 //! [api]: ./trait.Api.html
 //! [api_execute]: ./trait.Api.html#tymethod.execute
 //! [client]: ./trait.Client.html
-#![deny(warnings)]
+// #![deny(warnings)]
 #![deny(missing_debug_implementations)]
 #![deny(missing_docs)]
 use serde::{de, Serialize};
 
-mod api;
 mod auth;
 mod error;
 mod onedrive;
@@ -67,7 +66,6 @@ pub mod resource;
 mod util;
 
 pub use self::{
-    api::{Api, Client},
     auth::{Authentication, Permission, Token},
     error::{Error, Result},
     onedrive::{
