@@ -12,33 +12,34 @@
 //! Login setting file `tests/login_setting.json` is private and is ignored
 //! in `.gitignore`, so you need to set up it manually before running this test.
 //! The structure is specified in `tests/login_setting.json.template`.
-#![cfg(feature = "test_rw")]
 extern crate onedrive_api;
 use onedrive_api::{option::*, resource::*, *};
-use reqwest::{self, StatusCode};
+use reqwest::StatusCode;
 use serde_json::json;
 
 use self::utils::*;
 
+use login::ONEDRIVE;
+
 /// 4 requests
-fn test_folder_create_and_delete(drive: &OneDrive, client: &impl Client) {
+#[test]
+#[ignore]
+fn test_folder_create_and_delete() {
     let folder_name = gen_filename();
     let folder_loc = rooted_location(folder_name);
     let invalid_path = format!("/{}/invalid", folder_name.as_str());
     let invalid_loc = ItemLocation::from_path(&invalid_path).unwrap();
 
     // #1
-    drive
+    ONEDRIVE
         .create_folder(ItemLocation::root(), folder_name)
-        .execute(client)
         .expect("Cannot create folder");
-    let guard = AutoDelete::new(drive, client, folder_loc);
+    let guard = AutoDelete::new(folder_loc);
 
     // #2
     assert_eq!(
-        drive
+        ONEDRIVE
             .create_folder(ItemLocation::root(), folder_name)
-            .execute(client)
             .expect_err("Re-create folder should fail by default")
             .status_code(),
         Some(StatusCode::CONFLICT),
@@ -46,9 +47,8 @@ fn test_folder_create_and_delete(drive: &OneDrive, client: &impl Client) {
 
     // #3
     assert_eq!(
-        drive
+        ONEDRIVE
             .delete(invalid_loc)
-            .execute(client)
             .expect_err("Should not delete non-existent folder")
             .status_code(),
         Some(StatusCode::NOT_FOUND),
@@ -59,7 +59,9 @@ fn test_folder_create_and_delete(drive: &OneDrive, client: &impl Client) {
 }
 
 /// 4 requests
-fn test_folder_create_and_update(drive: &OneDrive, client: &impl Client) {
+#[test]
+#[ignore]
+fn test_folder_create_and_update() {
     const FAKE_TIME: &str = "2017-01-01T00:00:00Z";
 
     let folder_name = gen_filename();
@@ -74,11 +76,10 @@ fn test_folder_create_and_update(drive: &OneDrive, client: &impl Client) {
     }
 
     // #1
-    let item_before = drive
+    let item_before = ONEDRIVE
         .create_folder(ItemLocation::root(), folder_name)
-        .execute(client)
         .expect("Cannot create folder");
-    let guard = AutoDelete::new(drive, client, folder_loc);
+    let guard = AutoDelete::new(folder_loc);
 
     let (btime_before, mtime_before) =
         get_bmtime(&item_before).expect("Invalid file_system_info before update");
@@ -91,16 +92,14 @@ fn test_folder_create_and_update(drive: &OneDrive, client: &impl Client) {
         "createdDateTime": FAKE_TIME,
         "lastModifiedDateTime": FAKE_TIME,
     })));
-    let item_response = drive
+    let item_response = ONEDRIVE
         .update_item(folder_loc, &patch)
-        .execute(client)
         .expect("Cannot update folder metadata");
     assert_eq!(get_bmtime(&item_response), Some((FAKE_TIME, FAKE_TIME)));
 
     // #3
-    let item_after = drive
+    let item_after = ONEDRIVE
         .get_item(folder_loc)
-        .execute(client)
         .expect("Cannot get folder before update");
     assert_eq!(get_bmtime(&item_after), Some((FAKE_TIME, FAKE_TIME)));
 
@@ -109,7 +108,9 @@ fn test_folder_create_and_update(drive: &OneDrive, client: &impl Client) {
 }
 
 /// 6 requests
-fn test_file_upload_small_and_move(drive: &OneDrive, client: &impl Client) {
+#[test]
+#[ignore]
+fn test_file_upload_small_and_move() {
     // Different length, since we use `size` to check if replacement is successful.
     const CONTENT1: &[u8] = b"aaa";
     const CONTENT2: &[u8] = b"bbbbbb";
@@ -119,46 +120,41 @@ fn test_file_upload_small_and_move(drive: &OneDrive, client: &impl Client) {
     let file2_loc = rooted_location(file2_name);
 
     // #1
-    drive
+    ONEDRIVE
         .upload_small(file1_loc, CONTENT1)
-        .execute(client)
         .expect("Cannot upload file 1");
-    let guard1 = AutoDelete::new(drive, client, file1_loc);
+    let guard1 = AutoDelete::new(file1_loc);
 
     // #2
-    drive
+    ONEDRIVE
         .upload_small(file2_loc, CONTENT2)
-        .execute(client)
         .expect("Cannot upload file 2");
-    let guard2 = AutoDelete::new(drive, client, file2_loc);
+    let guard2 = AutoDelete::new(file2_loc);
 
     // #3
     assert_eq!(
-        drive
+        ONEDRIVE
             .move_(file1_loc, ItemLocation::root(), Some(file2_name))
-            .execute(client)
             .expect_err("Should not move with overwrite by default")
             .status_code(),
         Some(StatusCode::CONFLICT),
     );
 
     // #4
-    drive
+    ONEDRIVE
         .move_with_option(
             file1_loc,
             ItemLocation::root(),
             Some(file2_name),
             DriveItemPutOption::new().conflict_behavior(ConflictBehavior::Replace),
         )
-        .execute(client)
         .expect("Cannot move with overwrite");
     guard1.defuse();
 
     // #5
     assert_eq!(
-        drive
+        ONEDRIVE
             .get_item(file2_loc)
-            .execute(client)
             .expect("Cannot get file2")
             .size
             .expect("Missing `size`"),
@@ -171,7 +167,9 @@ fn test_file_upload_small_and_move(drive: &OneDrive, client: &impl Client) {
 }
 
 /// 5 requests
-fn test_file_upload_small_and_copy(drive: &OneDrive, client: &impl Client) {
+#[test]
+#[ignore]
+fn test_file_upload_small_and_copy() {
     const CONTENT: &[u8] = b"hello, copy";
     const WAIT_TIME: std::time::Duration = std::time::Duration::from_millis(1000);
     const MAX_WAIT_COUNT: usize = 5;
@@ -182,16 +180,14 @@ fn test_file_upload_small_and_copy(drive: &OneDrive, client: &impl Client) {
     let loc2 = rooted_location(name2);
 
     // #1
-    drive
+    ONEDRIVE
         .upload_small(loc1, CONTENT)
-        .execute(client)
         .expect("Cannot upload file");
-    let guard1 = AutoDelete::new(drive, client, loc1);
+    let guard1 = AutoDelete::new(loc1);
 
     // #2
-    let monitor = drive
+    let monitor = ONEDRIVE
         .copy(loc1, ItemLocation::root(), name2)
-        .execute(client)
         .expect("Cannot start copy");
     for i in 0.. {
         std::thread::sleep(WAIT_TIME);
@@ -199,7 +195,6 @@ fn test_file_upload_small_and_copy(drive: &OneDrive, client: &impl Client) {
         // #3
         match monitor
             .fetch_progress()
-            .execute(client)
             .expect("Failed to check `copy` progress")
             .status
         {
@@ -212,7 +207,7 @@ fn test_file_upload_small_and_copy(drive: &OneDrive, client: &impl Client) {
             panic!("Copy timeout");
         }
     }
-    let guard2 = AutoDelete::new(drive, client, loc2);
+    let guard2 = AutoDelete::new(loc2);
 
     // #4
     drop(guard2);
@@ -221,7 +216,9 @@ fn test_file_upload_small_and_copy(drive: &OneDrive, client: &impl Client) {
 }
 
 /// 8 requests
-fn test_file_upload_session(drive: &OneDrive, client: &impl Client) {
+#[test]
+#[ignore]
+fn test_file_upload_session() {
     type Range = std::ops::Range<usize>;
     const CONTENT: &[u8] = b"12345678";
     const RANGE1: Range = 0..2;
@@ -231,31 +228,28 @@ fn test_file_upload_session(drive: &OneDrive, client: &impl Client) {
     let item_loc = rooted_location(gen_filename());
 
     // #1
-    let sess = drive
+    let sess = ONEDRIVE
         .new_upload_session(item_loc)
-        .execute(client)
         .expect("Cannot create upload session");
 
     println!(
         "Upload session will expire at {:?}",
         sess.expiration_date_time(),
     );
-    let guard = AutoDelete::new_sess(drive, client, &sess);
+    let guard = AutoDelete::new_sess(&sess);
 
     // #2
     assert!(
-        drive
+        ONEDRIVE
             .upload_to_session(&sess, &CONTENT[RANGE1], RANGE1, CONTENT.len())
-            .execute(client)
             .expect("Cannot upload part 1")
             .is_none(),
         "Uploading part 1 should not complete",
     );
 
     // #3
-    let sess = drive
+    let sess = ONEDRIVE
         .get_upload_session(sess.upload_url())
-        .execute(client)
         .expect("Cannot re-get upload session");
     let next_ranges = sess.next_expected_ranges();
     assert!(
@@ -268,27 +262,24 @@ fn test_file_upload_session(drive: &OneDrive, client: &impl Client) {
 
     // #4
     assert_eq!(
-        drive
+        ONEDRIVE
             .upload_to_session(&sess, &CONTENT[RANGE2_ERROR], RANGE2_ERROR, CONTENT.len(),)
-            .execute(client)
             .expect_err("Upload wrong range should fail")
             .status_code(),
         Some(StatusCode::RANGE_NOT_SATISFIABLE),
     );
 
     // #5
-    drive
+    ONEDRIVE
         .upload_to_session(&sess, &CONTENT[RANGE2], RANGE2, CONTENT.len())
-        .execute(client)
         .expect("Failed to upload part 2")
         .expect("Uploading should be completed");
     guard.defuse();
-    let guard = AutoDelete::new(drive, client, item_loc);
+    let guard = AutoDelete::new(item_loc);
 
     // #6
-    let download_url = drive
+    let download_url = ONEDRIVE
         .get_item(item_loc)
-        .execute(client)
         .expect("Cannot get download url")
         .download_url
         .expect("Cannot get `download_url`");
@@ -301,44 +292,41 @@ fn test_file_upload_session(drive: &OneDrive, client: &impl Client) {
 }
 
 /// 8 requests
-fn test_track_changes(drive: &OneDrive, client: &impl Client) {
+#[test]
+#[ignore]
+fn test_track_changes() {
     use std::{collections::HashSet, iter::FromIterator};
 
     let container_name = gen_filename();
     let container_loc = rooted_location(container_name);
 
     // #1
-    let container_id = drive
+    let container_id = ONEDRIVE
         .create_folder(ItemLocation::root(), container_name)
-        .execute(client)
         .expect("Cannot create container folder")
         .id
         .expect("Missing `id`");
-    let guard = AutoDelete::new(drive, client, container_loc);
+    let guard = AutoDelete::new(container_loc);
 
     // #2
-    let folder1_id = drive
+    let folder1_id = ONEDRIVE
         .create_folder(container_loc, gen_filename())
-        .execute(client)
         .expect("Failed to create folder1")
         .id
         .expect("Missing `id`");
 
     // #3
-    let folder2_id = drive
+    let folder2_id = ONEDRIVE
         .create_folder(container_loc, gen_filename())
-        .execute(client)
         .expect("Failed to create folder2")
         .id
         .expect("Missing `id`");
 
     // #4
-    let (initial_changes, _) = drive
+    let (initial_changes, _) = ONEDRIVE
         .track_changes_from_initial(container_loc)
-        .execute(client)
         .expect("Cannot track initial changes")
         .fetch_all()
-        .execute(client)
         .expect("Cannot fetch all initial changes");
 
     // Items may duplicate.
@@ -357,16 +345,14 @@ fn test_track_changes(drive: &OneDrive, client: &impl Client) {
     );
 
     // #5
-    let delta_url = drive
+    let delta_url = ONEDRIVE
         .get_latest_delta_url(container_loc)
-        .execute(client)
         .expect("Failed to get latest track change delta url");
 
     // #6
     // Create under folder1
-    let folder3_id = drive
+    let folder3_id = ONEDRIVE
         .create_folder(&folder1_id, gen_filename())
-        .execute(client)
         .expect("Failed to create folder3")
         .id
         .expect("Missing `id`");
@@ -379,12 +365,10 @@ fn test_track_changes(drive: &OneDrive, client: &impl Client) {
     //    |- folder2
 
     // #7
-    let (delta_changes, _) = drive
+    let (delta_changes, _) = ONEDRIVE
         .track_changes_from_delta_url(&delta_url)
-        .execute(client)
         .expect("Failed to track changes with delta url")
         .fetch_all()
-        .execute(client)
         .expect("Failed to fetch all changes with delta url");
     assert_eq!(
         delta_changes
@@ -400,44 +384,40 @@ fn test_track_changes(drive: &OneDrive, client: &impl Client) {
 }
 
 mod utils {
+    use super::ONEDRIVE;
     use lazy_static::lazy_static;
     use onedrive_api::*;
 
-    pub struct AutoDelete<'a, C: Client> {
-        drive: &'a OneDrive,
-        client: &'a C,
+    pub struct AutoDelete<'a> {
         item: Option<ItemLocation<'a>>,
         sess: Option<&'a UploadSession>,
     }
 
-    impl<'a, C: Client + 'a> AutoDelete<'a, C> {
-        pub fn new(drive: &'a OneDrive, client: &'a C, item: impl Into<ItemLocation<'a>>) -> Self {
+    impl<'a> AutoDelete<'a> {
+        pub fn new(item: impl Into<ItemLocation<'a>>) -> Self {
             Self {
-                drive,
-                client,
                 item: Some(item.into()),
                 sess: None,
             }
         }
 
-        pub fn new_sess(drive: &'a OneDrive, client: &'a C, sess: &'a UploadSession) -> Self {
+        pub fn new_sess(sess: &'a UploadSession) -> Self {
             Self {
-                drive,
-                client,
                 item: None,
                 sess: Some(sess),
             }
         }
 
         pub fn defuse(self) {
+            // FIXME: May leak.
             std::mem::forget(self);
         }
     }
 
-    impl<C: Client> Drop for AutoDelete<'_, C> {
+    impl Drop for AutoDelete<'_> {
         fn drop(&mut self) {
             if let Some(item) = self.item {
-                match self.drive.delete(item).execute(self.client) {
+                match ONEDRIVE.delete(item) {
                     Err(e) if !std::thread::panicking() => {
                         panic!("Cannot delete item {:?}: {}", self.item, e);
                     }
@@ -445,7 +425,7 @@ mod utils {
                 }
             }
             if let Some(sess) = self.sess {
-                match self.drive.delete_upload_session(sess).execute(self.client) {
+                match ONEDRIVE.delete_upload_session(sess) {
                     Err(e) if !std::thread::panicking() => {
                         panic!("Cannot delete upload session {:?}: {}", sess, e);
                     }
@@ -486,9 +466,9 @@ mod utils {
     }
 }
 
-mod rw {
+mod login {
     use lazy_static::lazy_static;
-    use reqwest;
+    use onedrive_api::{DriveLocation, OneDrive};
     use serde::{Deserialize, Serialize};
     use serde_json;
     use std::fs;
@@ -508,12 +488,11 @@ mod rw {
 
     // Support code auth only currently.
     fn check_token(setting: &mut LoginSetting) -> String {
-        use onedrive_api::{Api, Authentication, DriveLocation, OneDrive, Permission};
+        use onedrive_api::{Authentication, Permission};
 
-        let client = reqwest::Client::new();
         let auth = Authentication::new(
             setting.client_id.clone(),
-            Permission::new_read().offline_access(true),
+            Permission::new_read().write(true).offline_access(true),
             setting.redirect_uri.clone(),
         );
 
@@ -521,7 +500,6 @@ mod rw {
             println!("Login with code...");
             let tok = auth
                 .login_with_code(&code, setting.client_secret.as_ref().map(|s| &**s))
-                .execute(&client)
                 .expect("Failed to login with code");
             setting.token = Some(tok.token.clone());
             setting.refresh_token = Some(tok.refresh_token.expect("Cannot get refresh token"));
@@ -530,8 +508,7 @@ mod rw {
 
         if let Some(token) = &setting.token {
             println!("Try get_drive with given token...");
-            let drive = OneDrive::new(token.to_owned(), DriveLocation::me());
-            match drive.get_drive().execute(&client) {
+            match OneDrive::new(token.to_owned(), DriveLocation::me()).get_drive() {
                 Ok(_) => return token.to_owned(),
                 Err(err) => println!("`get_drive` failed: {:?}", err),
             }
@@ -539,13 +516,10 @@ mod rw {
 
         if let Some(refresh_token) = &setting.refresh_token {
             println!("Login with refresh token...");
-            match auth
-                .login_with_refresh_token(
-                    &refresh_token,
-                    setting.client_secret.as_ref().map(|s| &**s),
-                )
-                .execute(&client)
-            {
+            match auth.login_with_refresh_token(
+                &refresh_token,
+                setting.client_secret.as_ref().map(|s| &**s),
+            ) {
                 Ok(tok) => {
                     setting.token = Some(tok.token.clone());
                     setting.refresh_token = tok.refresh_token;
@@ -591,30 +565,7 @@ mod rw {
     }
 
     lazy_static! {
-        static ref TOKEN: String = init_token();
-        static ref CLIENT: reqwest::Client = reqwest::Client::new();
-    }
-
-    macro_rules! test_fns {
-        ($($name:ident;)*) => {
-            $(
-                #[test]
-                #[ignore]
-                fn $name() {
-                    use onedrive_api::{OneDrive, DriveLocation};
-                    let drive = OneDrive::new(TOKEN.clone(), DriveLocation::me());
-                    super::$name(&drive, &*CLIENT);
-                }
-            )*
-        };
-    }
-
-    test_fns! {
-        test_folder_create_and_delete;
-        test_folder_create_and_update;
-        test_file_upload_small_and_move;
-        test_file_upload_small_and_copy;
-        test_file_upload_session;
-        test_track_changes;
+        pub static ref TOKEN: String = init_token();
+        pub static ref ONEDRIVE: OneDrive = OneDrive::new(TOKEN.to_owned(), DriveLocation::me());
     }
 }
