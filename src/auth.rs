@@ -77,8 +77,18 @@ pub struct Authentication {
 impl Authentication {
     /// Create an new instance for authentication with specified client identifier and permission.
     pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
+        Self::new_with_client(Client::new(), client_id, permission, redirect_uri)
+    }
+
+    /// Same as `Authentication::new` but with custom `Client`.
+    pub fn new_with_client(
+        client: Client,
+        client_id: String,
+        permission: Permission,
+        redirect_uri: String,
+    ) -> Self {
         Self {
-            client: Client::new(),
+            client,
             client_id,
             permission,
             redirect_uri,

@@ -49,8 +49,13 @@ pub struct OneDrive {
 impl OneDrive {
     /// Create a new OneDrive instance with token to perform operations in a Drive.
     pub fn new(token: String, drive: impl Into<DriveLocation>) -> Self {
+        Self::new_with_client(Client::new(), token, drive.into())
+    }
+
+    /// Same as `OneDrive::new` but with custom `Client`.
+    pub fn new_with_client(client: Client, token: String, drive: impl Into<DriveLocation>) -> Self {
         OneDrive {
-            client: Client::new(),
+            client,
             token,
             drive: drive.into(),
         }
