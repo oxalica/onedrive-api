@@ -48,7 +48,7 @@ use serde::{Deserialize, Serialize};
 pub type Url = String;
 
 /// Boxed raw json value.
-pub type JsonValue = Box<::serde_json::Value>;
+pub type JsonValue = Box<serde_json::Value>;
 
 /// Timestamp string with ISO 8601 format.
 pub type TimestampString = String;

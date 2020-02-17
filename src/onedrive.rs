@@ -14,17 +14,14 @@ use serde::{Deserialize, Serialize};
 use url::Url;
 
 macro_rules! api_url {
-    (@$init:expr; $($seg:expr),* $(,)?) => {{
-        let mut url = Url::parse($init).unwrap();
+    ($($seg:expr),* $(,)?) => {{
+        let mut url = Url::parse("https://graph.microsoft.com/v1.0").unwrap();
         {
             let mut buf = url.path_segments_mut().unwrap();
             $(ApiPathComponent::extend_into($seg, &mut buf);)*
         } // End borrowing of `url`
         url
     }};
-    ($($t:tt)*) => {
-        api_url!(@"https://graph.microsoft.com/v1.0"; $($t)*)
-    };
 }
 
 /// FIXME: More efficient impl.
@@ -459,7 +456,7 @@ impl OneDrive {
         &self,
         session: &UploadSession,
         data: &[u8],
-        remote_range: ::std::ops::Range<usize>,
+        remote_range: std::ops::Range<usize>,
         total_size: usize,
     ) -> Result<Option<DriveItem>> {
         // FIXME: https://github.com/rust-lang/rust-clippy/issues/3807

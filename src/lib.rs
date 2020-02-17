@@ -93,17 +93,17 @@ pub struct ExpectRange {
 impl<'de> de::Deserialize<'de> for ExpectRange {
     fn deserialize<D: de::Deserializer<'de>>(
         deserializer: D,
-    ) -> ::std::result::Result<Self, D::Error> {
+    ) -> std::result::Result<Self, D::Error> {
         struct Visitor;
 
         impl<'de> de::Visitor<'de> for Visitor {
             type Value = ExpectRange;
 
-            fn expecting(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(f, "Expect Range")
             }
 
-            fn visit_str<E: de::Error>(self, v: &str) -> ::std::result::Result<Self::Value, E> {
+            fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
                 let parse = || -> Option<ExpectRange> {
                     let mut it = v.split('-');
                     let start = it.next()?.parse().ok()?;

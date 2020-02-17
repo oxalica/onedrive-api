@@ -16,7 +16,7 @@ use crate::{
 };
 use http::header;
 use reqwest::RequestBuilder;
-use std::{default::Default, fmt::Write, marker::PhantomData};
+use std::{fmt::Write, marker::PhantomData};
 
 #[derive(Debug, Default)]
 struct AccessOption {

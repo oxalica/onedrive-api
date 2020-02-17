@@ -95,7 +95,6 @@ impl Authentication {
         }
     }
 
-    // FIXME: Change to `url::Url`
     fn auth_url(&self, response_type: &str) -> String {
         Url::parse_with_params(
             "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
