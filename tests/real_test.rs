@@ -12,6 +12,7 @@
 //! Login setting file `tests/login_setting.json` is private and is ignored
 //! in `.gitignore`, so you need to set up it manually before running this test.
 //! The structure is specified in `tests/login_setting.json.template`.
+#![allow(clippy::redundant_clone)]
 extern crate onedrive_api;
 use onedrive_api::{option::*, resource::*, *};
 use reqwest::StatusCode;
@@ -20,6 +21,186 @@ use serde_json::json;
 use self::utils::*;
 
 use login::ONEDRIVE;
+
+/// 3 requests
+#[test]
+#[ignore]
+fn test_get_drive() {
+    // #1
+    let drive1 = ONEDRIVE.get_drive().expect("Cannot get drive #1");
+    assert!(drive1.quota.is_some());
+    assert!(drive1.owner.is_some());
+
+    let drive_id = drive1.id.as_ref().expect("drive1 has no id");
+
+    // #2
+    let drive2 = OneDrive::new(ONEDRIVE.token().to_owned(), drive_id.clone())
+        .get_drive_with_option(ObjectOption::new().select(&[DriveField::id, DriveField::owner]))
+        .expect("Cannot get drive #2");
+    assert_eq!(&drive1.id, &drive2.id); // Checked to be `Some`.
+    assert_eq!(&drive1.owner, &drive2.owner); // Checked to be `Some`.
+    assert!(drive2.quota.is_none(), "drive2 contains unselected `quota`");
+
+    // #3
+    assert_eq!(
+        OneDrive::new(
+            ONEDRIVE.token().to_owned(),
+            DriveId::new(format!("{}_inva_lid", drive_id.as_str())),
+        )
+        .get_drive()
+        .expect_err("Drive id should be invalid")
+        .status_code(),
+        // This API returns 400 instead of 404
+        Some(StatusCode::BAD_REQUEST),
+    );
+}
+
+/// 3 requests
+#[test]
+#[ignore]
+fn test_get_item() {
+    // #1
+    let mut item_by_path = ONEDRIVE
+        .get_item(ItemLocation::from_path("/").unwrap())
+        .expect("Cannot get item by path");
+    let item_id = item_by_path.id.clone().expect("Missing `id`");
+
+    // #2
+    let mut item_by_id = ONEDRIVE.get_item(&item_id).expect("Cannot get item by id");
+    // Remove mutable fields.
+    item_by_path.web_url = None;
+    item_by_path.last_modified_by = None;
+    item_by_path.last_modified_date_time = None;
+    item_by_id.web_url = None;
+    item_by_id.last_modified_by = None;
+    item_by_id.last_modified_date_time = None;
+    assert_eq!(format!("{:?}", item_by_path), format!("{:?}", item_by_id));
+
+    // #3
+    let item_custom = ONEDRIVE
+        .get_item_with_option(&item_id, ObjectOption::new().select(&[DriveItemField::id]))
+        .expect("Cannot get item with option")
+        .expect("No if-none-match");
+    assert_eq!(item_custom.id.as_ref(), Some(&item_id), "`id` mismatch",);
+    assert!(item_custom.size.is_none(), "`size` should not be selected");
+
+    // `If-None-Match` may be ignored by server.
+    // So we don't test it.
+}
+
+/// 7 requests
+#[test]
+#[ignore]
+fn test_folder_create_and_list_children() {
+    fn to_names(v: Vec<DriveItem>) -> Vec<String> {
+        let mut v = v
+            .into_iter()
+            .map(|item| item.name.expect("Missing `name`"))
+            .collect::<Vec<_>>();
+        v.sort();
+        v
+    }
+
+    let container_name = gen_filename();
+    let container_loc = rooted_location(container_name);
+    let (sub_name1, sub_name2) = (gen_filename(), gen_filename());
+    assert!(sub_name1.as_str() < sub_name2.as_str()); // Monotonic
+    let items_origin = vec![sub_name1.as_str().to_owned(), sub_name2.as_str().to_owned()];
+
+    // #1
+    ONEDRIVE
+        .create_folder(ItemLocation::root(), container_name)
+        .expect("Cannot create folder");
+    let guard = AutoDelete::new(container_loc);
+    ONEDRIVE
+        .create_folder(container_loc, sub_name1)
+        .expect("Cannot create sub folder 1");
+    ONEDRIVE
+        .create_folder(container_loc, sub_name2)
+        .expect("Cannot create sub folder 2");
+
+    // #2
+    let mut fetcher = ONEDRIVE
+        .list_children_with_option(
+            container_loc,
+            CollectionOption::new()
+                .select(&[DriveItemField::name, DriveItemField::e_tag])
+                .page_size(1),
+        )
+        .expect("Cannot list children with option")
+        .expect("No if-none-match");
+
+    assert!(
+        fetcher.next_url().is_none(),
+        "`next_url` should be None before page 1",
+    );
+
+    // No request for the first page
+    let t = std::time::Instant::now();
+    let page1 = fetcher
+        .fetch_next_page()
+        .expect("Cannot fetch page 1")
+        .expect("Page 1 should not be None");
+    let elapsed = t.elapsed();
+    assert!(
+        elapsed < std::time::Duration::from_millis(1),
+        "The first page should be cached",
+    );
+    assert_eq!(page1.len(), 1);
+
+    assert!(
+        fetcher.next_url().is_some(),
+        "`next_url` should be Some before page 2",
+    );
+
+    // #3
+    let page2 = fetcher
+        .fetch_next_page()
+        .expect("Cannot fetch page 2")
+        .expect("Page 2 should not be None");
+    assert_eq!(page2.len(), 1);
+
+    assert!(
+        fetcher
+            .fetch_next_page()
+            .expect("Cannot fetch page 3")
+            .is_none(),
+        "Expected to have only 2 pages",
+    );
+
+    let mut items_manual = page1;
+    items_manual.extend(page2);
+    assert!(
+        items_manual.iter().all(|c| c.size.is_none()),
+        "`size` should be not be selected",
+    );
+    let items_manual = to_names(items_manual);
+
+    // #4, #5
+    let items_shortcut = ONEDRIVE
+        .list_children(container_loc)
+        .expect("Cannot list children");
+    let items_shortcut = to_names(items_shortcut);
+
+    // #6
+    let items_expand = ONEDRIVE
+        .get_item_with_option(
+            container_loc,
+            ObjectOption::new().expand(DriveItemField::children, Some(&["name"])),
+        )
+        .expect("Cannot get item with children")
+        .expect("No `If-None-Match`")
+        .children
+        .expect("Missing `children`");
+    let items_expand = to_names(items_expand);
+
+    assert_eq!(items_origin, items_manual);
+    assert_eq!(items_origin, items_shortcut);
+    assert_eq!(items_origin, items_expand);
+
+    // #7
+    drop(guard);
+}
 
 /// 4 requests
 #[test]
@@ -436,13 +617,14 @@ mod utils {
     }
 
     pub fn gen_filename() -> &'static FileName {
-        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::atomic::{AtomicU64, Ordering};
 
         // Randomly initialized counter.
         lazy_static! {
-            static ref COUNTER: AtomicUsize = {
+            static ref COUNTER: AtomicU64 = {
                 use rand::{rngs::StdRng, Rng, SeedableRng};
-                AtomicUsize::new(StdRng::from_entropy().gen())
+                // Avoid overflow to keep it monotonic.
+                AtomicU64::new(u64::from(StdRng::from_entropy().gen::<u32>()))
             };
         }
 
