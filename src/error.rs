@@ -9,8 +9,9 @@ use std::fmt;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Error of API request
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub struct Error {
+    #[fail(display = "{}", inner)]
     inner: Box<ErrorKind>,
 }
 
