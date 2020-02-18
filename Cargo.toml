@@ -13,13 +13,12 @@ documentation = "https://docs.rs/onedrive-api"
 
 [features]
 default = []
-# Enable tests of read-write APIs. See tests/real_test.rs for more details.
-real_test = []
 
 [dependencies]
 failure = { version = "0.1.6", features = ["derive"] }
 http = "0.1.19"
 lazy_static = "1.4.0"
+pico-args = "0.3.1"
 reqwest = "0.9.22"
 serde = { version = "1.0.102", features = ["derive"] }
 serde_json = "1.0.41"
@@ -30,3 +29,6 @@ rand = "0.7.2"
 
 [package.metadata.docs.rs]
 features = []
+
+[workspace]
+members = ["onedrive-api-test"]

@@ -1,0 +1,22 @@
+[package]
+name = "onedrive-api-test"
+version = "0.0.0"
+authors = ["oxalica <oxalicc@pm.me>"]
+edition = "2018"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+failure = "0.1.6"
+onedrive-api = { path = ".." }
+open = "1.3.4"
+pico-args = "0.3.1"
+
+[dev-dependencies]
+envy = "0.4.1"
+lazy_static = "1.4.0"
+rand = "0.7.3"
+reqwest = "0.9.22"
+serde = "1.0.104"
+serde_json = "1.0.48"
