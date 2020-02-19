@@ -1,11 +1,11 @@
 use crate::{
-    api::{Api, ApiExt as _, SimpleApi},
-    error::Error,
-    util::{RequestBuilder as Builder, ResponseExt as _},
+    error::{Error, Result},
+    util::ResponseExt as _,
 };
-use http::{header, Method};
+use http::header;
+use reqwest::Client;
 use serde::Deserialize;
-use url::{form_urlencoded, Url};
+use url::Url;
 
 /// A list of the Microsoft Graph permissions that you want the user to consent to.
 ///
@@ -68,6 +68,7 @@ impl Permission {
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth/auth-concepts?view=graph-rest-1.0)
 #[derive(Debug)]
 pub struct Authentication {
+    client: Client,
     client_id: String,
     permission: Permission,
     redirect_uri: String,
@@ -76,7 +77,18 @@ pub struct Authentication {
 impl Authentication {
     /// Create an new instance for authentication with specified client identifier and permission.
     pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
+        Self::new_with_client(Client::new(), client_id, permission, redirect_uri)
+    }
+
+    /// Same as `Authentication::new` but with custom `Client`.
+    pub fn new_with_client(
+        client: Client,
+        client_id: String,
+        permission: Permission,
+        redirect_uri: String,
+    ) -> Self {
         Self {
+            client,
             client_id,
             permission,
             redirect_uri,
@@ -113,13 +125,10 @@ impl Authentication {
         self.auth_url("code")
     }
 
-    fn request_authorize(
-        &self,
-        require_refresh: bool,
-        params: &[(&str, &str)],
-    ) -> impl Api<Response = Token> {
+    fn request_authorize(&self, require_refresh: bool, params: &[(&str, &str)]) -> Result<Token> {
         #[derive(Deserialize)]
         struct Resp {
+            // FIXME
             // token_type: String,
             // expires_in: u64,
             // scope: String,
@@ -127,42 +136,30 @@ impl Authentication {
             refresh_token: Option<String>,
         }
 
-        SimpleApi::new(
-            Builder::new(
-                Method::POST,
-                "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-            )
+        let resp: Resp = self
+            .client
+            .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-            .bytes_body(
-                form_urlencoded::Serializer::new(String::new())
-                    .extend_pairs(params)
-                    .finish()
-                    .into_bytes(),
-            ),
-        )
-        .and_then(move |resp| {
-            let resp: Resp = resp.parse()?;
-            if !require_refresh || resp.refresh_token.is_some() {
-                Ok(Token {
-                    token: resp.access_token,
-                    refresh_token: resp.refresh_token,
-                    _private: (),
-                })
-            } else {
-                Err(Error::unexpected_response("Missing field `refresh_token`"))
-            }
-        })
+            .form(params)
+            .send()?
+            .parse()?;
+
+        if !require_refresh || resp.refresh_token.is_some() {
+            Ok(Token {
+                token: resp.access_token,
+                refresh_token: resp.refresh_token,
+                _private: (),
+            })
+        } else {
+            Err(Error::unexpected_response("Missing field `refresh_token`"))
+        }
     }
 
     /// Login using a code in code flow authentication.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token)
-    pub fn login_with_code(
-        &self,
-        code: &str,
-        client_secret: Option<&str>,
-    ) -> impl Api<Response = Token> {
+    pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
         self.request_authorize(
             self.permission.offline_access,
             &[
@@ -194,7 +191,7 @@ impl Authentication {
         &self,
         refresh_token: &str,
         client_secret: Option<&str>,
-    ) -> impl Api<Response = Token> {
+    ) -> Result<Token> {
         assert!(
             self.permission.offline_access,
             "Refresh token requires offline_access permission."

@@ -4,24 +4,15 @@
 //! [OneDrive][ms_onedrive] API through [Microsoft Graph][ms_graph], and also [`Authentication`][auth]
 //! with utilities for authentication.
 //!
-//! HTTP APIs are provided by methods returning type [`impl Api`][api], which can be [`execute`][api_execute]d
-//! on any HTTP backends implementing [`trait Client`][client].
-//! You can implement the trait on any custom HTTP backends to execute APIs, or simply enable feature flags to
-//! get support to work with famous HTTP crates.
-//! We currently support:
-//!
-//! - _feature `reqwest`_: [`reqwest`][reqwest]
-//!
 //! Async support is TODO.
 //!
 //! ## Example
 //! ```ignore
-//! // With feature `reqwest` enabled.
-//! use onedrive_api::{OneDrive, Api as _, FileName, DriveLocation, ItemLocation};
-//! use reqwest;
+//! use onedrive_api::{OneDrive, FileName, DriveLocation, ItemLocation};
+//! use reqwest::Client;
 //!
 //! # fn run() -> onedrive_api::Result<()> {
-//! let client = reqwest::Client::new();
+//! let client = Client::new();
 //! let drive = OneDrive::new(
 //!     "<...TOKEN...>".to_owned(), // Login token to Microsoft Graph.
 //!     DriveLocation::me(),
@@ -31,15 +22,13 @@
 //!     .create_folder(
 //!         ItemLocation::root(),
 //!         FileName::new("test_folder").unwrap(),
-//!     )
-//!     .execute(&client)?;
+//!     )?;
 //!
 //! drive
 //!     .upload_small(
 //!         folder_item.id.as_ref().unwrap(),
 //!         b"Hello, world",
-//!     )
-//!     .execute(&client)?;
+//!     )?;
 //!
 //! # Ok(())
 //! # }
@@ -47,18 +36,16 @@
 //!
 //! [ms_onedrive]: https://onedrive.live.com/about
 //! [ms_graph]: https://docs.microsoft.com/graph/overview
-//! [reqwest]: https://crates.io/crates/reqwest
 //! [one_drive]: ./struct.OneDrive.html
 //! [auth]: ./struct.Authentication.html
 //! [api]: ./trait.Api.html
 //! [api_execute]: ./trait.Api.html#tymethod.execute
 //! [client]: ./trait.Client.html
-#![deny(warnings)]
+// #![deny(warnings)]
 #![deny(missing_debug_implementations)]
 #![deny(missing_docs)]
 use serde::{de, Serialize};
 
-mod api;
 mod auth;
 mod error;
 mod onedrive;
@@ -67,7 +54,6 @@ pub mod resource;
 mod util;
 
 pub use self::{
-    api::{Api, Client},
     auth::{Authentication, Permission, Token},
     error::{Error, Result},
     onedrive::{
@@ -107,17 +93,17 @@ pub struct ExpectRange {
 impl<'de> de::Deserialize<'de> for ExpectRange {
     fn deserialize<D: de::Deserializer<'de>>(
         deserializer: D,
-    ) -> ::std::result::Result<Self, D::Error> {
+    ) -> std::result::Result<Self, D::Error> {
         struct Visitor;
 
         impl<'de> de::Visitor<'de> for Visitor {
             type Value = ExpectRange;
 
-            fn expecting(&self, f: &mut ::std::fmt::Formatter) -> ::std::fmt::Result {
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
                 write!(f, "Expect Range")
             }
 
-            fn visit_str<E: de::Error>(self, v: &str) -> ::std::result::Result<Self::Value, E> {
+            fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<Self::Value, E> {
                 let parse = || -> Option<ExpectRange> {
                     let mut it = v.split('-');
                     let start = it.next()?.parse().ok()?;

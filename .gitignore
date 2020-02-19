@@ -3,6 +3,7 @@
 Cargo.lock
 /.vscode
 *.snap.new
+.env*
 
 /src/main.rs
 /tests/login_setting.json

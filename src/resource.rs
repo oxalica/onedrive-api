@@ -10,12 +10,11 @@
 //! ## Example
 //! Here is an example to use [`resource::DriveItemField`][drive_item_field].
 //! ```
-//! use onedrive_api::{OneDrive, Api as _, ItemLocation, option::ObjectOption};
+//! use onedrive_api::{OneDrive, ItemLocation, option::ObjectOption};
 //! use onedrive_api::resource::*;
 //!
-//! # fn run(drive: &OneDrive, client: impl onedrive_api::Client) -> onedrive_api::Result<()> {
+//! # fn run(drive: &OneDrive) -> onedrive_api::Result<()> {
 //! // let drive: OneDrive;
-//! // let client: impl onedrive_api::Client;
 //! let item: Option<DriveItem> = drive
 //!     .get_item_with_option(
 //!         ItemLocation::root(),
@@ -23,8 +22,7 @@
 //!             .if_none_match(&Tag::new("<abcdABCD1234>".to_owned()))
 //!             // Only response `id` and `e_tag` to reduce data transmission.
 //!             .select(&[DriveItemField::id, DriveItemField::e_tag]),
-//!     )
-//!     .execute(&client)?;
+//!     )?;
 //! match item {
 //!     None => println!("Tag matched"),
 //!     Some(item) => {
@@ -50,7 +48,7 @@ use serde::{Deserialize, Serialize};
 pub type Url = String;
 
 /// Boxed raw json value.
-pub type JsonValue = Box<::serde_json::Value>;
+pub type JsonValue = Box<serde_json::Value>;
 
 /// Timestamp string with ISO 8601 format.
 pub type TimestampString = String;
