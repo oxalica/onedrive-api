@@ -1,0 +1,22 @@
+name: Real test
+on: push
+
+jobs:
+  test:
+    name: Real test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - name: Real Test
+        env:
+          RUST_BACKTRACE: full
+          ONEDRIVE_API_TEST_CLIENT_ID: ${{ secrets.ONEDRIVE_API_TEST_CLIENT_ID }}
+          ONEDRIVE_API_TEST_REDIRECT_URI: ${{ secrets.ONEDRIVE_API_TEST_REDIRECT_URI }}
+          ONEDRIVE_API_TEST_REFRESH_TOKEN: ${{ secrets.ONEDRIVE_API_TEST_REFRESH_TOKEN }}
+        run: |
+          cd onedrive-api-test
+          cargo test

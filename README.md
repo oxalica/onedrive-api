@@ -1,6 +1,6 @@
 # onedrive-api
 
-[![Travis CI Status](https://travis-ci.org/oxalica/onedrive-api.svg?branch=master)](https://travis-ci.org/oxalica/onedrive-api)
+[![Build Status](https://img.shields.io/endpoint.svg?url=https%3A%2F%2Factions-badge.atrox.dev%2Foxalica%2Fonedrive-api%2Fbadge%3Fref%3Dmaster&style=flat)](https://actions-badge.atrox.dev/oxalica/onedrive-api/goto?ref=master)
 [![crates.io](https://img.shields.io/crates/v/onedrive-api.svg)](https://crates.io/crates/onedrive-api)
 [![Documentation](https://docs.rs/onedrive-api/badge.svg)](https://docs.rs/onedrive-api)
 
