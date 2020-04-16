@@ -1,7 +1,7 @@
 with import <nixpkgs> {};
 pkgs.mkShell {
   buildInputs = [
-    pkgconfig
+    pkg-config
     openssl
   ];
 }

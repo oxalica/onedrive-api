@@ -136,6 +136,7 @@ impl Authentication {
             refresh_token: Option<String>,
         }
 
+        // FIXME: Custom error variants? https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#error-codes-for-authorization-endpoint-errors
         let resp: Resp = self
             .client
             .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")

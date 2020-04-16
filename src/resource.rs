@@ -302,6 +302,7 @@ fn snake_to_camel_case(s: &str) -> String {
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/errors#error-resource-type)
 ///
 /// [error]: ../struct.Error.html
+// FIXME: Fail to deserialize `inner_error` in some cases.
 #[allow(missing_docs)]
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
