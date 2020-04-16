@@ -3,8 +3,8 @@ use crate::{
     option::{CollectionOption, DriveItemPutOption, ObjectOption},
     resource::*,
     util::{
-        ApiPathComponent, DriveLocation, FileName, ItemLocation, RequestBuilderExt as _,
-        ResponseExt as _,
+        handle_error_response, ApiPathComponent, DriveLocation, FileName, ItemLocation,
+        RequestBuilderExt as _, ResponseExt as _,
     },
     {ConflictBehavior, ExpectRange},
 };
@@ -24,7 +24,7 @@ macro_rules! api_url {
     }};
 }
 
-/// FIXME: More efficient impl.
+/// TODO: More efficient impl.
 macro_rules! api_path {
     ($item:expr) => {{
         let mut url = Url::parse("path:///drive").unwrap();
@@ -71,13 +71,15 @@ impl OneDrive {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0)
     ///
     /// [drive]: ./resource/struct.Drive.html
-    pub fn get_drive_with_option(&self, option: ObjectOption<DriveField>) -> Result<Drive> {
+    pub async fn get_drive_with_option(&self, option: ObjectOption<DriveField>) -> Result<Drive> {
         self.client
             .get(api_url![&self.drive])
             .apply(option)
             .bearer_auth(&self.token)
-            .send()?
+            .send()
+            .await?
             .parse()
+            .await
     }
 
     /// Shortcut to `get_drive_with_option` with default parameters.
@@ -86,8 +88,8 @@ impl OneDrive {
     /// [`get_drive_with_option`][with_opt]
     ///
     /// [with_opt]: #method.get_drive_with_option
-    pub fn get_drive(&self) -> Result<Drive> {
-        self.get_drive_with_option(Default::default())
+    pub async fn get_drive(&self) -> Result<Drive> {
+        self.get_drive_with_option(Default::default()).await
     }
 
     /// List children of a `DriveItem`.
@@ -107,7 +109,7 @@ impl OneDrive {
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
     /// [fetcher]: ./struct.ListChildrenFetcher.html
-    pub fn list_children_with_option<'s, 'a>(
+    pub async fn list_children_with_option<'s, 'a>(
         &'s self,
         item: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
@@ -117,8 +119,10 @@ impl OneDrive {
             .get(api_url![&self.drive, &item.into(), "children"])
             .apply(option)
             .bearer_auth(&self.token)
-            .send()?
-            .parse_optional()?;
+            .send()
+            .await?
+            .parse_optional()
+            .await?;
 
         Ok(opt_resp.map(|resp| ListChildrenFetcher::new(self, resp)))
     }
@@ -131,10 +135,15 @@ impl OneDrive {
     ///
     /// [with_opt]: #method.list_children_with_option
     // FIXME: https://github.com/rust-lang/rust/issues/42940
-    pub fn list_children<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<Vec<DriveItem>> {
-        self.list_children_with_option(item, Default::default())?
+    pub async fn list_children<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+    ) -> Result<Vec<DriveItem>> {
+        self.list_children_with_option(item, Default::default())
+            .await?
             .ok_or_else(|| Error::unexpected_response("Unexpected empty response"))?
             .fetch_all()
+            .await
     }
 
     /// Get a `DriveItem` resource.
@@ -149,7 +158,7 @@ impl OneDrive {
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
-    pub fn get_item_with_option<'a>(
+    pub async fn get_item_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         option: ObjectOption<DriveItemField>,
@@ -158,8 +167,10 @@ impl OneDrive {
             .get(api_url![&self.drive, &item.into()])
             .apply(option)
             .bearer_auth(&self.token)
-            .send()?
+            .send()
+            .await?
             .parse_optional()
+            .await
     }
 
     /// Shortcut to `get_item_with_option` with default parameters.
@@ -168,8 +179,9 @@ impl OneDrive {
     /// [`get_item_with_option`][with_opt]
     ///
     /// [with_opt]: #method.get_item_with_option
-    pub fn get_item<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<DriveItem> {
-        self.get_item_with_option(item, Default::default())?
+    pub async fn get_item<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<DriveItem> {
+        self.get_item_with_option(item, Default::default())
+            .await?
             .ok_or_else(|| Error::unexpected_response("Unexpected empty response"))
     }
 
@@ -187,7 +199,7 @@ impl OneDrive {
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
     /// [conflict_fail]: ./enum.ConflictBehavior.html#variant.Fail
-    pub fn create_folder_with_option<'a>(
+    pub async fn create_folder_with_option<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
         name: &FileName,
@@ -217,8 +229,10 @@ impl OneDrive {
                 folder: Folder {},
                 conflict_behavior,
             })
-            .send()?
+            .send()
+            .await?
             .parse()
+            .await
     }
 
     /// Shortcut to `create_folder_with_option` with default options.
@@ -227,12 +241,13 @@ impl OneDrive {
     /// [`create_folder_with_option`][with_opt]
     ///
     /// [with_opt]: #method.create_folder_with_option
-    pub fn create_folder<'a>(
+    pub async fn create_folder<'a>(
         &self,
         parent_item: impl Into<ItemLocation<'a>>,
         name: &FileName,
     ) -> Result<DriveItem> {
         self.create_folder_with_option(parent_item, name, Default::default())
+            .await
     }
 
     /// Update DriveItem properties
@@ -249,7 +264,7 @@ impl OneDrive {
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [move_]: #method.move_
     /// [move_with_opt]: #method.move_with_option
-    pub fn update_item_with_option<'a>(
+    pub async fn update_item_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         patch: &DriveItem,
@@ -260,8 +275,10 @@ impl OneDrive {
             .bearer_auth(&self.token)
             .apply(option)
             .json(patch)
-            .send()?
+            .send()
+            .await?
             .parse()
+            .await
     }
 
     /// Shortcut to `update_item_with_option` with default options.
@@ -270,12 +287,13 @@ impl OneDrive {
     /// [`update_item_with_option`][with_opt]
     ///
     /// [with_opt]: #method.update_item_with_option
-    pub fn update_item<'a>(
+    pub async fn update_item<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         patch: &DriveItem,
     ) -> Result<DriveItem> {
         self.update_item_with_option(item, patch, Default::default())
+            .await
     }
 
     const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
@@ -293,7 +311,7 @@ impl OneDrive {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0)
     ///
     /// [drive_item]: ./resource/struct.DriveItem.html
-    pub fn upload_small<'a>(
+    pub async fn upload_small<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         data: &[u8],
@@ -310,8 +328,10 @@ impl OneDrive {
             .bearer_auth(&self.token)
             // FIXME: Avoid copying.
             .body(data.to_vec())
-            .send()?
+            .send()
+            .await?
             .parse()
+            .await
     }
 
     /// Create an upload session.
@@ -334,7 +354,7 @@ impl OneDrive {
     ///
     /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
     /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
-    pub fn new_upload_session_with_option<'a>(
+    pub async fn new_upload_session_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         option: DriveItemPutOption,
@@ -360,8 +380,10 @@ impl OneDrive {
             .json(&Req {
                 item: Item { conflict_behavior },
             })
-            .send()?
+            .send()
+            .await?
             .parse()
+            .await
     }
 
     /// Shortcut to `new_upload_session_with_option` with `ConflictBehavior::Fail`.
@@ -370,11 +392,12 @@ impl OneDrive {
     /// [`new_upload_session_with_option`][with_opt]
     ///
     /// [with_opt]: #method.new_upload_session_with_option
-    pub fn new_upload_session<'a>(
+    pub async fn new_upload_session<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
     ) -> Result<UploadSession> {
         self.new_upload_session_with_option(item, Default::default())
+            .await
     }
 
     /// Resuming an in-progress upload
@@ -384,7 +407,7 @@ impl OneDrive {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#resuming-an-in-progress-upload)
-    pub fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
+    pub async fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct Resp {
@@ -393,7 +416,7 @@ impl OneDrive {
             expiration_date_time: TimestampString,
         }
 
-        let resp: Resp = self.client.get(upload_url).send()?.parse()?;
+        let resp: Resp = self.client.get(upload_url).send().await?.parse().await?;
 
         Ok(UploadSession {
             upload_url: upload_url.to_owned(),
@@ -414,11 +437,13 @@ impl OneDrive {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session)
-    pub fn delete_upload_session(&self, sess: &UploadSession) -> Result<()> {
+    pub async fn delete_upload_session(&self, sess: &UploadSession) -> Result<()> {
         self.client
             .delete(&sess.upload_url)
-            .send()?
+            .send()
+            .await?
             .parse_no_content()
+            .await
     }
 
     const UPLOAD_SESSION_PART_LIMIT: usize = 60 << 20; // 60 MiB
@@ -452,7 +477,7 @@ impl OneDrive {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
-    pub fn upload_to_session(
+    pub async fn upload_to_session(
         &self,
         session: &UploadSession,
         data: &[u8],
@@ -495,8 +520,10 @@ impl OneDrive {
             )
             // FIXME: Avoid copying.
             .body(data.to_vec())
-            .send()?
+            .send()
+            .await?
             .parse_optional()
+            .await
     }
 
     /// Copy a DriveItem.
@@ -515,12 +542,12 @@ impl OneDrive {
     ///
     /// [conflict_rename]: ./enum.ConflictBehavior.html#variant.Rename
     /// [conflict_fail]: ./enum.ConflictBehavior.html#variant.Fail
-    pub fn copy<'a, 'b>(
-        &self,
+    pub async fn copy<'s, 'a, 'b>(
+        &'s self,
         source_item: impl Into<ItemLocation<'a>>,
         dest_folder: impl Into<ItemLocation<'b>>,
         dest_name: &FileName,
-    ) -> Result<CopyProgressMonitor> {
+    ) -> Result<CopyProgressMonitor<'s>> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Req<'a> {
@@ -538,10 +565,11 @@ impl OneDrive {
                 },
                 name: dest_name.as_str(),
             })
-            .send()?;
+            .send()
+            .await?;
 
-        let url = raw_resp
-            .handle_error_response()?
+        let url = handle_error_response(raw_resp)
+            .await?
             .headers()
             .get(header::LOCATION)
             .ok_or_else(|| {
@@ -574,7 +602,7 @@ impl OneDrive {
     ///
     /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
     /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
-    pub fn move_with_option<'a, 'b>(
+    pub async fn move_with_option<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
         dest_folder: impl Into<ItemLocation<'b>>,
@@ -604,8 +632,10 @@ impl OneDrive {
                 name: dest_name.map(FileName::as_str),
                 conflict_behavior,
             })
-            .send()?
+            .send()
+            .await?
             .parse()
+            .await
     }
 
     /// Shortcut to `move_with_option` with `ConflictBehavior::Fail`.
@@ -614,13 +644,14 @@ impl OneDrive {
     /// [`move_with_option`][with_opt]
     ///
     /// [with_opt]: #method.move_with_option
-    pub fn move_<'a, 'b>(
+    pub async fn move_<'a, 'b>(
         &self,
         source_item: impl Into<ItemLocation<'a>>,
         dest_folder: impl Into<ItemLocation<'b>>,
         dest_name: Option<&FileName>,
     ) -> Result<DriveItem> {
         self.move_with_option(source_item, dest_folder, dest_name, Default::default())
+            .await
     }
 
     /// Delete a `DriveItem`.
@@ -642,7 +673,7 @@ impl OneDrive {
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
     /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
-    pub fn delete_with_option<'a>(
+    pub async fn delete_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         option: DriveItemPutOption,
@@ -656,8 +687,10 @@ impl OneDrive {
             .delete(api_url![&self.drive, &item.into()])
             .bearer_auth(&self.token)
             .apply(option)
-            .send()?
+            .send()
+            .await?
             .parse_no_content()
+            .await
     }
 
     /// Shortcut to `delete_with_option`.
@@ -666,8 +699,8 @@ impl OneDrive {
     /// [`delete_with_option`][with_opt]
     ///
     /// [with_opt]: #method.delete_with_option
-    pub fn delete<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<()> {
-        self.delete_with_option(item, Default::default())
+    pub async fn delete<'a>(&self, item: impl Into<ItemLocation<'a>>) -> Result<()> {
+        self.delete_with_option(item, Default::default()).await
     }
 
     /// Track changes for a folder from initial state (empty state) to snapshot of current states.
@@ -687,7 +720,7 @@ impl OneDrive {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0)
     ///
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub fn track_changes_from_initial_with_option<'a>(
+    pub async fn track_changes_from_initial_with_option<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
@@ -697,8 +730,10 @@ impl OneDrive {
             .get(api_url![&self.drive, &folder.into(), "delta"])
             .apply(option)
             .bearer_auth(&self.token)
-            .send()?
-            .parse()?;
+            .send()
+            .await?
+            .parse()
+            .await?;
         Ok(TrackChangeFetcher::new(self, resp))
     }
 
@@ -711,11 +746,12 @@ impl OneDrive {
     ///
     /// [with_opt]: #method.track_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub fn track_changes_from_initial<'a>(
+    pub async fn track_changes_from_initial<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
     ) -> Result<TrackChangeFetcher<'_>> {
         self.track_changes_from_initial_with_option(folder, Default::default())
+            .await
     }
 
     /// Track changes for a folder from snapshot (delta url) to snapshot of current states.
@@ -727,7 +763,7 @@ impl OneDrive {
     ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub fn track_changes_from_delta_url<'t>(
+    pub async fn track_changes_from_delta_url<'t>(
         &'t self,
         delta_url: &str,
     ) -> Result<TrackChangeFetcher<'_>> {
@@ -735,8 +771,10 @@ impl OneDrive {
             .client
             .get(delta_url)
             .bearer_auth(&self.token)
-            .send()?
-            .parse()?;
+            .send()
+            .await?
+            .parse()
+            .await?;
         Ok(TrackChangeFetcher::new(self, resp))
     }
 
@@ -749,13 +787,18 @@ impl OneDrive {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#retrieving-the-current-deltalink)
     ///
     /// [track_from_delta]: #method.track_changes_from_delta_url
-    pub fn get_latest_delta_url<'a>(&self, folder: impl Into<ItemLocation<'a>>) -> Result<String> {
+    pub async fn get_latest_delta_url<'a>(
+        &self,
+        folder: impl Into<ItemLocation<'a>>,
+    ) -> Result<String> {
         self.client
             .get(api_url![&self.drive, &folder.into(), "delta"])
             .query(&[("token", "latest")])
             .bearer_auth(&self.token)
-            .send()?
-            .parse::<DriveItemCollectionResponse>()?
+            .send()
+            .await?
+            .parse::<DriveItemCollectionResponse>()
+            .await?
             .delta_url
             .ok_or_else(|| {
                 Error::unexpected_response(
@@ -783,6 +826,7 @@ pub struct CopyProgressMonitor<'a> {
 ///
 /// # See also
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta)
+// FIXME: Beta API
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct CopyProgress {
@@ -799,6 +843,7 @@ pub struct CopyProgress {
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta#json-representation)
 ///
 /// [copy_progress]: ./struct.CopyProgress.html
+// FIXME: Beta API
 #[allow(missing_docs)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -834,7 +879,7 @@ impl<'a> CopyProgressMonitor<'a> {
     /// [`CopyProgress`][copy_progress]
     ///
     /// [copy_progress]: ../struct.CopyProgress.html
-    pub fn fetch_progress(&self) -> Result<CopyProgress> {
+    pub async fn fetch_progress(&self) -> Result<CopyProgress> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]
         struct Resp {
@@ -842,7 +887,14 @@ impl<'a> CopyProgressMonitor<'a> {
             status: CopyStatus,
         }
 
-        let resp: Resp = self.onedrive.client.get(&self.url).send()?.parse()?;
+        let resp: Resp = self
+            .onedrive
+            .client
+            .get(&self.url)
+            .send()
+            .await?
+            .parse()
+            .await?;
 
         Ok(CopyProgress {
             percentage_complete: resp.percentage_complete,
@@ -903,7 +955,7 @@ impl<'a> DriveItemFetcher<'a> {
         self.last_response.delta_url.as_ref().map(|s| &**s)
     }
 
-    fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
+    async fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
         if let Some(items) = self.last_response.value.take() {
             return Ok(Some(items));
         }
@@ -916,14 +968,16 @@ impl<'a> DriveItemFetcher<'a> {
             .client
             .get(url)
             .bearer_auth(&self.onedrive.token)
-            .send()?
-            .parse()?;
+            .send()
+            .await?
+            .parse()
+            .await?;
         Ok(Some(self.last_response.value.take().unwrap_or_default()))
     }
 
-    fn fetch_all(mut self) -> Result<(Vec<DriveItem>, Option<String>)> {
+    async fn fetch_all(mut self) -> Result<(Vec<DriveItem>, Option<String>)> {
         let mut buf = vec![];
-        while let Some(items) = self.fetch_next_page()? {
+        while let Some(items) = self.fetch_next_page().await? {
             buf.extend(items);
         }
         Ok((buf, self.delta_url().map(|s| s.to_owned())))
@@ -975,8 +1029,8 @@ impl<'a> ListChildrenFetcher<'a> {
     }
 
     /// Fetch the next page, or `None` if reaches the end.
-    pub fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
-        self.fetcher.fetch_next_page()
+    pub async fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
+        self.fetcher.fetch_next_page().await
     }
 
     /// Fetch all rest pages and collect all items.
@@ -985,8 +1039,11 @@ impl<'a> ListChildrenFetcher<'a> {
     ///
     /// Any error occurs when fetching will lead to an failure, and
     /// all progress will be lost.
-    pub fn fetch_all(self) -> Result<Vec<DriveItem>> {
-        self.fetcher.fetch_all().and_then(|(items, _)| Ok(items))
+    pub async fn fetch_all(self) -> Result<Vec<DriveItem>> {
+        self.fetcher
+            .fetch_all()
+            .await
+            .and_then(|(items, _)| Ok(items))
     }
 }
 
@@ -1058,8 +1115,8 @@ impl<'a> TrackChangeFetcher<'a> {
     }
 
     /// Fetch the next page, or `None` if reaches the end.
-    pub fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
-        self.fetcher.fetch_next_page()
+    pub async fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
+        self.fetcher.fetch_next_page().await
     }
 
     /// Fetch all rest pages, collect all items, and also return `delta_url`.
@@ -1068,13 +1125,12 @@ impl<'a> TrackChangeFetcher<'a> {
     ///
     /// Any error occurs when fetching will lead to an failure, and
     /// all progress will be lost.
-    pub fn fetch_all(self) -> Result<(Vec<DriveItem>, String)> {
-        self.fetcher.fetch_all().and_then(|(items, opt_delta_url)| {
-            let delta_url = opt_delta_url.ok_or_else(|| {
-                Error::unexpected_response("Missing `@odata.deltaLink` for the last page")
-            })?;
-            Ok((items, delta_url))
-        })
+    pub async fn fetch_all(self) -> Result<(Vec<DriveItem>, String)> {
+        let (items, opt_delta_url) = self.fetcher.fetch_all().await?;
+        let delta_url = opt_delta_url.ok_or_else(|| {
+            Error::unexpected_response("Missing `@odata.deltaLink` for the last page")
+        })?;
+        Ok((items, delta_url))
     }
 }
 

@@ -66,6 +66,7 @@ impl Permission {
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth/auth-concepts?view=graph-rest-1.0)
+// FIXME: Authorization/Auth
 #[derive(Debug)]
 pub struct Authentication {
     client: Client,
@@ -125,7 +126,11 @@ impl Authentication {
         self.auth_url("code")
     }
 
-    fn request_authorize(&self, require_refresh: bool, params: &[(&str, &str)]) -> Result<Token> {
+    async fn request_authorize(
+        &self,
+        require_refresh: bool,
+        params: &[(&str, &str)],
+    ) -> Result<Token> {
         #[derive(Deserialize)]
         struct Resp {
             // FIXME
@@ -142,8 +147,10 @@ impl Authentication {
             .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .form(params)
-            .send()?
-            .parse()?;
+            .send()
+            .await?
+            .parse()
+            .await?;
 
         if !require_refresh || resp.refresh_token.is_some() {
             Ok(Token {
@@ -160,7 +167,7 @@ impl Authentication {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token)
-    pub fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
+    pub async fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
         self.request_authorize(
             self.permission.offline_access,
             &[
@@ -171,6 +178,7 @@ impl Authentication {
                 ("redirect_uri", &self.redirect_uri),
             ],
         )
+        .await
     }
 
     /// Login using a refresh token.
@@ -188,7 +196,7 @@ impl Authentication {
     /// [auth]: ./struct.Authentication.html
     /// [offline_access]: ./struct.Permission.html#method.offline_access
     /// [refresh_token]: ./struct.Token.html#structfield.refresh_token
-    pub fn login_with_refresh_token(
+    pub async fn login_with_refresh_token(
         &self,
         refresh_token: &str,
         client_secret: Option<&str>,
@@ -208,6 +216,7 @@ impl Authentication {
                 ("refresh_token", refresh_token),
             ],
         )
+        .await
     }
 }
 

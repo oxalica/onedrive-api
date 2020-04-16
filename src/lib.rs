@@ -4,14 +4,12 @@
 //! [OneDrive][ms_onedrive] API through [Microsoft Graph][ms_graph], and also [`Authentication`][auth]
 //! with utilities for authentication.
 //!
-//! Async support is TODO.
-//!
 //! ## Example
-//! ```ignore
+//! ```
 //! use onedrive_api::{OneDrive, FileName, DriveLocation, ItemLocation};
 //! use reqwest::Client;
 //!
-//! # fn run() -> onedrive_api::Result<()> {
+//! # async fn run() -> onedrive_api::Result<()> {
 //! let client = Client::new();
 //! let drive = OneDrive::new(
 //!     "<...TOKEN...>".to_owned(), // Login token to Microsoft Graph.
@@ -22,13 +20,15 @@
 //!     .create_folder(
 //!         ItemLocation::root(),
 //!         FileName::new("test_folder").unwrap(),
-//!     )?;
+//!     )
+//!     .await?;
 //!
 //! drive
 //!     .upload_small(
 //!         folder_item.id.as_ref().unwrap(),
 //!         b"Hello, world",
-//!     )?;
+//!     )
+//!     .await?;
 //!
 //! # Ok(())
 //! # }

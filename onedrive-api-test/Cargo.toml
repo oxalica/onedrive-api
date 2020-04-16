@@ -10,13 +10,13 @@ publish = false
 [dependencies]
 failure = "0.1.6"
 onedrive-api = { path = ".." }
-open = "1.3.4"
+open = "1.4.0"
 pico-args = "0.3.1"
 
 [dev-dependencies]
 envy = "0.4.1"
 lazy_static = "1.4.0"
 rand = "0.7.3"
-reqwest = "0.9.22"
+reqwest = "0.10.4"
 serde = "1.0.104"
 serde_json = "1.0.48"
