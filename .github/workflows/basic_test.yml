@@ -16,9 +16,7 @@ jobs:
         with:
           profile: minimal
           toolchain: ${{ matrix.rust }}
-      - uses: actions-rs/cargo@v1
-        with:
-          command: test
+      - run: cargo test
         env:
           RUST_BACKTRACE: full
 
@@ -32,10 +30,7 @@ jobs:
           profile: minimal
           toolchain: stable
           components: rustfmt
-      - uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+      - run: cargo fmt --all -- --check
 
   clippy:
     name: Clippy
@@ -47,13 +42,10 @@ jobs:
           profile: minimal
           toolchain: stable
           components: clippy
-      - uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: -- -D warnings
+      - run: cargo clippy -- -D warnings
 
   deadlinks:
-    name: Deadlinks in documentation
+    name: Docs deadlinks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@master
@@ -62,5 +54,5 @@ jobs:
           profile: minimal
           toolchain: stable
       - run: cargo install cargo-deadlinks
-      - run: cargo doc
+      - run: cargo doc --workspace
       - run: cargo deadlinks --check-http
