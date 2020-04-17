@@ -54,7 +54,8 @@ USAGE: {} [-o <output_file>] [-r <redirect_uri>] [-s <client_secret>] <client_id
 }
 
 #[rustfmt::skip::macros(writeln)]
-fn main() -> Result<(), Error> {
+#[tokio::main]
+async fn main() -> Result<(), Error> {
     let args = parse_args().unwrap_or_else(|err| {
         eprintln!("{}", err);
         exit_with_help();
@@ -87,7 +88,9 @@ fn main() -> Result<(), Error> {
     };
 
     eprintln!("Logining...");
-    let token = auth.login_with_code(&code, args.client_secret.as_deref())?;
+    let token = auth
+        .login_with_code(&code, args.client_secret.as_deref())
+        .await?;
     let refresh_token = token.refresh_token.expect("Missing refresh token");
 
     {

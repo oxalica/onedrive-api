@@ -10,7 +10,7 @@ struct Env {
     refresh_token: String,
 }
 
-fn login() -> String {
+async fn login() -> String {
     let env: Env = envy::prefixed("ONEDRIVE_API_TEST_").from_env().unwrap();
 
     let auth = Authentication::new(
@@ -20,60 +20,26 @@ fn login() -> String {
     );
 
     auth.login_with_refresh_token(&env.refresh_token, env.client_secret.as_deref())
+        .await
         .expect("Login failed")
         .token
 }
 
 lazy_static! {
-    pub static ref TOKEN: String = login();
-    pub static ref ONEDRIVE: OneDrive = OneDrive::new(TOKEN.to_owned(), DriveLocation::me());
+    pub static ref TOKEN: tokio::sync::Mutex<Option<String>> = Default::default();
 }
 
-pub struct AutoDelete<'a> {
-    item: Option<ItemLocation<'a>>,
-    sess: Option<&'a UploadSession>,
-}
-
-impl<'a> AutoDelete<'a> {
-    pub fn new(item: impl Into<ItemLocation<'a>>) -> Self {
-        Self {
-            item: Some(item.into()),
-            sess: None,
+pub async fn get_logined_onedrive() -> OneDrive {
+    let mut guard = TOKEN.lock().await;
+    let token = match &*guard {
+        Some(token) => token.clone(),
+        None => {
+            let token = login().await;
+            *guard = Some(token.clone());
+            token
         }
-    }
-
-    pub fn new_sess(sess: &'a UploadSession) -> Self {
-        Self {
-            item: None,
-            sess: Some(sess),
-        }
-    }
-
-    pub fn defuse(self) {
-        // FIXME: May leak.
-        std::mem::forget(self);
-    }
-}
-
-impl Drop for AutoDelete<'_> {
-    fn drop(&mut self) {
-        if let Some(item) = self.item {
-            match ONEDRIVE.delete(item) {
-                Err(e) if !std::thread::panicking() => {
-                    panic!("Cannot delete item {:?}: {}", self.item, e);
-                }
-                _ => {}
-            }
-        }
-        if let Some(sess) = self.sess {
-            match ONEDRIVE.delete_upload_session(sess) {
-                Err(e) if !std::thread::panicking() => {
-                    panic!("Cannot delete upload session {:?}: {}", sess, e);
-                }
-                _ => {}
-            }
-        }
-    }
+    };
+    OneDrive::new(token, DriveLocation::me())
 }
 
 pub fn gen_filename() -> &'static FileName {
@@ -98,11 +64,12 @@ pub fn rooted_location(name: &FileName) -> ItemLocation<'static> {
     ItemLocation::from_path(s).unwrap()
 }
 
-pub fn download(url: &str) -> Vec<u8> {
-    let mut buf = vec![];
+pub async fn download(url: &str) -> Vec<u8> {
     reqwest::get(url)
+        .await
         .expect("Failed to request for downloading file")
-        .copy_to(&mut buf)
-        .expect("Failed to download file");
-    buf
+        .bytes()
+        .await
+        .expect("Failed to download file")
+        .to_vec()
 }

@@ -12,6 +12,7 @@ failure = "0.1.6"
 onedrive-api = { path = ".." }
 open = "1.4.0"
 pico-args = "0.3.1"
+tokio = { version = "0.2.18", features = ["macros"] }
 
 [dev-dependencies]
 envy = "0.4.1"
