@@ -878,7 +878,7 @@ impl<'a> CopyProgressMonitor<'a> {
     /// # See also
     /// [`CopyProgress`][copy_progress]
     ///
-    /// [copy_progress]: ../struct.CopyProgress.html
+    /// [copy_progress]: ./struct.CopyProgress.html
     pub async fn fetch_progress(&self) -> Result<CopyProgress> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]

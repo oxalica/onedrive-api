@@ -9,7 +9,7 @@ through [Microsoft Graph][graph], and also some utilities for authentication,
 
 - [Changelog](CHANGELOG.md)
 
-[onedrive]: https://onedrive.live.com/about
+[onedrive]: https://products.office.com/en-us/onedrive/online-cloud-storage
 [graph]: https://docs.microsoft.com/graph/overview
 
 # License

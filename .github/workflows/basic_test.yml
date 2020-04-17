@@ -52,3 +52,15 @@ jobs:
           command: clippy
           args: -- -D warnings
 
+  deadlinks:
+    name: Deadlinks in documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - run: cargo install cargo-deadlinks
+      - run: cargo doc
+      - run: cargo deadlinks --check-http

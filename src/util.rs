@@ -171,7 +171,7 @@ impl FileName {
     /// # See also
     /// [ItemLocation::from_path][from_path]
     ///
-    /// [from_path]: ../struct.ItemLocation.html#method.from_path
+    /// [from_path]: ./struct.ItemLocation.html#method.from_path
     pub fn new<S: AsRef<str> + ?Sized>(name: &S) -> Option<&Self> {
         const INVALID_CHARS: &str = r#""*:<>?/\|"#;
 

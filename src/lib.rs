@@ -34,7 +34,7 @@
 //! # }
 //! ```
 //!
-//! [ms_onedrive]: https://onedrive.live.com/about
+//! [ms_onedrive]: https://products.office.com/en-us/onedrive/online-cloud-storage
 //! [ms_graph]: https://docs.microsoft.com/graph/overview
 //! [one_drive]: ./struct.OneDrive.html
 //! [auth]: ./struct.Authentication.html
