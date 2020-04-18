@@ -96,6 +96,7 @@ impl From<DriveId> for DriveLocation {
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-get?view=graph-rest-1.0)
 ///
 /// [drive_item]: ./resource/struct.DriveItem.html
+// TODO: Now `DriveLocation` has only owned version, while `ItemLocation` has only borrowed version.
 #[derive(Clone, Copy, Debug)]
 pub struct ItemLocation<'a> {
     inner: ItemLocationEnum<'a>,

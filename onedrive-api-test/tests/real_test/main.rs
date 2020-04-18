@@ -434,6 +434,10 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
     const RANGE2_ERROR: Range = 6..8;
     const RANGE2: Range = 2..8;
 
+    fn as_range_u64(r: Range) -> std::ops::Range<u64> {
+        r.start as u64..r.end as u64
+    }
+
     let item_loc = rooted_location(gen_filename());
 
     // #1
@@ -450,7 +454,12 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
     // #2
     assert!(
         one_drive
-            .upload_to_session(&sess, &CONTENT[RANGE1], RANGE1, CONTENT.len())
+            .upload_to_session(
+                &sess,
+                &CONTENT[RANGE1],
+                as_range_u64(RANGE1),
+                CONTENT.len() as u64,
+            )
             .await
             .expect("Cannot upload part 1")
             .is_none(),
@@ -474,7 +483,12 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
     // #4
     assert_eq!(
         one_drive
-            .upload_to_session(&sess, &CONTENT[RANGE2_ERROR], RANGE2_ERROR, CONTENT.len(),)
+            .upload_to_session(
+                &sess,
+                &CONTENT[RANGE2_ERROR],
+                as_range_u64(RANGE2_ERROR),
+                CONTENT.len() as u64,
+            )
             .await
             .expect_err("Upload wrong range should fail")
             .status_code(),
@@ -483,7 +497,12 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
 
     // #5
     one_drive
-        .upload_to_session(&sess, &CONTENT[RANGE2], RANGE2, CONTENT.len())
+        .upload_to_session(
+            &sess,
+            &CONTENT[RANGE2],
+            as_range_u64(RANGE2),
+            CONTENT.len() as u64,
+        )
         .await
         .expect("Failed to upload part 2")
         .expect("Uploading should be completed");

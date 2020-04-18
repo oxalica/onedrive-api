@@ -15,6 +15,7 @@ documentation = "https://docs.rs/onedrive-api"
 default = []
 
 [dependencies]
+bytes = "0.5.4"
 http = "0.2.1"
 lazy_static = "1.4.0"
 pico-args = "0.3.1"

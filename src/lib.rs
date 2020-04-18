@@ -26,7 +26,7 @@
 //! drive
 //!     .upload_small(
 //!         folder_item.id.as_ref().unwrap(),
-//!         b"Hello, world",
+//!         &b"Hello, world"[..],
 //!     )
 //!     .await?;
 //!

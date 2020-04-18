@@ -8,6 +8,7 @@ use crate::{
     },
     {ConflictBehavior, ExpectRange},
 };
+use bytes::Bytes;
 use http::header;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -138,7 +139,6 @@ impl OneDrive {
     /// [`list_children_with_option`][with_opt]
     ///
     /// [with_opt]: #method.list_children_with_option
-    // FIXME: https://github.com/rust-lang/rust/issues/42940
     pub async fn list_children<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
@@ -318,8 +318,9 @@ impl OneDrive {
     pub async fn upload_small<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
-        data: &[u8],
+        data: impl Into<Bytes>,
     ) -> Result<DriveItem> {
+        let data = data.into();
         assert!(
             data.len() <= Self::UPLOAD_SMALL_LIMIT,
             "Data too large for upload_small ({} B > {} B)",
@@ -330,8 +331,7 @@ impl OneDrive {
         self.client
             .put(api_url![&self.drive, &item.into(), "content"])
             .bearer_auth(&self.token)
-            // FIXME: Avoid copying.
-            .body(data.to_vec())
+            .body(data)
             .send()
             .await?
             .parse()
@@ -484,30 +484,25 @@ impl OneDrive {
     pub async fn upload_to_session(
         &self,
         session: &UploadSession,
-        data: &[u8],
-        // FIXME: u64
-        remote_range: std::ops::Range<usize>,
-        // FIXME: u64
-        total_size: usize,
+        data: impl Into<Bytes>,
+        remote_range: std::ops::Range<u64>,
+        total_size: u64,
     ) -> Result<Option<DriveItem>> {
-        // FIXME: https://github.com/rust-lang/rust-clippy/issues/3807
-        #[allow(clippy::len_zero)]
-        {
-            assert!(
-                remote_range.len() > 0 && remote_range.end <= total_size,
-                "Invalid range",
-            );
-        }
-        assert_eq!(
-            data.len(),
-            remote_range.end - remote_range.start,
-            "Length mismatch"
-        );
+        use std::convert::TryFrom as _;
+
+        let data = data.into();
+        assert!(!data.is_empty(), "Empty data");
         assert!(
             data.len() <= Self::UPLOAD_SESSION_PART_LIMIT,
-            "Data too large for one part ({} B > {} B)",
+            "Data too large for one part (got: {} B, limit: {} B)",
             data.len(),
             Self::UPLOAD_SESSION_PART_LIMIT,
+        );
+        assert!(
+            remote_range.start < remote_range.end && remote_range.end <= total_size
+            // `Range<u64>` has no method `len()`.
+            && remote_range.end - remote_range.start <= u64::try_from(data.len()).unwrap(),
+            "Invalid remote range",
         );
 
         self.client
@@ -517,15 +512,15 @@ impl OneDrive {
                 header::CONTENT_RANGE,
                 format!(
                     "bytes {}-{}/{}",
-                    // `remote_range` is checked to be positive.
-                    // So this will not overflow.
                     remote_range.start,
+                    // Inclusive.
+                    // We checked `remote_range.start < remote_range.end`,
+                    // so this never overflows.
                     remote_range.end - 1,
-                    total_size
+                    total_size,
                 ),
             )
-            // FIXME: Avoid copying.
-            .body(data.to_vec())
+            .body(data)
             .send()
             .await?
             .parse_optional()
