@@ -13,7 +13,7 @@ struct Env {
 async fn login() -> String {
     let env: Env = envy::prefixed("ONEDRIVE_API_TEST_").from_env().unwrap();
 
-    let auth = Authentication::new(
+    let auth = Auth::new(
         env.client_id,
         Permission::new_read().write(true).offline_access(true),
         env.redirect_uri,

@@ -1,5 +1,5 @@
 use anyhow::{Context as _, Result};
-use onedrive_api::{Authentication, Permission};
+use onedrive_api::{Auth, Permission};
 use std::{
     env,
     fs::File,
@@ -59,7 +59,7 @@ async fn main() -> Result<()> {
         exit_with_help();
     });
 
-    let auth = Authentication::new(
+    let auth = Auth::new(
         args.client_id.clone(),
         Permission::new_read().write(true).offline_access(true),
         args.redirect_uri.clone(),

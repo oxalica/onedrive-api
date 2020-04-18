@@ -61,26 +61,28 @@ impl Permission {
     }
 }
 
-/// Authentication to Microsoft Graph API
+/// OAuth2 authentication and authorization basics for Microsoft Graph.
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth/auth-concepts?view=graph-rest-1.0)
-// FIXME: Authorization/Auth
 #[derive(Debug)]
-pub struct Authentication {
+pub struct Auth {
     client: Client,
     client_id: String,
     permission: Permission,
     redirect_uri: String,
 }
 
-impl Authentication {
-    /// Create an new instance for authentication with specified client identifier and permission.
+impl Auth {
+    /// Create an new instance for OAuth2 to Microsoft Graph
+    /// with specified client identifier and permission.
     pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
         Self::new_with_client(Client::new(), client_id, permission, redirect_uri)
     }
 
-    /// Same as `Authentication::new` but with custom `Client`.
+    /// Same as [`Auth::new`][auth_new] but with custom `reqwest::Client`.
+    ///
+    /// [auth_new]: #method.new
     pub fn new_with_client(
         client: Client,
         client_id: String,
@@ -109,15 +111,7 @@ impl Authentication {
         .into_string()
     }
 
-    /// Get the URL for web browser for token flow authentication.
-    ///
-    /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-service?view=graph-rest-1.0)
-    pub fn token_auth_url(&self) -> String {
-        self.auth_url("token")
-    }
-
-    /// Get the URL for web browser for code flow authentication.
+    /// Get the URL for web browser for code flow.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request)
@@ -147,7 +141,7 @@ impl Authentication {
         Ok(token_resp)
     }
 
-    /// Login using a code in code flow authentication.
+    /// Login using a code.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token)
@@ -175,13 +169,13 @@ impl Authentication {
     /// a new [`refresh_token`][refresh_token] if success.
     ///
     /// # Panic
-    /// Panic if the current [`Authentication`][auth] is created with no
+    /// Panic if the current [`Auth`][auth] is created with no
     /// [`offline_access`][offline_access] permission.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#5-use-the-refresh-token-to-get-a-new-access-token)
     ///
-    /// [auth]: ./struct.Authentication.html
+    /// [auth]: ./struct.Auth.html
     /// [offline_access]: ./struct.Permission.html#method.offline_access
     /// [refresh_token]: ./struct.Token.html#structfield.refresh_token
     pub async fn login_with_refresh_token(

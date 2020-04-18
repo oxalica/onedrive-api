@@ -333,7 +333,7 @@ pub struct ErrorResponse {
 /// **This struct is independent with [`ErrorResponse`][error_response] from storage API.**
 ///
 /// It can only be contained in [`onedrive_api::Error`][error] returned by operations
-/// about OAuth2 (methods of [`Authentication`][auth]).
+/// about OAuth2 (methods of [`Auth`][auth]).
 ///
 /// # See also
 /// - [Microsoft Docs: Request an authorization code](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#error-response)
@@ -342,7 +342,7 @@ pub struct ErrorResponse {
 ///
 /// [error_response]: ./struct.ErrorResponse.html
 /// [error]: ../struct.Error.html
-/// [auth]: ../struct.Authentication.html
+/// [auth]: ../struct.Auth.html
 #[derive(Debug, Deserialize)]
 #[allow(missing_docs)]
 pub struct OAuth2ErrorResponse {

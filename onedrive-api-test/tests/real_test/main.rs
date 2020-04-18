@@ -602,7 +602,7 @@ async fn test_track_changes(one_drive: &OneDrive) {
 }
 
 async fn test_auth_error(_: &OneDrive) {
-    let auth = Authentication::new(
+    let auth = Auth::new(
         "11111111-2222-3333-4444-555555555555".to_owned(),
         Permission::new_read().offline_access(true),
         "https://login.microsoftonline.com/common/oauth2/nativeclient".to_owned(),

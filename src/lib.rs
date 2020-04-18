@@ -1,8 +1,8 @@
 //! # onedrive-api
 //!
 //! `onedrive-api` crate provides middle-level HTTP APIs [`OneDrive`][one_drive] to the
-//! [OneDrive][ms_onedrive] API through [Microsoft Graph][ms_graph], and also [`Authentication`][auth]
-//! with utilities for authentication.
+//! [OneDrive][ms_onedrive] API through [Microsoft Graph][ms_graph], and also [`Auth`][auth]
+//! with utilities for OAuth2.
 //!
 //! ## Example
 //! ```
@@ -37,7 +37,7 @@
 //! [ms_onedrive]: https://products.office.com/en-us/onedrive/online-cloud-storage
 //! [ms_graph]: https://docs.microsoft.com/graph/overview
 //! [one_drive]: ./struct.OneDrive.html
-//! [auth]: ./struct.Authentication.html
+//! [auth]: ./struct.Auth.html
 //! [api]: ./trait.Api.html
 //! [api_execute]: ./trait.Api.html#tymethod.execute
 //! [client]: ./trait.Client.html
@@ -54,7 +54,7 @@ pub mod resource;
 mod util;
 
 pub use self::{
-    auth::{Authentication, Permission, TokenResponse},
+    auth::{Auth, Permission, TokenResponse},
     error::{Error, Result},
     onedrive::{
         CopyProgress, CopyProgressMonitor, CopyStatus, ListChildrenFetcher, OneDrive,
