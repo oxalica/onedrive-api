@@ -144,12 +144,12 @@ macro_rules! define_resource_object {
             /// More details in [mod documentation][mod].
             ///
             /// [mod]: ./index.html
-            // FIXME: Should be `#[non_exhaustive]`
             #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            #[non_exhaustive]
+            #[allow(missing_docs, non_camel_case_types)]
             $vis enum $field_enum_name {
                 $(
                     $( // Only place selectable fields.
-                        #[allow(missing_docs, non_camel_case_types)]
                         $sel_field_name,
                     )?
                 )*
@@ -356,6 +356,11 @@ pub struct OAuth2ErrorResponse {
     _private: (),
 }
 
+/// ```compile_fail
+/// let _ = onedrive_api::resource::DriveItemField::download_url;
+/// ```
+fn _download_url_is_not_selectable() {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -387,8 +392,5 @@ mod tests {
         assert_eq!(DriveItemField::size.api_field_name(), "size");
         assert_eq!(DriveItemField::web_dav_url.api_field_name(), "webDavUrl");
         assert_eq!(DriveItemField::web_url.api_field_name(), "webUrl");
-
-        // This should fail to compile.
-        // let _ = DriveItemField::download_url;
     }
 }

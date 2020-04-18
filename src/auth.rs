@@ -2,7 +2,6 @@ use crate::{
     error::{Error, Result},
     util::handle_oauth2_error_response,
 };
-use http::header;
 use reqwest::Client;
 use serde::Deserialize;
 use url::Url;
@@ -144,8 +143,6 @@ impl Authentication {
         let resp = self
             .client
             .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
-            // FIXME: Is this required?
-            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .form(params)
             .send()
             .await?;
