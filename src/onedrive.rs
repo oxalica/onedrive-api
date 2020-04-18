@@ -44,22 +44,26 @@ pub struct OneDrive {
 }
 
 impl OneDrive {
-    /// Create a new OneDrive instance with token to perform operations in a Drive.
-    pub fn new(token: String, drive: impl Into<DriveLocation>) -> Self {
-        Self::new_with_client(Client::new(), token, drive.into())
+    /// Create a new OneDrive instance with access token given to perform operations in a Drive.
+    pub fn new(access_token: String, drive: impl Into<DriveLocation>) -> Self {
+        Self::new_with_client(Client::new(), access_token, drive.into())
     }
 
     /// Same as `OneDrive::new` but with custom `Client`.
-    pub fn new_with_client(client: Client, token: String, drive: impl Into<DriveLocation>) -> Self {
+    pub fn new_with_client(
+        client: Client,
+        access_token: String,
+        drive: impl Into<DriveLocation>,
+    ) -> Self {
         OneDrive {
             client,
-            token,
+            token: access_token,
             drive: drive.into(),
         }
     }
 
-    /// Get the token used to create the OneDrive instance.
-    pub fn token(&self) -> &str {
+    /// Get the access token used to create the OneDrive instance.
+    pub fn access_token(&self) -> &str {
         &self.token
     }
 
@@ -481,7 +485,9 @@ impl OneDrive {
         &self,
         session: &UploadSession,
         data: &[u8],
+        // FIXME: u64
         remote_range: std::ops::Range<usize>,
+        // FIXME: u64
         total_size: usize,
     ) -> Result<Option<DriveItem>> {
         // FIXME: https://github.com/rust-lang/rust-clippy/issues/3807

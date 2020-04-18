@@ -129,17 +129,7 @@ impl Authentication {
         &self,
         require_refresh: bool,
         params: &[(&str, &str)],
-    ) -> Result<Token> {
-        #[derive(Deserialize)]
-        struct Resp {
-            // FIXME
-            // token_type: String,
-            // expires_in: u64,
-            // scope: String,
-            access_token: String,
-            refresh_token: Option<String>,
-        }
-
+    ) -> Result<TokenResponse> {
         let resp = self
             .client
             .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
@@ -148,24 +138,24 @@ impl Authentication {
             .await?;
 
         // Handle special error response.
-        let resp: Resp = handle_oauth2_error_response(resp).await?.json().await?;
+        let token_resp: TokenResponse = handle_oauth2_error_response(resp).await?.json().await?;
 
-        if !require_refresh || resp.refresh_token.is_some() {
-            Ok(Token {
-                token: resp.access_token,
-                refresh_token: resp.refresh_token,
-                _private: (),
-            })
-        } else {
-            Err(Error::unexpected_response("Missing field `refresh_token`"))
+        if require_refresh && token_resp.refresh_token.is_none() {
+            return Err(Error::unexpected_response("Missing field `refresh_token`"));
         }
+
+        Ok(token_resp)
     }
 
     /// Login using a code in code flow authentication.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#3-get-a-token)
-    pub async fn login_with_code(&self, code: &str, client_secret: Option<&str>) -> Result<Token> {
+    pub async fn login_with_code(
+        &self,
+        code: &str,
+        client_secret: Option<&str>,
+    ) -> Result<TokenResponse> {
         self.request_authorize(
             self.permission.offline_access,
             &[
@@ -198,7 +188,7 @@ impl Authentication {
         &self,
         refresh_token: &str,
         client_secret: Option<&str>,
-    ) -> Result<Token> {
+    ) -> Result<TokenResponse> {
         assert!(
             self.permission.offline_access,
             "Refresh token requires offline_access permission."
@@ -218,14 +208,25 @@ impl Authentication {
     }
 }
 
-/// Access tokens
-#[derive(Debug)]
-pub struct Token {
+/// Tokens and some additional data returned by a successful authorization.
+///
+/// # See also
+/// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#token-response)
+#[derive(Debug, Deserialize)]
+pub struct TokenResponse {
+    /// Indicates the token type value. The only type that Azure AD supports is Bearer.
+    pub token_type: String,
+    /// A list of the Microsoft Graph permissions that the access_token is valid for.
+    #[serde(deserialize_with = "space_separated_strings")]
+    pub scope: Vec<String>,
+    /// How long the access token is valid (in seconds).
+    #[serde(rename = "expires_in")]
+    pub expires_in_secs: u64,
     /// The access token used for authorization in requests.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-overview#what-is-an-access-token-and-how-do-i-use-it)
-    pub token: String,
+    pub access_token: String,
     /// The refresh token for refreshing (re-get) an access token when the previous one expired.
     ///
     /// This is only returned in code auth flow with [`offline_access`][offline_access] permission.
@@ -235,5 +236,30 @@ pub struct Token {
     ///
     /// [offline_access]: ./struct.Permission.html#method.offline_access
     pub refresh_token: Option<String>,
+    #[serde(default)]
     _private: (),
+}
+
+fn space_separated_strings<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: serde::de::Deserializer<'de>,
+{
+    struct Visitor;
+
+    impl<'de> serde::de::Visitor<'de> for Visitor {
+        type Value = Vec<String>;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("space-separated strings")
+        }
+
+        fn visit_str<E>(self, s: &str) -> std::result::Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(s.split(' ').map(|s| s.to_owned()).collect())
+        }
+    }
+
+    deserializer.deserialize_str(Visitor)
 }

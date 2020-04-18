@@ -57,7 +57,7 @@ async fn test_get_drive(one_drive: &OneDrive) {
     let drive_id = drive1.id.as_ref().expect("drive1 has no id");
 
     // #2
-    let drive2 = OneDrive::new(one_drive.token().to_owned(), drive_id.clone())
+    let drive2 = OneDrive::new(one_drive.access_token().to_owned(), drive_id.clone())
         .get_drive_with_option(ObjectOption::new().select(&[DriveField::id, DriveField::owner]))
         .await
         .expect("Cannot get drive #2");
@@ -68,7 +68,7 @@ async fn test_get_drive(one_drive: &OneDrive) {
     // #3
     assert_eq!(
         OneDrive::new(
-            one_drive.token().to_owned(),
+            one_drive.access_token().to_owned(),
             DriveId::new(format!("{}_inva_lid", drive_id.as_str())),
         )
         .get_drive()

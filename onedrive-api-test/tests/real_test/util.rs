@@ -22,7 +22,7 @@ async fn login() -> String {
     auth.login_with_refresh_token(&env.refresh_token, env.client_secret.as_deref())
         .await
         .expect("Login failed")
-        .token
+        .access_token
 }
 
 lazy_static! {
