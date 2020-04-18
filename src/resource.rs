@@ -294,25 +294,66 @@ fn snake_to_camel_case(s: &str) -> String {
     buf
 }
 
-/// The error object with description and details of the error responsed from server.
+/// The error resource type, returned whenever an error occurs in the processing of a request.
 ///
-/// It may be contained in [`onedrive_api::Error`][error] which may
-/// be returned when processing requests.
+/// Error responses follow the definition in the OData v4 specification for error responses.
+///
+/// **This struct is independent with [`OAuth2ErrorResponse`][oauth2_error_response] from OAuth2 API.**
+///
+/// It may be contained in [`onedrive_api::Error`][error] returned by storage API
+/// (methods of [`OneDrive`][one_drive], [`ListChildrenFetcher`][list_children_fetcher], etc.).
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/errors#error-resource-type)
 ///
+/// [oauth2_error_response]: ./struct.OAuth2ErrorResponse.html
 /// [error]: ../struct.Error.html
-// FIXME: Fail to deserialize `inner_error` in some cases.
-#[allow(missing_docs)]
+/// [one_drive]: ../struct.OneDrive.html
+/// [list_children_fetcher]: ../struct.ListChildrenFetcher.html
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ErrorObject {
-    pub code: Option<String>,
-    pub message: Option<String>,
-    pub inner_error: Option<Box<ErrorObject>>,
-    #[serde(flatten)]
-    pub extra_data: serde_json::Map<String, serde_json::Value>,
+pub struct ErrorResponse {
+    /// OData `code`. Non-exhaustive.
+    ///
+    /// Some possible values of `code` field can be found in:
+    /// - [Error resource type: code property](https://docs.microsoft.com/en-us/graph/errors#code-property)
+    /// - [Error codes for authorization endpoint errors](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#error-codes-for-authorization-endpoint-errors)
+    /// - And maybe more.
+    pub code: String,
+    /// OData `message`. Usually to be human-readable.
+    pub message: String,
+    /// OData `innererror`. An optional object with additional or more specific error codes.
+    #[serde(rename = "innererror")]
+    pub inner_error: Option<serde_json::Map<String, serde_json::Value>>,
+    #[serde(default)]
+    _private: (),
+}
+
+/// OAuth2 error response.
+///
+/// **This struct is independent with [`ErrorResponse`][error_response] from storage API.**
+///
+/// It can only be contained in [`onedrive_api::Error`][error] returned by operations
+/// about OAuth2 (methods of [`Authentication`][auth]).
+///
+/// # See also
+/// - [Microsoft Docs: Request an authorization code](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#error-response)
+/// - [Microsoft Docs: Request an access token](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#error-response-1)
+/// - [Microsoft Docs: Refresh the access token](https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#error-response-2)
+///
+/// [error_response]: ./struct.ErrorResponse.html
+/// [error]: ../struct.Error.html
+/// [auth]: ../struct.Authentication.html
+#[derive(Debug, Deserialize)]
+#[allow(missing_docs)]
+pub struct OAuth2ErrorResponse {
+    pub error: String,
+    pub error_description: String,
+    pub error_codes: Option<Vec<u32>>,
+    pub timestamp: Option<String>,
+    pub trace_id: Option<String>,
+    pub correlation_id: Option<String>,
+    #[serde(default)]
+    _private: (),
 }
 
 #[cfg(test)]

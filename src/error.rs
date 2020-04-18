@@ -1,4 +1,4 @@
-use crate::resource::ErrorObject;
+use crate::resource::{ErrorResponse, OAuth2ErrorResponse};
 use http::StatusCode;
 use thiserror::Error;
 
@@ -21,19 +21,20 @@ enum ErrorKind {
     RequestError(reqwest::Error),
     #[error("Unexpected response: {reason}")]
     UnexpectedResponse { reason: &'static str },
-    #[error(
-        "Api request failed with {status}: ({}) {}",
-        .response.code.as_deref().unwrap_or_default(),
-        .response.message.as_deref().unwrap_or_default(),
-    )]
+    #[error("Api error with {status}: ({}) {}", .response.code, .response.message)]
     ErrorResponse {
         status: StatusCode,
-        response: ErrorObject,
+        response: ErrorResponse,
+    },
+    #[error("OAuth2 error with {status}: ({}) {}", .response.error, .response.error_description)]
+    OAuth2Error {
+        status: StatusCode,
+        response: OAuth2ErrorResponse,
     },
 }
 
 impl Error {
-    pub(crate) fn from_error_response(status: StatusCode, response: ErrorObject) -> Self {
+    pub(crate) fn from_error_response(status: StatusCode, response: ErrorResponse) -> Self {
         Self {
             inner: Box::new(ErrorKind::ErrorResponse { status, response }),
         }
@@ -45,10 +46,27 @@ impl Error {
         }
     }
 
+    pub(crate) fn from_oauth2_error_response(
+        status: StatusCode,
+        response: OAuth2ErrorResponse,
+    ) -> Self {
+        Self {
+            inner: Box::new(ErrorKind::OAuth2Error { status, response }),
+        }
+    }
+
     /// Get the error response from API if caused by error status code.
-    pub fn error_response(&self) -> Option<&ErrorObject> {
+    pub fn error_response(&self) -> Option<&ErrorResponse> {
         match &*self.inner {
             ErrorKind::ErrorResponse { response, .. } => Some(response),
+            _ => None,
+        }
+    }
+
+    /// Get the OAuth2 error response from API if caused by OAuth2 error response.
+    pub fn oauth2_error_response(&self) -> Option<&OAuth2ErrorResponse> {
+        match &*self.inner {
+            ErrorKind::OAuth2Error { response, .. } => Some(response),
             _ => None,
         }
     }
@@ -58,7 +76,9 @@ impl Error {
         match &*self.inner {
             ErrorKind::RequestError(source) => source.status(),
             ErrorKind::UnexpectedResponse { .. } => None,
-            ErrorKind::ErrorResponse { status, .. } => Some(*status),
+            ErrorKind::ErrorResponse { status, .. } | ErrorKind::OAuth2Error { status, .. } => {
+                Some(*status)
+            }
         }
     }
 }

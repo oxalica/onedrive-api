@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, Result},
-    resource::{DriveId, ItemId},
+    resource::{DriveId, ErrorResponse, ItemId, OAuth2ErrorResponse},
 };
 use http::StatusCode;
 use reqwest::{RequestBuilder, Response};
@@ -274,17 +274,27 @@ impl ResponseExt for Response {
     }
 }
 
-pub async fn handle_error_response(resp: Response) -> Result<Response> {
-    if resp.status().is_success() {
-        return Ok(resp);
-    }
-
+pub(crate) async fn handle_error_response(resp: Response) -> Result<Response> {
     #[derive(Deserialize)]
-    struct ErrorResponse {
-        error: crate::resource::ErrorObject,
+    struct Resp {
+        error: ErrorResponse,
     }
 
     let status = resp.status();
-    let resp: ErrorResponse = resp.json().await?;
-    Err(Error::from_error_response(status, resp.error))
+    if status.is_success() {
+        Ok(resp)
+    } else {
+        let resp: Resp = resp.json().await?;
+        Err(Error::from_error_response(status, resp.error))
+    }
+}
+
+pub(crate) async fn handle_oauth2_error_response(resp: Response) -> Result<Response> {
+    let status = resp.status();
+    if status.is_success() {
+        Ok(resp)
+    } else {
+        let resp: OAuth2ErrorResponse = resp.json().await?;
+        Err(Error::from_oauth2_error_response(status, resp))
+    }
 }

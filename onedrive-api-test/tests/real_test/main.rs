@@ -42,6 +42,9 @@ define_tests! {
     test_file_upload_small_and_copy;
     test_file_upload_session;
     test_track_changes;
+
+    test_auth_error;
+    test_get_drive_error_unauthorized;
 }
 
 /// 3 requests
@@ -596,4 +599,41 @@ async fn test_track_changes(one_drive: &OneDrive) {
 
     // #8
     one_drive.delete(container_loc).await.unwrap();
+}
+
+async fn test_auth_error(_: &OneDrive) {
+    let auth = Authentication::new(
+        "11111111-2222-3333-4444-555555555555".to_owned(),
+        Permission::new_read().offline_access(true),
+        "https://login.microsoftonline.com/common/oauth2/nativeclient".to_owned(),
+    );
+
+    {
+        let err = auth
+            .login_with_code("M11111111-2222-3333-4444-555555555555", None)
+            .await
+            .unwrap_err();
+        // Don't know why, but it just replies HTTP `400 Bad Request`.
+        assert_eq!(err.status_code(), Some(StatusCode::BAD_REQUEST));
+        let err_resp = err.oauth2_error_response().unwrap();
+        assert_eq!(err_resp.error, "unauthorized_client"); // Invalid `client_id`.
+    }
+
+    {
+        let err = auth.login_with_refresh_token("42", None).await.unwrap_err();
+        // Don't know why, but it just replies HTTP `400 Bad Request`.
+        assert_eq!(err.status_code(), Some(StatusCode::BAD_REQUEST));
+        let err_resp = err.oauth2_error_response().unwrap();
+        assert_eq!(err_resp.error, "invalid_grant");
+    }
+}
+
+async fn test_get_drive_error_unauthorized(_: &OneDrive) {
+    let one_drive = OneDrive::new("42".to_owned(), DriveLocation::me());
+    let err = one_drive.get_drive().await.unwrap_err();
+    assert_eq!(err.status_code(), Some(StatusCode::UNAUTHORIZED));
+    assert_eq!(
+        err.error_response().unwrap().code,
+        "InvalidAuthenticationToken",
+    );
 }

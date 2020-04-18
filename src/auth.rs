@@ -1,6 +1,6 @@
 use crate::{
     error::{Error, Result},
-    util::ResponseExt as _,
+    util::handle_oauth2_error_response,
 };
 use http::header;
 use reqwest::Client;
@@ -141,16 +141,17 @@ impl Authentication {
             refresh_token: Option<String>,
         }
 
-        // FIXME: Custom error variants? https://docs.microsoft.com/en-us/azure/active-directory/develop/v2-oauth2-auth-code-flow#error-codes-for-authorization-endpoint-errors
-        let resp: Resp = self
+        let resp = self
             .client
             .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
+            // FIXME: Is this required?
             .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
             .form(params)
             .send()
-            .await?
-            .parse()
             .await?;
+
+        // Handle special error response.
+        let resp: Resp = handle_oauth2_error_response(resp).await?.json().await?;
 
         if !require_refresh || resp.refresh_token.is_some() {
             Ok(Token {
