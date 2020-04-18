@@ -8,7 +8,7 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-failure = "0.1.6"
+anyhow = "1.0.28"
 onedrive-api = { path = ".." }
 open = "1.4.0"
 pico-args = "0.3.1"

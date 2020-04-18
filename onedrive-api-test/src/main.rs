@@ -1,4 +1,4 @@
-use failure::{format_err, Error};
+use anyhow::{Context as _, Result};
 use onedrive_api::{Authentication, Permission};
 use std::{
     env,
@@ -17,7 +17,7 @@ struct Args {
     redirect_uri: String,
 }
 
-fn parse_args() -> Result<Args, Error> {
+fn parse_args() -> Result<Args> {
     let mut args = pico_args::Arguments::from_env();
     let output_file = args
         .opt_value_from_str("-o")?
@@ -26,9 +26,7 @@ fn parse_args() -> Result<Args, Error> {
         .opt_value_from_str("-r")?
         .unwrap_or_else(|| DEFAULT_REDIRECT_URI.to_owned());
     let client_secret = args.opt_value_from_str("-s")?;
-    let client_id = args
-        .free_from_str()?
-        .ok_or_else(|| format_err!("Missing client id"))?;
+    let client_id = args.free_from_str()?.context("Missing client id")?;
     args.finish()?;
     Ok(Args {
         client_id,
@@ -55,7 +53,7 @@ USAGE: {} [-o <output_file>] [-r <redirect_uri>] [-s <client_secret>] <client_id
 
 #[rustfmt::skip::macros(writeln)]
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> Result<()> {
     let args = parse_args().unwrap_or_else(|err| {
         eprintln!("{}", err);
         exit_with_help();

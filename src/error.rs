@@ -1,7 +1,6 @@
 use crate::resource::ErrorObject;
-use failure::{format_err, Fail};
 use http::StatusCode;
-use std::fmt;
+use thiserror::Error;
 
 /// An alias to `Result` of [`Error`][error].
 ///
@@ -9,59 +8,57 @@ use std::fmt;
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Error of API request
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
+#[error(transparent)]
 pub struct Error {
-    #[fail(display = "{}", inner)]
     inner: Box<ErrorKind>,
 }
 
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        fmt::Display::fmt(&self.inner, f)
-    }
-}
-
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 enum ErrorKind {
-    #[fail(display = "Deserialize error: {}", 0)]
-    DeserializeError(failure::Error),
-    #[fail(display = "Api request failed with {}: {:?}", status, error)]
+    // Errors about ser/de are included.
+    #[error("Request error: {0}")]
+    RequestError(reqwest::Error),
+    #[error("Unexpected response: {reason}")]
+    UnexpectedResponse { reason: &'static str },
+    #[error(
+        "Api request failed with {status}: ({}) {}",
+        .response.code.as_deref().unwrap_or_default(),
+        .response.message.as_deref().unwrap_or_default(),
+    )]
     ErrorResponse {
         status: StatusCode,
-        error: ErrorObject,
+        response: ErrorObject,
     },
-    // Errors about ser/de are included.
-    #[fail(display = "Request error: {}", 0)]
-    RequestError(reqwest::Error),
 }
 
 impl Error {
-    pub(crate) fn from_error_response(status: StatusCode, error: ErrorObject) -> Self {
+    pub(crate) fn from_error_response(status: StatusCode, response: ErrorObject) -> Self {
         Self {
-            inner: Box::new(ErrorKind::ErrorResponse { status, error }),
+            inner: Box::new(ErrorKind::ErrorResponse { status, response }),
         }
     }
 
     pub(crate) fn unexpected_response(reason: &'static str) -> Self {
         Self {
-            inner: Box::new(ErrorKind::DeserializeError(format_err!("{}", reason))),
+            inner: Box::new(ErrorKind::UnexpectedResponse { reason }),
         }
     }
 
     /// Get the error response from API if caused by error status code.
     pub fn error_response(&self) -> Option<&ErrorObject> {
         match &*self.inner {
-            ErrorKind::ErrorResponse { error, .. } => Some(error),
-            ErrorKind::DeserializeError(_) | ErrorKind::RequestError(_) => None,
+            ErrorKind::ErrorResponse { response, .. } => Some(response),
+            _ => None,
         }
     }
 
     /// Get the HTTP status code if caused by error status code.
     pub fn status_code(&self) -> Option<StatusCode> {
         match &*self.inner {
-            ErrorKind::DeserializeError(_) => None,
-            ErrorKind::ErrorResponse { status, .. } => Some(*status),
             ErrorKind::RequestError(source) => source.status(),
+            ErrorKind::UnexpectedResponse { .. } => None,
+            ErrorKind::ErrorResponse { status, .. } => Some(*status),
         }
     }
 }
