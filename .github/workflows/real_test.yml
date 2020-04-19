@@ -1,5 +1,12 @@
 name: Real test
-on: push
+on:
+  push:
+    branches:
+      - master
+      - ci-test
+
+env:
+  RUST_BACKTRACE: full
 
 jobs:
   test:
@@ -13,7 +20,6 @@ jobs:
           toolchain: stable
       - name: Real Test
         env:
-          RUST_BACKTRACE: full
           ONEDRIVE_API_TEST_CLIENT_ID: ${{ secrets.ONEDRIVE_API_TEST_CLIENT_ID }}
           ONEDRIVE_API_TEST_REDIRECT_URI: ${{ secrets.ONEDRIVE_API_TEST_REDIRECT_URI }}
           ONEDRIVE_API_TEST_REFRESH_TOKEN: ${{ secrets.ONEDRIVE_API_TEST_REFRESH_TOKEN }}

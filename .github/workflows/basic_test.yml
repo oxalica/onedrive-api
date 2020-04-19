@@ -1,58 +1,108 @@
 name: Basic Test
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+      - ci-test
+
+env: 
+  RUST_BACKTRACE: full
 
 jobs:
-  test:
-    name: Test
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
-        rust: [stable, nightly]
-
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@master
-      - uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust }}
-      - run: cargo test
-        env:
-          RUST_BACKTRACE: full
-
   rustfmt:
     name: Rustfmt
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           components: rustfmt
-      - run: cargo fmt --all -- --check
+      - name: Check format
+        run: cargo fmt --all -- --check
 
   clippy:
     name: Clippy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
           components: clippy
-      - run: cargo clippy -- -D warnings
+      - name: Clippy check
+        run: cargo clippy -- -D warnings
 
-  deadlinks:
-    name: Docs deadlinks
+  test_all_features:
+    name: Test (all features)
+    needs: [rustfmt]
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        rust: [stable, nightly]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+      - name: Build
+        run: cargo build --all-features
+      - name: Test
+        run: cargo test --all-features
+
+  test_default_features:
+    name: Test (default features)
+    needs: [rustfmt]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@master
-      - uses: actions-rs/toolchain@v1
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
         with:
           profile: minimal
           toolchain: stable
-      - run: cargo install cargo-deadlinks
-      - run: cargo doc --workspace
-      - run: cargo deadlinks --check-http
+      - name: Build
+        run: cargo build
+      - name: Test
+        run: cargo test
+
+  deadlinks:
+    name: Docs deadlinks (${{ matrix.name }})
+    needs: [rustfmt]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        name:
+          - default features
+          - all features
+        include:
+          - name: default features
+            doc_flags:
+          - name: all features
+            doc_flags: --all-features
+    steps:
+      - name: Checkout
+        uses: actions/checkout@master
+      - name: Install rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+      - name: Install cargo-deadlinks
+        run: cargo install cargo-deadlinks
+      - name: Documenting
+        run: cargo doc ${{ matrix.doc_flags }}
+      - name: Check deadlinks
+        run: cargo deadlinks --check-http --dir target/doc/onedrive_api
