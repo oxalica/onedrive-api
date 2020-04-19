@@ -44,7 +44,7 @@ impl Permission {
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-21)
     ///
-    /// [refresh_token]: ./struct.Token.html#structfield.refresh_token
+    /// [refresh_token]: ./struct.TokenResponse.html#structfield.refresh_token
     pub fn offline_access(mut self, offline_access: bool) -> Self {
         self.offline_access = offline_access;
         self
@@ -177,7 +177,7 @@ impl Auth {
     ///
     /// [auth]: ./struct.Auth.html
     /// [offline_access]: ./struct.Permission.html#method.offline_access
-    /// [refresh_token]: ./struct.Token.html#structfield.refresh_token
+    /// [refresh_token]: ./struct.TokenResponse.html#structfield.refresh_token
     pub async fn login_with_refresh_token(
         &self,
         refresh_token: &str,
