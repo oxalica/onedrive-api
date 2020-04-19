@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 anyhow = "1.0.28"
-onedrive-api = { path = ".." }
+onedrive-api = { path = "..", features = ["beta"] }
 open = "1.4.0"
 pico-args = "0.3.1"
 tokio = { version = "0.2.18", features = ["macros"] }

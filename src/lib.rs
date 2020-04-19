@@ -34,6 +34,20 @@
 //! # }
 //! ```
 //!
+//! # Features
+//! - `beta`
+//!
+//!   Most of Microsoft APIs used in this crate are stable.
+//!   But there are also some beta APIs, which are subject to change and
+//!   is not suggested to be used in production application.
+//!   Microsoft references of beta APIs usually contain a `(beta)` suffix in title.
+//!
+//!   To avoid breakage, we put beta APIs and related resources under feature gate `beta`.
+//!   They may change to follow Microsoft API references **ANYTIME**,
+//!   and do **NOT** follow the semantic version of this crate.
+//!
+//!   Be carefully using it and **do NOT use it in production**.
+//!
 //! [ms_onedrive]: https://products.office.com/en-us/onedrive/online-cloud-storage
 //! [ms_graph]: https://docs.microsoft.com/graph/overview
 //! [one_drive]: ./struct.OneDrive.html
@@ -57,12 +71,14 @@ pub use self::{
     auth::{Auth, Permission, TokenResponse},
     error::{Error, Result},
     onedrive::{
-        CopyProgress, CopyProgressMonitor, CopyStatus, ListChildrenFetcher, OneDrive,
-        TrackChangeFetcher, UploadSession,
+        CopyProgressMonitor, ListChildrenFetcher, OneDrive, TrackChangeFetcher, UploadSession,
     },
     resource::{DriveId, ItemId, Tag},
     util::{DriveLocation, FileName, ItemLocation},
 };
+
+#[cfg(feature = "beta")]
+pub use self::onedrive::{CopyProgress, CopyStatus};
 
 /// The conflict resolution behavior for actions that create a new item.
 ///

@@ -811,6 +811,10 @@ impl OneDrive {
 
 /// The monitor for checking the progress of a asynchronous `copy` operation.
 ///
+/// # Notes
+/// This struct is always present. But since retrieving copy progress requires beta API,
+/// it is useless due to the lack of method `fetch_progress` if feature `beta` is not enabled.
+///
 /// # See also
 /// [`OneDrive::copy`][copy]
 ///
@@ -823,11 +827,11 @@ pub struct CopyProgressMonitor<'a> {
     url: String,
 }
 
-/// The progress of a asynchronous `copy` operation.
+/// The progress of a asynchronous `copy` operation. [Beta]
 ///
 /// # See also
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta)
-// FIXME: Beta API
+#[cfg(feature = "beta")]
 #[allow(missing_docs)]
 #[derive(Debug)]
 pub struct CopyProgress {
@@ -836,7 +840,7 @@ pub struct CopyProgress {
     _private: (),
 }
 
-/// The status of a `copy` operation.
+/// The status of a `copy` operation. [Beta]
 ///
 /// # See also
 /// [`CopyProgress`][copy_progress]
@@ -844,10 +848,11 @@ pub struct CopyProgress {
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta#json-representation)
 ///
 /// [copy_progress]: ./struct.CopyProgress.html
-// FIXME: Beta API
+#[cfg(feature = "beta")]
 #[allow(missing_docs)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[non_exhaustive]
 pub enum CopyStatus {
     NotStarted,
     InProgress,
@@ -874,12 +879,13 @@ impl<'a> CopyProgressMonitor<'a> {
         &self.url
     }
 
-    /// Fetch the `copy` progress.
+    /// Fetch the `copy` progress. [Beta]
     ///
     /// # See also
     /// [`CopyProgress`][copy_progress]
     ///
     /// [copy_progress]: ./struct.CopyProgress.html
+    #[cfg(feature = "beta")]
     pub async fn fetch_progress(&self) -> Result<CopyProgress> {
         #[derive(Debug, Deserialize)]
         #[serde(rename_all = "camelCase")]

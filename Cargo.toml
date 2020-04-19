@@ -13,6 +13,7 @@ documentation = "https://docs.rs/onedrive-api"
 
 [features]
 default = []
+beta = []
 
 [dependencies]
 bytes = "0.5.4"
@@ -26,7 +27,7 @@ thiserror = "1.0.15"
 url = "2.1.1"
 
 [package.metadata.docs.rs]
-features = []
+all-features = true
 
 [workspace]
 members = ["onedrive-api-test"]
