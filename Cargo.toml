@@ -1,6 +1,6 @@
 [package]
 name = "onedrive-api"
-version = "0.5.2"
+version = "0.6.0"
 authors = ["oxalica <oxalicc@pm.me>"]
 repository = "https://github.com/oxalica/onedrive-api"
 license = "MIT"
