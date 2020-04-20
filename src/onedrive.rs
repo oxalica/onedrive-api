@@ -352,15 +352,21 @@ impl OneDrive {
     /// # Note
     /// [`conflict_behavior`][conflict_behavior] is supported.
     ///
+    /// `file_size` is actually NOT a part of this request, but is used to be stored
+    /// in [`UploadSession`][upload_sess] and will be sent in [`upload_part()`][upload_part] requests.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#create-an-upload-session)
     ///
     /// [if_match]: ./option/struct.CollectionOption.html#method.if_match
     /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
+    /// [upload_sess]: ./struct.UploadSession.html
+    /// [upload_part]: ./struct.UploadSession.html#method.upload_part
     pub async fn new_upload_session_with_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
         option: DriveItemPutOption,
+        file_size: u64,
     ) -> Result<UploadSession> {
         #[derive(Serialize)]
         struct Item {
@@ -373,10 +379,19 @@ impl OneDrive {
             item: Item,
         }
 
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct Resp {
+            upload_url: String,
+            #[serde(flatten)]
+            meta: UploadSessionMeta,
+        }
+
         let conflict_behavior = option
             .get_conflict_behavior()
             .unwrap_or(ConflictBehavior::Fail);
-        self.client
+        let resp: Resp = self
+            .client
             .post(api_url![&self.drive, &item.into(), "createUploadSession"])
             .apply(option)
             .bearer_auth(&self.token)
@@ -386,7 +401,13 @@ impl OneDrive {
             .send()
             .await?
             .parse()
-            .await
+            .await?;
+
+        Ok(UploadSession {
+            upload_url: resp.upload_url,
+            meta: resp.meta,
+            file_size,
+        })
     }
 
     /// Shortcut to `new_upload_session_with_option` with `ConflictBehavior::Fail`.
@@ -398,8 +419,9 @@ impl OneDrive {
     pub async fn new_upload_session<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
+        file_size: u64,
     ) -> Result<UploadSession> {
-        self.new_upload_session_with_option(item, Default::default())
+        self.new_upload_session_with_option(item, Default::default(), file_size)
             .await
     }
 
@@ -408,122 +430,28 @@ impl OneDrive {
     /// Query the status of the upload to find out which byte ranges
     /// have been received previously.
     ///
+    /// # Note
+    ///
+    /// `file_size` is not saved by server but is required by [`UploadSession::upload_part()`][upload_part].
+    /// You need to store it somewhere to make it possible to resume the session.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#resuming-an-in-progress-upload)
-    pub async fn get_upload_session(&self, upload_url: &str) -> Result<UploadSession> {
-        #[derive(Debug, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Resp {
-            // There is no url.
-            next_expected_ranges: Vec<ExpectRange>,
-            expiration_date_time: TimestampString,
-        }
-
-        let resp: Resp = self.client.get(upload_url).send().await?.parse().await?;
+    ///
+    /// [upload_part]: ./struct.UploadSession.html#method.upload_part
+    pub async fn get_upload_session(
+        &self,
+        upload_url: String,
+        file_size: u64,
+    ) -> Result<UploadSession> {
+        // No bearer auth.
+        let resp: UploadSessionMeta = self.client.get(&upload_url).send().await?.parse().await?;
 
         Ok(UploadSession {
-            upload_url: upload_url.to_owned(),
-            next_expected_ranges: resp.next_expected_ranges,
-            expiration_date_time: resp.expiration_date_time,
+            upload_url,
+            meta: resp,
+            file_size,
         })
-    }
-
-    /// Cancel an upload session
-    ///
-    /// This cleans up the temporary file holding the data previously uploaded.
-    /// This should be used in scenarios where the upload is aborted, for example,
-    /// if the user cancels the transfer.
-    ///
-    /// Temporary files and their accompanying upload session are automatically
-    /// cleaned up after the expirationDateTime has passed. Temporary files may
-    /// not be deleted immedately after the expiration time has elapsed.
-    ///
-    /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session)
-    pub async fn delete_upload_session(&self, sess: &UploadSession) -> Result<()> {
-        self.client
-            .delete(&sess.upload_url)
-            .send()
-            .await?
-            .parse_no_content()
-            .await
-    }
-
-    const UPLOAD_SESSION_PART_LIMIT: usize = 60 << 20; // 60 MiB
-
-    /// Upload bytes to an upload session
-    ///
-    /// You can upload the entire file, or split the file into multiple byte ranges,
-    /// as long as the maximum bytes in any given request is less than 60 MiB.
-    /// The fragments of the file must be uploaded sequentially in order. Uploading
-    /// fragments out of order will result in an error.
-    ///
-    /// Note: If your app splits a file into multiple byte ranges, the size of each
-    /// byte range MUST be a multiple of 320 KiB (327,680 bytes). Using a fragment
-    /// size that does not divide evenly by 320 KiB will result in errors committing
-    /// some files.
-    ///
-    /// # Response
-    /// - If the part is uploaded successfully, but the file is not complete yet,
-    ///   will respond `None`.
-    /// - If this is the last part and it is uploaded successfully,
-    ///   will return `Some(<newly_created_drive_item>)`.
-    ///
-    /// # Error
-    /// When the file is completely uploaded, if an item with the same name is created
-    /// during uploading, the last `upload_to_session` call will return `Err` with
-    /// HTTP 409 CONFLICT.
-    ///
-    /// # Panic
-    /// Panic if `remote_range` is invalid, not match the length of `data`, or
-    /// `data` is larger than 60 MiB (62,914,560 bytes).
-    ///
-    /// # See also
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
-    pub async fn upload_to_session(
-        &self,
-        session: &UploadSession,
-        data: impl Into<Bytes>,
-        remote_range: std::ops::Range<u64>,
-        total_size: u64,
-    ) -> Result<Option<DriveItem>> {
-        use std::convert::TryFrom as _;
-
-        let data = data.into();
-        assert!(!data.is_empty(), "Empty data");
-        assert!(
-            data.len() <= Self::UPLOAD_SESSION_PART_LIMIT,
-            "Data too large for one part (got: {} B, limit: {} B)",
-            data.len(),
-            Self::UPLOAD_SESSION_PART_LIMIT,
-        );
-        assert!(
-            remote_range.start < remote_range.end && remote_range.end <= total_size
-            // `Range<u64>` has no method `len()`.
-            && remote_range.end - remote_range.start <= u64::try_from(data.len()).unwrap(),
-            "Invalid remote range",
-        );
-
-        self.client
-            .put(&session.upload_url)
-            // No auth token
-            .header(
-                header::CONTENT_RANGE,
-                format!(
-                    "bytes {}-{}/{}",
-                    remote_range.start,
-                    // Inclusive.
-                    // We checked `remote_range.start < remote_range.end`,
-                    // so this never overflows.
-                    remote_range.end - 1,
-                    total_size,
-                ),
-            )
-            .body(data)
-            .send()
-            .await?
-            .parse_optional()
-            .await
     }
 
     /// Copy a DriveItem.
@@ -1135,15 +1063,25 @@ struct ItemReference<'a> {
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0)
 ///
 /// [get_session]: ./struct.OneDrive.html#method.new_upload_session
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug)]
 pub struct UploadSession {
     upload_url: String,
+    meta: UploadSessionMeta,
+    // The total size of the file which we want to upload.
+    file_size: u64,
+}
+
+// Replied by GETing an upload url.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct UploadSessionMeta {
     next_expected_ranges: Vec<ExpectRange>,
     expiration_date_time: TimestampString,
 }
 
 impl UploadSession {
+    const MAX_PART_SIZE: usize = 60 << 20; // 60 MiB
+
     /// The URL endpoint accepting PUT requests.
     ///
     /// Directly PUT to this URL is **NOT** encouraged.
@@ -1168,7 +1106,7 @@ impl UploadSession {
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
     pub fn next_expected_ranges(&self) -> &[ExpectRange] {
-        &self.next_expected_ranges
+        &self.meta.next_expected_ranges
     }
 
     /// Get the date and time in UTC that the upload session will expire.
@@ -1178,7 +1116,116 @@ impl UploadSession {
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/uploadsession?view=graph-rest-1.0#properties)
     pub fn expiration_date_time(&self) -> &TimestampString {
-        &self.expiration_date_time
+        &self.meta.expiration_date_time
+    }
+
+    /// Get the size of the file which you want to upload.
+    ///
+    /// This is just `file_size` that you provided
+    /// in [`new_upload_session_with_option`][new_sess] or [`get_upload_session`][get_sess].
+    ///
+    /// [new_sess]: ./struct.OneDrive.html#method.new_upload_session_with_option
+    /// [get_sess]: ./struct.OneDrive.html#method.get_upload_session
+    pub fn file_size(&self) -> u64 {
+        self.file_size
+    }
+
+    /// Cancel the upload session
+    ///
+    /// This cleans up the temporary file holding the data previously uploaded.
+    /// This should be used in scenarios where the upload is aborted, for example,
+    /// if the user cancels the transfer.
+    ///
+    /// Temporary files and their accompanying upload session are automatically
+    /// cleaned up after the expirationDateTime has passed. Temporary files may
+    /// not be deleted immedately after the expiration time has elapsed.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session)
+    pub async fn delete(&self, onedrive: &OneDrive) -> Result<()> {
+        onedrive
+            .client
+            // No bearer auth.
+            .delete(&self.upload_url)
+            .send()
+            .await?
+            .parse_no_content()
+            .await
+    }
+
+    /// Upload bytes to an upload session
+    ///
+    /// You can upload the entire file, or split the file into multiple byte ranges,
+    /// as long as the maximum bytes in any given request is less than 60 MiB.
+    /// The fragments of the file must be uploaded sequentially in order. Uploading
+    /// fragments out of order will result in an error.
+    ///
+    /// Note: If your app splits a file into multiple byte ranges, the size of each
+    /// byte range MUST be a multiple of 320 KiB (327,680 bytes). Using a fragment
+    /// size that does not divide evenly by 320 KiB will result in errors committing
+    /// some files.
+    ///
+    /// # Response
+    /// - If the part is uploaded successfully, but the file is not complete yet,
+    ///   will respond `None`.
+    /// - If this is the last part and it is uploaded successfully,
+    ///   will return `Some(<newly_created_drive_item>)`.
+    ///
+    /// # Error
+    /// When the file is completely uploaded, if an item with the same name is created
+    /// during uploading, the last `upload_to_session` call will return `Err` with
+    /// HTTP 409 CONFLICT.
+    ///
+    /// # Panic
+    /// Panic if `remote_range` is invalid, not match the length of `data`, or
+    /// `data` is larger than 60 MiB (62,914,560 bytes).
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
+    pub async fn upload_part(
+        &self,
+        onedrive: &OneDrive,
+        data: impl Into<Bytes>,
+        remote_range: std::ops::Range<u64>,
+    ) -> Result<Option<DriveItem>> {
+        use std::convert::TryFrom as _;
+
+        let data = data.into();
+        assert!(!data.is_empty(), "Empty data");
+        assert!(
+            data.len() <= Self::MAX_PART_SIZE,
+            "Data too large for a single part (got: {} B, limit: {} B)",
+            data.len(),
+            Self::MAX_PART_SIZE,
+        );
+        assert!(
+            remote_range.start < remote_range.end && remote_range.end <= self.file_size
+            // `Range<u64>` has no method `len()`.
+            && remote_range.end - remote_range.start <= u64::try_from(data.len()).unwrap(),
+            "Invalid remote range",
+        );
+
+        onedrive
+            .client
+            .put(&self.upload_url)
+            // No bearer auth.
+            .header(
+                header::CONTENT_RANGE,
+                format!(
+                    "bytes {}-{}/{}",
+                    remote_range.start,
+                    // Inclusive.
+                    // We checked `remote_range.start < remote_range.end`,
+                    // so this never overflows.
+                    remote_range.end - 1,
+                    self.file_size,
+                ),
+            )
+            .body(data)
+            .send()
+            .await?
+            .parse_optional()
+            .await
     }
 }
 

@@ -430,6 +430,7 @@ async fn test_file_upload_small_and_copy(one_drive: &OneDrive) {
 async fn test_file_upload_session(one_drive: &OneDrive) {
     type Range = std::ops::Range<usize>;
     const CONTENT: &[u8] = b"12345678";
+    const CONTENT_LEN: u64 = CONTENT.len() as u64;
     const RANGE1: Range = 0..2;
     const RANGE2_ERROR: Range = 6..8;
     const RANGE2: Range = 2..8;
@@ -442,7 +443,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
 
     // #1
     let sess = one_drive
-        .new_upload_session(item_loc)
+        .new_upload_session(item_loc, CONTENT_LEN)
         .await
         .expect("Cannot create upload session");
 
@@ -453,13 +454,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
 
     // #2
     assert!(
-        one_drive
-            .upload_to_session(
-                &sess,
-                &CONTENT[RANGE1],
-                as_range_u64(RANGE1),
-                CONTENT.len() as u64,
-            )
+        sess.upload_part(&one_drive, &CONTENT[RANGE1], as_range_u64(RANGE1))
             .await
             .expect("Cannot upload part 1")
             .is_none(),
@@ -468,7 +463,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
 
     // #3
     let sess = one_drive
-        .get_upload_session(sess.upload_url())
+        .get_upload_session(sess.upload_url().to_owned(), CONTENT_LEN)
         .await
         .expect("Cannot re-get upload session");
     let next_ranges = sess.next_expected_ranges();
@@ -482,27 +477,19 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
 
     // #4
     assert_eq!(
-        one_drive
-            .upload_to_session(
-                &sess,
-                &CONTENT[RANGE2_ERROR],
-                as_range_u64(RANGE2_ERROR),
-                CONTENT.len() as u64,
-            )
-            .await
-            .expect_err("Upload wrong range should fail")
-            .status_code(),
+        sess.upload_part(
+            &one_drive,
+            &CONTENT[RANGE2_ERROR],
+            as_range_u64(RANGE2_ERROR),
+        )
+        .await
+        .expect_err("Upload wrong range should fail")
+        .status_code(),
         Some(StatusCode::RANGE_NOT_SATISFIABLE),
     );
 
     // #5
-    one_drive
-        .upload_to_session(
-            &sess,
-            &CONTENT[RANGE2],
-            as_range_u64(RANGE2),
-            CONTENT.len() as u64,
-        )
+    sess.upload_part(&one_drive, &CONTENT[RANGE2], as_range_u64(RANGE2))
         .await
         .expect("Failed to upload part 2")
         .expect("Uploading should be completed");
