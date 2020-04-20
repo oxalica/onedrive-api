@@ -69,7 +69,7 @@ async fn test_get_drive(one_drive: &OneDrive) {
     assert_eq!(
         OneDrive::new(
             one_drive.access_token().to_owned(),
-            DriveId::new(format!("{}_inva_lid", drive_id.as_str())),
+            DriveId(format!("{}_inva_lid", drive_id.as_str())),
         )
         .get_drive()
         .await

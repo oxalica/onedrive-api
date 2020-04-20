@@ -57,44 +57,39 @@ macro_rules! define_string_wrapper {
     ($($(#[$meta:meta])* $vis:vis $name:ident;)*) => { $(
         $(#[$meta])*
         #[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
-        $vis struct $name(String);
+        $vis struct $name(pub String);
 
-        // TODO: Provide `to_string`
         impl $name {
-            /// Wrap a string.
-            ///
-            /// Simply wrap without checking.
-            pub fn new(id: String) -> Self {
-                $name(id)
-            }
-
             /// View as str.
             pub fn as_str(&self) -> &str {
                 &self.0
-            }
-        }
-
-        impl AsRef<str> for $name {
-            fn as_ref(&self) -> &str {
-                self.as_str()
             }
         }
     )* };
 }
 
 define_string_wrapper! {
-    /// The unique identifier to a `Drive`.
+    /// Wrapper for a unique identifier to a `Drive`.
+    ///
+    /// # See also
+    /// [Microsoft Docs: Drive resource type](https://docs.microsoft.com/en-us/graph/api/resources/drive?view=graph-rest-1.0)
     pub DriveId;
 
-    /// The unique identifier for a `DriveItem`.
+    /// Wrapper for a unique identifier for a `DriveItem`.
+    ///
+    /// # See also
+    /// [Microsoft Docs: driveItem resource type](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0)
     pub ItemId;
 
-    /// An tag representing the state of an item.
+    /// Wrapper for a tag representing the state of an item.
     ///
     /// Used for avoid data transmission when a resource is not modified.
     ///
     /// The tag from [`DriveItem::c_tag`][c_tag] is for the content of the item,
     /// while the one from [`DriveItem::e_tag`][e_tag] is for the entire item (metadata + content).
+    ///
+    /// # See also
+    /// [Microsoft Docs: driveItem resource type](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0)
     ///
     /// [e_tag]: ./struct.DriveItem.html#structfield.e_tag
     /// [c_tag]: ./struct.DriveItem.html#structfield.c_tag

@@ -1234,7 +1234,7 @@ mod test {
     use super::*;
     #[test]
     fn test_api_url() {
-        let mock_item_id = ItemId::new("1234".to_owned());
+        let mock_item_id = ItemId("1234".to_owned());
         assert_eq!(
             api_path!(&ItemLocation::from_id(&mock_item_id)),
             "/drive/items/1234",

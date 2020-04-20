@@ -141,7 +141,7 @@ impl<'a> ItemLocation<'a> {
     /// Item id from other API.
     pub fn from_id(item_id: &'a ItemId) -> Self {
         Self {
-            inner: ItemLocationEnum::Id(item_id.as_ref()),
+            inner: ItemLocationEnum::Id(item_id.as_str()),
         }
     }
 
@@ -207,7 +207,7 @@ impl ApiPathComponent for DriveLocation {
             User(id) => buf.extend(&["users", id, "drive"]),
             Group(id) => buf.extend(&["groups", id, "drive"]),
             Site(id) => buf.extend(&["sites", id, "drive"]),
-            Id(id) => buf.extend(&["drives", id.as_ref()]),
+            Id(id) => buf.extend(&["drives", id.as_str()]),
         };
     }
 }

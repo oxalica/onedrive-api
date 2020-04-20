@@ -25,12 +25,12 @@ struct AccessOption {
 
 impl AccessOption {
     fn if_match(mut self, tag: &Tag) -> Self {
-        self.if_match = Some(tag.as_str().to_owned());
+        self.if_match = Some(tag.0.clone());
         self
     }
 
     fn if_none_match(mut self, tag: &Tag) -> Self {
-        self.if_none_match = Some(tag.as_str().to_owned());
+        self.if_none_match = Some(tag.0.clone());
         self
     }
 }
