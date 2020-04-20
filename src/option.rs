@@ -14,8 +14,7 @@ use crate::{
     util::RequestBuilderTransformer,
     ConflictBehavior,
 };
-use http::header;
-use reqwest::RequestBuilder;
+use reqwest::{header, RequestBuilder};
 use std::{fmt::Write, marker::PhantomData};
 
 #[derive(Debug, Default)]

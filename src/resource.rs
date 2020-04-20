@@ -42,7 +42,6 @@
 //! [expand]: ../option/struct.ObjectOption.html#method.expand
 //! [one_drive]: ../struct.OneDrive.html
 //! [drive_item_field]: ./enum.DriveItemField.html
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
 
 /// A semantic alias for URL string in resource objects.
@@ -144,7 +143,8 @@ macro_rules! define_resource_object {
             /// More details in [mod documentation][mod].
             ///
             /// [mod]: ./index.html
-            #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+            #[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumVariantNames)]
+            #[strum(serialize_all = "camelCase")]
             #[non_exhaustive]
             #[allow(missing_docs, non_camel_case_types)]
             $vis enum $field_enum_name {
@@ -158,16 +158,7 @@ macro_rules! define_resource_object {
             impl ResourceField for $field_enum_name {
                 #[inline]
                 fn api_field_name(&self) -> &'static str {
-                    lazy_static! {
-                        static ref FIELD_NAME_TABLE: Vec<String> = {
-                            vec![
-                                // Only place selectable fields.
-                                $($(snake_to_camel_case(stringify!($sel_field_name)),)?)*
-                            ]
-                        };
-                    }
-
-                    &FIELD_NAME_TABLE[*self as usize]
+                    <Self as strum::VariantNames>::VARIANTS[*self as usize]
                 }
             }
 
@@ -277,23 +268,6 @@ define_resource_object! {
     }
 }
 
-#[inline]
-fn snake_to_camel_case(s: &str) -> String {
-    let mut buf = String::new();
-    let mut is_u = false;
-    for c in s.chars() {
-        if c == '_' {
-            is_u = true;
-        } else if is_u {
-            is_u = false;
-            buf.push(c.to_ascii_uppercase());
-        } else {
-            buf.push(c);
-        }
-    }
-    buf
-}
-
 /// The error resource type, returned whenever an error occurs in the processing of a request.
 ///
 /// Error responses follow the definition in the OData v4 specification for error responses.
@@ -364,18 +338,6 @@ fn _download_url_is_not_selectable() {}
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_snake_to_camel_case() {
-        let data = [
-            ("abc", "abc"),
-            ("hello_world", "helloWorld"),
-            ("wh_tst_ef_ck", "whTstEfCk"),
-        ];
-        for (i, o) in &data {
-            assert_eq!(snake_to_camel_case(i), *o);
-        }
-    }
 
     #[test]
     fn test_api_field_name() {

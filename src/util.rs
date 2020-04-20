@@ -2,8 +2,7 @@ use crate::{
     error::{Error, Result},
     resource::{DriveId, ErrorResponse, ItemId, OAuth2ErrorResponse},
 };
-use http::StatusCode;
-use reqwest::{RequestBuilder, Response};
+use reqwest::{RequestBuilder, Response, StatusCode};
 use serde::{de, Deserialize};
 use url::PathSegmentsMut;
 

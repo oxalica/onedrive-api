@@ -1,5 +1,5 @@
 use crate::resource::{ErrorResponse, OAuth2ErrorResponse};
-use http::StatusCode;
+use reqwest::StatusCode;
 use thiserror::Error;
 
 /// An alias to `Result` of [`Error`][error].

@@ -9,8 +9,7 @@ use crate::{
     {ConflictBehavior, ExpectRange},
 };
 use bytes::Bytes;
-use http::header;
-use reqwest::Client;
+use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 use url::Url;
 
