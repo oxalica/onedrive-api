@@ -164,7 +164,7 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
     // No request for the first page
     let t = std::time::Instant::now();
     let page1 = fetcher
-        .fetch_next_page()
+        .fetch_next_page(one_drive)
         .await
         .expect("Cannot fetch page 1")
         .expect("Page 1 should not be None");
@@ -182,7 +182,7 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
 
     // #3
     let page2 = fetcher
-        .fetch_next_page()
+        .fetch_next_page(one_drive)
         .await
         .expect("Cannot fetch page 2")
         .expect("Page 2 should not be None");
@@ -190,7 +190,7 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
 
     assert!(
         fetcher
-            .fetch_next_page()
+            .fetch_next_page(one_drive)
             .await
             .expect("Cannot fetch page 3")
             .is_none(),
@@ -406,7 +406,7 @@ async fn test_file_upload_small_and_copy(one_drive: &OneDrive) {
 
         // #3
         match monitor
-            .fetch_progress()
+            .fetch_progress(one_drive)
             .await
             .expect("Failed to check `copy` progress")
             .status
@@ -558,7 +558,7 @@ async fn test_track_changes(one_drive: &OneDrive) {
         .track_changes_from_initial(container_loc)
         .await
         .expect("Cannot track initial changes")
-        .fetch_all()
+        .fetch_all(one_drive)
         .await
         .expect("Cannot fetch all initial changes");
 
@@ -604,7 +604,7 @@ async fn test_track_changes(one_drive: &OneDrive) {
         .track_changes_from_delta_url(&delta_url)
         .await
         .expect("Failed to track changes with delta url")
-        .fetch_all()
+        .fetch_all(one_drive)
         .await
         .expect("Failed to fetch all changes with delta url");
     assert_eq!(

@@ -113,11 +113,11 @@ impl OneDrive {
     /// [drive_item]: ./resource/struct.DriveItem.html
     /// [if_none_match]: ./option/struct.CollectionOption.html#method.if_none_match
     /// [fetcher]: ./struct.ListChildrenFetcher.html
-    pub async fn list_children_with_option<'s, 'a>(
-        &'s self,
+    pub async fn list_children_with_option<'a>(
+        &self,
         item: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
-    ) -> Result<Option<ListChildrenFetcher<'s>>> {
+    ) -> Result<Option<ListChildrenFetcher>> {
         let opt_resp = self
             .client
             .get(api_url![&self.drive, &item.into(), "children"])
@@ -128,7 +128,7 @@ impl OneDrive {
             .parse_optional()
             .await?;
 
-        Ok(opt_resp.map(|resp| ListChildrenFetcher::new(self, resp)))
+        Ok(opt_resp.map(|resp| ListChildrenFetcher::new(resp)))
     }
 
     /// Shortcut to `list_children_with_option` with default params,
@@ -145,7 +145,7 @@ impl OneDrive {
         self.list_children_with_option(item, Default::default())
             .await?
             .ok_or_else(|| Error::unexpected_response("Unexpected empty response"))?
-            .fetch_all()
+            .fetch_all(self)
             .await
     }
 
@@ -542,12 +542,12 @@ impl OneDrive {
     ///
     /// [conflict_rename]: ./enum.ConflictBehavior.html#variant.Rename
     /// [conflict_fail]: ./enum.ConflictBehavior.html#variant.Fail
-    pub async fn copy<'s, 'a, 'b>(
-        &'s self,
+    pub async fn copy<'a, 'b>(
+        &self,
         source_item: impl Into<ItemLocation<'a>>,
         dest_folder: impl Into<ItemLocation<'b>>,
         dest_name: &FileName,
-    ) -> Result<CopyProgressMonitor<'s>> {
+    ) -> Result<CopyProgressMonitor> {
         #[derive(Serialize)]
         #[serde(rename_all = "camelCase")]
         struct Req<'a> {
@@ -579,7 +579,7 @@ impl OneDrive {
             .map_err(|_| Error::unexpected_response("Invalid string header `Location`"))?
             .to_owned();
 
-        Ok(CopyProgressMonitor::from_url(self, url))
+        Ok(CopyProgressMonitor::from_url(url))
     }
 
     /// Move a DriveItem to a new folder.
@@ -724,7 +724,7 @@ impl OneDrive {
         &self,
         folder: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
-    ) -> Result<TrackChangeFetcher<'_>> {
+    ) -> Result<TrackChangeFetcher> {
         let resp = self
             .client
             .get(api_url![&self.drive, &folder.into(), "delta"])
@@ -734,7 +734,7 @@ impl OneDrive {
             .await?
             .parse()
             .await?;
-        Ok(TrackChangeFetcher::new(self, resp))
+        Ok(TrackChangeFetcher::new(resp))
     }
 
     /// Shortcut to `track_changes_from_initial_with_option` with default parameters.
@@ -749,7 +749,7 @@ impl OneDrive {
     pub async fn track_changes_from_initial<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
-    ) -> Result<TrackChangeFetcher<'_>> {
+    ) -> Result<TrackChangeFetcher> {
         self.track_changes_from_initial_with_option(folder, Default::default())
             .await
     }
@@ -763,10 +763,10 @@ impl OneDrive {
     ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub async fn track_changes_from_delta_url<'t>(
-        &'t self,
+    pub async fn track_changes_from_delta_url(
+        &self,
         delta_url: &str,
-    ) -> Result<TrackChangeFetcher<'_>> {
+    ) -> Result<TrackChangeFetcher> {
         let resp: DriveItemCollectionResponse = self
             .client
             .get(delta_url)
@@ -775,7 +775,7 @@ impl OneDrive {
             .await?
             .parse()
             .await?;
-        Ok(TrackChangeFetcher::new(self, resp))
+        Ok(TrackChangeFetcher::new(resp))
     }
 
     /// Get a delta url representing the snapshot of current states.
@@ -821,8 +821,7 @@ impl OneDrive {
 ///
 /// [copy]: ./struct.OneDrive.html#method.copy
 #[derive(Debug)]
-pub struct CopyProgressMonitor<'a> {
-    onedrive: &'a OneDrive,
+pub struct CopyProgressMonitor {
     url: String,
 }
 
@@ -832,10 +831,12 @@ pub struct CopyProgressMonitor<'a> {
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta)
 #[cfg(feature = "beta")]
 #[allow(missing_docs)]
-#[derive(Debug)]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CopyProgress {
     pub percentage_complete: f64,
     pub status: CopyStatus,
+    #[serde(default)]
     _private: (),
 }
 
@@ -863,17 +864,17 @@ pub enum CopyStatus {
     Waiting,
 }
 
-impl<'a> CopyProgressMonitor<'a> {
-    /// Make a progress monitor using existing `url`.
+impl CopyProgressMonitor {
+    /// Make a progress monitor using existing monitor `url`.
     ///
     /// The `url` must be get from [`CopyProgressMonitor::url`][url]
     ///
     /// [url]: #method.url
-    pub fn from_url(onedrive: &'a OneDrive, url: String) -> Self {
-        Self { onedrive, url }
+    pub fn from_url(url: String) -> Self {
+        Self { url }
     }
 
-    /// Get the url of this monitor.
+    /// Get the monitor url.
     pub fn url(&self) -> &str {
         &self.url
     }
@@ -885,28 +886,9 @@ impl<'a> CopyProgressMonitor<'a> {
     ///
     /// [copy_progress]: ./struct.CopyProgress.html
     #[cfg(feature = "beta")]
-    pub async fn fetch_progress(&self) -> Result<CopyProgress> {
-        #[derive(Debug, Deserialize)]
-        #[serde(rename_all = "camelCase")]
-        struct Resp {
-            percentage_complete: f64,
-            status: CopyStatus,
-        }
-
-        let resp: Resp = self
-            .onedrive
-            .client
-            .get(&self.url)
-            .send()
-            .await?
-            .parse()
-            .await?;
-
-        Ok(CopyProgress {
-            percentage_complete: resp.percentage_complete,
-            status: resp.status,
-            _private: (),
-        })
+    pub async fn fetch_progress(&self, onedrive: &OneDrive) -> Result<CopyProgress> {
+        // No bearer auth.
+        onedrive.client.get(&self.url).send().await?.parse().await
     }
 }
 
@@ -920,28 +902,23 @@ struct DriveItemCollectionResponse {
 }
 
 #[derive(Debug)]
-struct DriveItemFetcher<'a> {
-    onedrive: &'a OneDrive,
+struct DriveItemFetcher {
     last_response: DriveItemCollectionResponse,
 }
 
-impl<'a> DriveItemFetcher<'a> {
-    fn new(onedrive: &'a OneDrive, first_response: DriveItemCollectionResponse) -> Self {
+impl DriveItemFetcher {
+    fn new(first_response: DriveItemCollectionResponse) -> Self {
         Self {
-            onedrive,
             last_response: first_response,
         }
     }
 
-    fn resume_from(onedrive: &'a OneDrive, next_url: String) -> Self {
-        Self::new(
-            onedrive,
-            DriveItemCollectionResponse {
-                value: None,
-                next_url: Some(next_url),
-                delta_url: None,
-            },
-        )
+    fn resume_from(next_url: String) -> Self {
+        Self::new(DriveItemCollectionResponse {
+            value: None,
+            next_url: Some(next_url),
+            delta_url: None,
+        })
     }
 
     fn next_url(&self) -> Option<&str> {
@@ -961,7 +938,7 @@ impl<'a> DriveItemFetcher<'a> {
         self.last_response.delta_url.as_ref().map(|s| &**s)
     }
 
-    async fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
+    async fn fetch_next_page(&mut self, onedrive: &OneDrive) -> Result<Option<Vec<DriveItem>>> {
         if let Some(items) = self.last_response.value.take() {
             return Ok(Some(items));
         }
@@ -969,11 +946,10 @@ impl<'a> DriveItemFetcher<'a> {
             None => return Ok(None),
             Some(url) => url,
         };
-        self.last_response = self
-            .onedrive
+        self.last_response = onedrive
             .client
             .get(url)
-            .bearer_auth(&self.onedrive.token)
+            .bearer_auth(&onedrive.token)
             .send()
             .await?
             .parse()
@@ -981,9 +957,9 @@ impl<'a> DriveItemFetcher<'a> {
         Ok(Some(self.last_response.value.take().unwrap_or_default()))
     }
 
-    async fn fetch_all(mut self) -> Result<(Vec<DriveItem>, Option<String>)> {
+    async fn fetch_all(mut self, onedrive: &OneDrive) -> Result<(Vec<DriveItem>, Option<String>)> {
         let mut buf = vec![];
-        while let Some(items) = self.fetch_next_page().await? {
+        while let Some(items) = self.fetch_next_page(onedrive).await? {
             buf.extend(items);
         }
         Ok((buf, self.delta_url().map(|s| s.to_owned())))
@@ -997,14 +973,14 @@ impl<'a> DriveItemFetcher<'a> {
 ///
 /// [list_children_with_opt]: ./struct.OneDrive.html#method.list_children_with_option
 #[derive(Debug)]
-pub struct ListChildrenFetcher<'a> {
-    fetcher: DriveItemFetcher<'a>,
+pub struct ListChildrenFetcher {
+    fetcher: DriveItemFetcher,
 }
 
-impl<'a> ListChildrenFetcher<'a> {
-    fn new(onedrive: &'a OneDrive, first_response: DriveItemCollectionResponse) -> Self {
+impl ListChildrenFetcher {
+    fn new(first_response: DriveItemCollectionResponse) -> Self {
         Self {
-            fetcher: DriveItemFetcher::new(onedrive, first_response),
+            fetcher: DriveItemFetcher::new(first_response),
         }
     }
 
@@ -1012,9 +988,9 @@ impl<'a> ListChildrenFetcher<'a> {
     /// [`ListChildrenFetcher::next_url`][next_url].
     ///
     /// [next_url]: #method.next_url
-    pub fn resume_from(onedrive: &'a OneDrive, next_url: String) -> Self {
+    pub fn resume_from(next_url: String) -> Self {
         Self {
-            fetcher: DriveItemFetcher::resume_from(onedrive, next_url),
+            fetcher: DriveItemFetcher::resume_from(next_url),
         }
     }
 
@@ -1035,8 +1011,8 @@ impl<'a> ListChildrenFetcher<'a> {
     }
 
     /// Fetch the next page, or `None` if reaches the end.
-    pub async fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
-        self.fetcher.fetch_next_page().await
+    pub async fn fetch_next_page(&mut self, onedrive: &OneDrive) -> Result<Option<Vec<DriveItem>>> {
+        self.fetcher.fetch_next_page(onedrive).await
     }
 
     /// Fetch all rest pages and collect all items.
@@ -1045,9 +1021,9 @@ impl<'a> ListChildrenFetcher<'a> {
     ///
     /// Any error occurs when fetching will lead to an failure, and
     /// all progress will be lost.
-    pub async fn fetch_all(self) -> Result<Vec<DriveItem>> {
+    pub async fn fetch_all(self, onedrive: &OneDrive) -> Result<Vec<DriveItem>> {
         self.fetcher
-            .fetch_all()
+            .fetch_all(onedrive)
             .await
             .and_then(|(items, _)| Ok(items))
     }
@@ -1063,14 +1039,14 @@ impl<'a> ListChildrenFetcher<'a> {
 /// [track_initial]: ./struct.OneDrive.html#method.track_changes_from_initial_with_option
 /// [track_delta]: ./struct.OneDrive.html#method.track_changes_from_delta_url
 #[derive(Debug)]
-pub struct TrackChangeFetcher<'a> {
-    fetcher: DriveItemFetcher<'a>,
+pub struct TrackChangeFetcher {
+    fetcher: DriveItemFetcher,
 }
 
-impl<'a> TrackChangeFetcher<'a> {
-    fn new(onedrive: &'a OneDrive, first_response: DriveItemCollectionResponse) -> Self {
+impl TrackChangeFetcher {
+    fn new(first_response: DriveItemCollectionResponse) -> Self {
         Self {
-            fetcher: DriveItemFetcher::new(onedrive, first_response),
+            fetcher: DriveItemFetcher::new(first_response),
         }
     }
 
@@ -1079,9 +1055,9 @@ impl<'a> TrackChangeFetcher<'a> {
     /// The url should be from [`TrackChangeFetcher::next_url`][next_url].
     ///
     /// [next_url]: #method.next_url
-    pub fn resume_from(onedrive: &'a OneDrive, next_url: String) -> Self {
+    pub fn resume_from(next_url: String) -> Self {
         Self {
-            fetcher: DriveItemFetcher::resume_from(onedrive, next_url),
+            fetcher: DriveItemFetcher::resume_from(next_url),
         }
     }
 
@@ -1121,8 +1097,8 @@ impl<'a> TrackChangeFetcher<'a> {
     }
 
     /// Fetch the next page, or `None` if reaches the end.
-    pub async fn fetch_next_page(&mut self) -> Result<Option<Vec<DriveItem>>> {
-        self.fetcher.fetch_next_page().await
+    pub async fn fetch_next_page(&mut self, onedrive: &OneDrive) -> Result<Option<Vec<DriveItem>>> {
+        self.fetcher.fetch_next_page(onedrive).await
     }
 
     /// Fetch all rest pages, collect all items, and also return `delta_url`.
@@ -1131,8 +1107,8 @@ impl<'a> TrackChangeFetcher<'a> {
     ///
     /// Any error occurs when fetching will lead to an failure, and
     /// all progress will be lost.
-    pub async fn fetch_all(self) -> Result<(Vec<DriveItem>, String)> {
-        let (items, opt_delta_url) = self.fetcher.fetch_all().await?;
+    pub async fn fetch_all(self, onedrive: &OneDrive) -> Result<(Vec<DriveItem>, String)> {
+        let (items, opt_delta_url) = self.fetcher.fetch_all(onedrive).await?;
         let delta_url = opt_delta_url.ok_or_else(|| {
             Error::unexpected_response("Missing `@odata.deltaLink` for the last page")
         })?;
