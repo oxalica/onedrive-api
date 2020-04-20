@@ -19,7 +19,7 @@
 //!     .get_item_with_option(
 //!         ItemLocation::root(),
 //!         ObjectOption::new()
-//!             .if_none_match(&Tag::new("<abcdABCD1234>".to_owned()))
+//!             .if_none_match(&Tag("<abcdABCD1234>".to_owned()))
 //!             // Only response `id` and `e_tag` to reduce data transmission.
 //!             .select(&[DriveItemField::id, DriveItemField::e_tag]),
 //!     )

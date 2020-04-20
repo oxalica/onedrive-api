@@ -128,7 +128,7 @@ impl OneDrive {
             .parse_optional()
             .await?;
 
-        Ok(opt_resp.map(|resp| ListChildrenFetcher::new(resp)))
+        Ok(opt_resp.map(ListChildrenFetcher::new))
     }
 
     /// Shortcut to `list_children_with_option` with default params,
