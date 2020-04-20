@@ -579,7 +579,7 @@ impl OneDrive {
             .map_err(|_| Error::unexpected_response("Invalid string header `Location`"))?
             .to_owned();
 
-        Ok(CopyProgressMonitor::from_url(url))
+        Ok(CopyProgressMonitor::from_monitor_url(url))
     }
 
     /// Move a DriveItem to a new folder.
@@ -822,7 +822,7 @@ impl OneDrive {
 /// [copy]: ./struct.OneDrive.html#method.copy
 #[derive(Debug)]
 pub struct CopyProgressMonitor {
-    url: String,
+    monitor_url: String,
 }
 
 /// The progress of a asynchronous `copy` operation. [Beta]
@@ -865,18 +865,18 @@ pub enum CopyStatus {
 }
 
 impl CopyProgressMonitor {
-    /// Make a progress monitor using existing monitor `url`.
+    /// Make a progress monitor using existing `monitor_url`.
     ///
-    /// The `url` must be get from [`CopyProgressMonitor::url`][url]
+    /// `monitor_url` should be got from [`CopyProgressMonitor::monitor_url`][monitor_url]
     ///
-    /// [url]: #method.url
-    pub fn from_url(url: String) -> Self {
-        Self { url }
+    /// [monitor_url]: #method.monitor_url
+    pub fn from_monitor_url(monitor_url: String) -> Self {
+        Self { monitor_url }
     }
 
     /// Get the monitor url.
-    pub fn url(&self) -> &str {
-        &self.url
+    pub fn monitor_url(&self) -> &str {
+        &self.monitor_url
     }
 
     /// Fetch the `copy` progress. [Beta]
@@ -888,7 +888,13 @@ impl CopyProgressMonitor {
     #[cfg(feature = "beta")]
     pub async fn fetch_progress(&self, onedrive: &OneDrive) -> Result<CopyProgress> {
         // No bearer auth.
-        onedrive.client.get(&self.url).send().await?.parse().await
+        onedrive
+            .client
+            .get(&self.monitor_url)
+            .send()
+            .await?
+            .parse()
+            .await
     }
 }
 
