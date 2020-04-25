@@ -105,6 +105,12 @@ pub struct ItemLocation<'a> {
 enum ItemLocationEnum<'a> {
     Path(&'a str),
     Id(&'a str),
+    // See example `GET last user to modify file foo.txt` from
+    // https://docs.microsoft.com/en-us/graph/overview?view=graph-rest-1.0#popular-api-requests
+    ChildOfId {
+        parent_id: &'a str,
+        child_name: &'a str,
+    },
 }
 
 impl<'a> ItemLocation<'a> {
@@ -149,6 +155,16 @@ impl<'a> ItemLocation<'a> {
     pub fn root() -> Self {
         Self {
             inner: ItemLocationEnum::Path("/"),
+        }
+    }
+
+    /// The child item in a directory.
+    pub fn child_of_id(parent_id: &'a ItemId, child_name: &'a FileName) -> Self {
+        Self {
+            inner: ItemLocationEnum::ChildOfId {
+                parent_id: parent_id.as_str(),
+                child_name: child_name.as_str(),
+            },
         }
     }
 }
@@ -219,6 +235,10 @@ impl ApiPathComponent for ItemLocation<'_> {
             Path("/") => buf.push("root"),
             Path(path) => buf.push(&["root:", path, ":"].join("")),
             Id(id) => buf.extend(&["items", id]),
+            ChildOfId {
+                parent_id,
+                child_name,
+            } => buf.extend(&["items", parent_id, "children", child_name]),
         };
     }
 }
