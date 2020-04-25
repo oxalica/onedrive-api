@@ -1,3 +1,15 @@
+# v0.6.1
+
+## Features
+- Default features of `reqwest` can be disabled by `default-features = false`
+  to allow switching to non-default tls implementation.
+- Enable gzip by default.
+- New API: `get_item_download_url[_with_option]`
+- New variant of `ItemLocation`: locating an child by name under an `ItemId`.
+
+## Fixes
+- `options::*` are now `Send + Sync`
+
 # v0.6.0
 
 ## Huge Breaking Changes
