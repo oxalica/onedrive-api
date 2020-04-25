@@ -53,7 +53,7 @@ pub struct ObjectOption<Field> {
     access_opt: AccessOption,
     select_buf: String,
     expand_buf: String,
-    _marker: PhantomData<dyn Fn(&Field)>,
+    _marker: PhantomData<dyn Fn(&Field) + Send + Sync>,
 }
 
 impl<Field: ResourceField> ObjectOption<Field> {
@@ -361,5 +361,27 @@ impl DriveItemPutOption {
 impl RequestBuilderTransformer for DriveItemPutOption {
     fn trans(self, req: RequestBuilder) -> RequestBuilder {
         self.access_opt.trans(req)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::resource;
+
+    fn _assert_send_sync<T: Send + Sync>() {}
+
+    fn _assert_object_option_is_send_sync() {
+        _assert_send_sync::<ObjectOption<resource::DriveField>>();
+        _assert_send_sync::<ObjectOption<resource::DriveItemField>>();
+    }
+
+    fn _assert_collection_option_is_send_sync() {
+        _assert_send_sync::<CollectionOption<resource::DriveField>>();
+        _assert_send_sync::<CollectionOption<resource::DriveItemField>>();
+    }
+
+    fn _assert_drive_item_put_option_is_send_sync() {
+        _assert_send_sync::<DriveItemPutOption>();
     }
 }
