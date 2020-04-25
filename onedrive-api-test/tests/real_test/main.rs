@@ -495,12 +495,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
         .expect("Uploading should be completed");
 
     // #6
-    let download_url = one_drive
-        .get_item(item_loc)
-        .await
-        .expect("Cannot get download url")
-        .download_url
-        .expect("Cannot get `download_url`");
+    let download_url = one_drive.get_item_download_url(item_loc).await.unwrap();
 
     // #7
     assert_eq!(download(&download_url).await, CONTENT);

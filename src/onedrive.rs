@@ -46,10 +46,22 @@ pub struct OneDrive {
 impl OneDrive {
     /// Create a new OneDrive instance with access token given to perform operations in a Drive.
     pub fn new(access_token: String, drive: impl Into<DriveLocation>) -> Self {
-        Self::new_with_client(Client::new(), access_token, drive.into())
+        let client = Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
+            .unwrap();
+        Self::new_with_client(client, access_token, drive.into())
     }
 
-    /// Same as `OneDrive::new` but with custom `Client`.
+    /// Same as [`OneDrive::new`] but with custom `reqwest::Client`.
+    ///
+    /// # Note
+    /// The given `client` should have redirection disabled to
+    /// make [`get_item_download_url[_with_option]`][get_url] work properly.
+    /// See also the docs of [`get_item_download_url[_with_option]`][get_url].
+    ///
+    /// [`OneDrive::new`]: #method.new
+    /// [get_url]: #method.get_item_download_url_with_option
     pub fn new_with_client(
         client: Client,
         access_token: String,
@@ -186,6 +198,64 @@ impl OneDrive {
         self.get_item_with_option(item, Default::default())
             .await?
             .ok_or_else(|| Error::unexpected_response("Unexpected empty response"))
+    }
+
+    /// Get a pre-authorized download URL for a file.
+    ///
+    /// The URL returned is only valid for a short period of time (a few minutes).
+    ///
+    /// # Note
+    /// This API only works with reqwest redirection disabled, which is the default option set by
+    /// [`OneDrive::new()`][new].
+    /// If the `OneDrive` instance is created by [`new_with_client()`][new_with_client],
+    /// be sure the `reqwest::Client` has redirection disabled.
+    ///
+    /// Only `If-None-Match` is supported in `option`.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-get-content?view=graph-rest-1.0&tabs=http)
+    ///
+    /// [new]: #method.new
+    /// [new_with_client]: #method.new_with_client
+    pub async fn get_item_download_url_with_option<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+        option: ObjectOption<DriveItemField>,
+    ) -> Result<String> {
+        let raw_resp = self
+            .client
+            .get(api_url![&self.drive, &item.into(), "content"])
+            .apply(option)
+            .bearer_auth(&self.token)
+            .send()
+            .await?;
+        let url = handle_error_response(raw_resp)
+            .await?
+            .headers()
+            .get(header::LOCATION)
+            .ok_or_else(|| {
+                Error::unexpected_response(
+                    "Header `Location` not exists in response of `get_item_download_url`",
+                )
+            })?
+            .to_str()
+            .map_err(|_| Error::unexpected_response("Invalid string header `Location`"))?
+            .to_owned();
+        Ok(url)
+    }
+
+    /// Shortcut to [`get_item_download_url_with_option`] with default options.
+    ///
+    /// # See also
+    /// [`get_item_download_url_with_option`]
+    ///
+    /// [`get_item_download_url_with_option`]: #method.get_item_downloda_url_with_option
+    pub async fn get_item_download_url<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+    ) -> Result<String> {
+        self.get_item_download_url_with_option(item.into(), Default::default())
+            .await
     }
 
     /// Create a new folder under an DriveItem

@@ -301,7 +301,8 @@ pub(crate) async fn handle_error_response(resp: Response) -> Result<Response> {
     }
 
     let status = resp.status();
-    if status.is_success() {
+    // `get_item_download_url_with_option` expects 302.
+    if status.is_success() || status.is_redirection() {
         Ok(resp)
     } else {
         let resp: Resp = resp.json().await?;
