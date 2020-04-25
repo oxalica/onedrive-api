@@ -48,6 +48,7 @@ impl OneDrive {
     pub fn new(access_token: String, drive: impl Into<DriveLocation>) -> Self {
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
+            .gzip(true)
             .build()
             .unwrap();
         Self::new_with_client(client, access_token, drive.into())

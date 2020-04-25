@@ -17,7 +17,7 @@ beta = []
 
 [dependencies]
 bytes = "0.5.4"
-reqwest = { version = "0.10.4", features = ["json"] }
+reqwest = { version = "0.10.4", features = ["json", "gzip"] }
 serde = { version = "1.0.102", features = ["derive"] }
 serde_json = "1.0.41"
 strum = { version = "0.18.0", features = ["derive"] }
