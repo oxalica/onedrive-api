@@ -97,6 +97,21 @@ impl Auth {
         }
     }
 
+    /// Get the `client_id` used to create this instance.
+    pub fn client_id(&self) -> &str {
+        &self.client_id
+    }
+
+    /// Get the `permission` used to create this instance.
+    pub fn permission(&self) -> &Permission {
+        &self.permission
+    }
+
+    /// Get the `redirect_uri` used to create this instance.
+    pub fn redirect_uri(&self) -> &str {
+        &self.redirect_uri
+    }
+
     fn auth_url(&self, response_type: &str) -> String {
         Url::parse_with_params(
             "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
