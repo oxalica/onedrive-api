@@ -940,7 +940,7 @@ impl DriveItemFetcher {
     }
 
     fn delta_url(&self) -> Option<&str> {
-        self.last_response.delta_url.as_ref().map(|s| &**s)
+        self.last_response.delta_url.as_deref()
     }
 
     async fn fetch_next_page(&mut self, onedrive: &OneDrive) -> Result<Option<Vec<DriveItem>>> {
@@ -1030,7 +1030,7 @@ impl ListChildrenFetcher {
         self.fetcher
             .fetch_all(onedrive)
             .await
-            .and_then(|(items, _)| Ok(items))
+            .map(|(items, _)| items)
     }
 }
 

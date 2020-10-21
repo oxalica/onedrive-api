@@ -222,6 +222,7 @@ impl Auth {
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#token-response)
 #[derive(Debug, Deserialize)]
+#[non_exhaustive]
 pub struct TokenResponse {
     /// Indicates the token type value. The only type that Azure AD supports is Bearer.
     pub token_type: String,
@@ -245,8 +246,6 @@ pub struct TokenResponse {
     ///
     /// [offline_access]: ./struct.Permission.html#method.offline_access
     pub refresh_token: Option<String>,
-    #[serde(default)]
-    _private: (),
 }
 
 fn space_separated_strings<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>

@@ -121,6 +121,7 @@ macro_rules! define_resource_object {
             $(#[$meta])*
             #[derive(Debug, Default, Deserialize, Serialize)]
             #[serde(rename_all = "camelCase")]
+            #[non_exhaustive]
             $vis struct $struct_name {
                 $(
                     #[allow(missing_docs)]
@@ -130,8 +131,6 @@ macro_rules! define_resource_object {
                     $(pub $sel_field_name)?
                         : Option<$field_ty>,
                 )*
-                #[serde(default)]
-                _private: (),
             }
 
             /// Fields descriptors.
@@ -289,6 +288,7 @@ define_resource_object! {
 /// [one_drive]: ../struct.OneDrive.html
 /// [list_children_fetcher]: ../struct.ListChildrenFetcher.html
 #[derive(Debug, Deserialize)]
+#[non_exhaustive]
 pub struct ErrorResponse {
     /// OData `code`. Non-exhaustive.
     ///
@@ -302,8 +302,6 @@ pub struct ErrorResponse {
     /// OData `innererror`. An optional object with additional or more specific error codes.
     #[serde(rename = "innererror")]
     pub inner_error: Option<serde_json::Map<String, serde_json::Value>>,
-    #[serde(default)]
-    _private: (),
 }
 
 /// OAuth2 error response.
@@ -323,6 +321,7 @@ pub struct ErrorResponse {
 /// [auth]: ../struct.Auth.html
 #[derive(Debug, Deserialize)]
 #[allow(missing_docs)]
+#[non_exhaustive]
 pub struct OAuth2ErrorResponse {
     pub error: String,
     pub error_description: String,
@@ -330,8 +329,6 @@ pub struct OAuth2ErrorResponse {
     pub timestamp: Option<String>,
     pub trace_id: Option<String>,
     pub correlation_id: Option<String>,
-    #[serde(default)]
-    _private: (),
 }
 
 /// ```compile_fail
