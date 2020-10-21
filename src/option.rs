@@ -106,7 +106,7 @@ impl<Field: ResourceField> ObjectOption<Field> {
     /// [resource]: ../resource/index.html#field-descriptors
     pub fn select(mut self, fields: &[Field]) -> Self {
         for sel in fields {
-            self = self.select_raw(&[sel.api_field_name()]);
+            self = self.select_raw(&[sel.__raw_name()]);
         }
         self
     }
@@ -124,13 +124,14 @@ impl<Field: ResourceField> ObjectOption<Field> {
     ///
     /// # Note
     /// If called more than once, all fields mentioned will be expanded.
+    /// `select_children` should be raw camelCase field names mentioned in Microsoft Docs below.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter)
     ///
     /// [resource]: ../resource/index.html#field-descriptors
     pub fn expand(self, field: Field, select_children: Option<&[&str]>) -> Self {
-        self.expand_raw(field.api_field_name(), select_children)
+        self.expand_raw(field.__raw_name(), select_children)
     }
 
     fn expand_raw(mut self, field: &str, select_children: Option<&[&str]>) -> Self {
@@ -248,7 +249,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
             Order::Ascending => "asc",
             Order::Descending => "desc",
         };
-        self.order_buf = Some(format!("{} {}", field.api_field_name(), order));
+        self.order_buf = Some(format!("{} {}", field.__raw_name(), order));
         self
     }
 

@@ -96,9 +96,10 @@ define_string_wrapper! {
     pub Tag;
 }
 
+// Used for generalization over any resource field enums in `option`.
 #[doc(hidden)]
 pub trait ResourceField {
-    fn api_field_name(&self) -> &'static str;
+    fn __raw_name(&self) -> &'static str;
 }
 
 macro_rules! define_resource_object {
@@ -150,10 +151,18 @@ macro_rules! define_resource_object {
                 )*
             }
 
+            impl $field_enum_name {
+                /// Get the raw camelCase name of the field.
+                #[inline]
+                pub fn raw_name(&self) -> &'static str {
+                    <Self as strum::VariantNames>::VARIANTS[*self as usize]
+                }
+            }
+
             impl ResourceField for $field_enum_name {
                 #[inline]
-                fn api_field_name(&self) -> &'static str {
-                    <Self as strum::VariantNames>::VARIANTS[*self as usize]
+                fn __raw_name(&self) -> &'static str {
+                    self.raw_name()
                 }
             }
 
@@ -335,19 +344,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_api_field_name() {
-        assert_eq!(DriveField::id.api_field_name(), "id");
-        assert_eq!(DriveField::drive_type.api_field_name(), "driveType");
-        assert_eq!(DriveField::owner.api_field_name(), "owner");
-        assert_eq!(DriveField::web_url.api_field_name(), "webUrl");
+    fn test_raw_name() {
+        assert_eq!(DriveField::id.raw_name(), "id");
+        assert_eq!(DriveField::drive_type.raw_name(), "driveType");
+        assert_eq!(DriveField::owner.raw_name(), "owner");
+        assert_eq!(DriveField::web_url.raw_name(), "webUrl");
 
-        assert_eq!(DriveItemField::id.api_field_name(), "id");
+        assert_eq!(DriveItemField::id.raw_name(), "id");
         assert_eq!(
-            DriveItemField::file_system_info.api_field_name(),
+            DriveItemField::file_system_info.raw_name(),
             "fileSystemInfo"
         );
-        assert_eq!(DriveItemField::size.api_field_name(), "size");
-        assert_eq!(DriveItemField::web_dav_url.api_field_name(), "webDavUrl");
-        assert_eq!(DriveItemField::web_url.api_field_name(), "webUrl");
+        assert_eq!(DriveItemField::size.raw_name(), "size");
+        assert_eq!(DriveItemField::web_dav_url.raw_name(), "webDavUrl");
+        assert_eq!(DriveItemField::web_url.raw_name(), "webUrl");
     }
 }
