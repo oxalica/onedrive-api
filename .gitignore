@@ -2,9 +2,5 @@
 **/*.rs.bk
 Cargo.lock
 /.vscode
-*.snap.new
-.env*
 
-/src/main.rs
-/tests/login_setting.json
-/tests/login_setting.json.tmp
+.env*
