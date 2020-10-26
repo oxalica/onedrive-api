@@ -1,3 +1,14 @@
+# v0.6.2
+
+## Features
+- Add missing `track_changes_from_delta_url_with_option` for customizing `track_changes_from_delta_url`.
+- Add method `raw_name` for field descriptor enums to get raw camelCased name used in underlying requests.
+- Add getter `client_id/permission/redirect_uri` for `Auth`.
+
+## Others
+- Bump dependencies.
+- Use new rustc features to simplify codes.
+
 # v0.6.1
 
 ## Features
