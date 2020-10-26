@@ -762,19 +762,38 @@ impl OneDrive {
     ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub async fn track_changes_from_delta_url(
+    pub async fn track_changes_from_delta_url_with_option(
         &self,
         delta_url: &str,
+        option: CollectionOption<DriveItemField>,
     ) -> Result<TrackChangeFetcher> {
         let resp: DriveItemCollectionResponse = self
             .client
             .get(delta_url)
+            .apply(option)
             .bearer_auth(&self.token)
             .send()
             .await?
             .parse()
             .await?;
         Ok(TrackChangeFetcher::new(resp))
+    }
+
+    /// Shortcut to `track_changes_from_delta_url_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`track_changes_from_delta_url_with_option`][with_opt]
+    ///
+    /// [`TrackChangeFetcher`][fetcher]
+    ///
+    /// [with_opt]: #method.track_changes_from_delta_url_with_option
+    /// [fetcher]: ./struct.TrackChangeFetcher.html
+    pub async fn track_changes_from_delta_url(
+        &self,
+        delta_url: &str,
+    ) -> Result<TrackChangeFetcher> {
+        self.track_changes_from_delta_url_with_option(delta_url, Default::default())
+            .await
     }
 
     /// Get a delta url representing the snapshot of current states.
