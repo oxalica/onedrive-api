@@ -711,6 +711,10 @@ impl OneDrive {
     /// Note: you should only delete a folder locally if it is empty after
     /// syncing all the changes.
     ///
+    /// # Panic
+    /// Track Changes API does not support [`$count=true` query parameter][dollar_count].
+    /// If [`CollectionOption::get_count`][opt_get_count] is set in option, it will panic.
+    ///
     /// # Response
     /// Respond a [fetcher][fetcher] for fetching changes from initial state (empty) to the snapshot of
     /// current states. See [`TrackChangeFetcher`][fetcher] for more details.
@@ -719,11 +723,17 @@ impl OneDrive {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0)
     ///
     /// [fetcher]: ./struct.TrackChangeFetcher.html
+    /// [dollar_count]: https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
+    /// [opt_get_count]: ./option/struct.CollectionOption.html#method.get_count
     pub async fn track_changes_from_initial_with_option<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
     ) -> Result<TrackChangeFetcher> {
+        assert!(
+            !option.has_get_count(),
+            "`get_count` is not supported by Track Changes API",
+        );
         let resp = self
             .client
             .get(api_url![&self.drive, &folder.into(), "delta"])
@@ -755,6 +765,10 @@ impl OneDrive {
 
     /// Track changes for a folder from snapshot (delta url) to snapshot of current states.
     ///
+    /// # Panic
+    /// Track Changes API does not support [`$count=true` query parameter][dollar_count].
+    /// If [`CollectionOption::get_count`][opt_get_count] is set in option, it will panic.
+    ///
     /// # See also
     /// [`OneDrive::track_changes_from_initial_with_option`][track_initial]
     ///
@@ -762,11 +776,17 @@ impl OneDrive {
     ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
+    /// [dollar_count]: https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
+    /// [opt_get_count]: ./option/struct.CollectionOption.html#method.get_count
     pub async fn track_changes_from_delta_url_with_option(
         &self,
         delta_url: &str,
         option: CollectionOption<DriveItemField>,
     ) -> Result<TrackChangeFetcher> {
+        assert!(
+            !option.has_get_count(),
+            "`get_count` is not supported by Track Changes API",
+        );
         let resp: DriveItemCollectionResponse = self
             .client
             .get(delta_url)

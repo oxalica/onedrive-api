@@ -173,7 +173,7 @@ pub struct CollectionOption<Field> {
     obj_option: ObjectOption<Field>,
     order_buf: Option<String>,
     page_size_buf: Option<String>,
-    get_count_buf: Option<bool>,
+    get_count_buf: bool,
 }
 
 impl<Field: ResourceField> CollectionOption<Field> {
@@ -183,7 +183,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
             obj_option: Default::default(),
             order_buf: None,
             page_size_buf: None,
-            get_count_buf: None,
+            get_count_buf: false,
         }
     }
 
@@ -270,13 +270,22 @@ impl<Field: ResourceField> CollectionOption<Field> {
     /// # Note
     /// If called more than once, only the last call make sense.
     ///
-    /// Set it when calling unsupported API will cause HTTP 400 Client Error.
+    /// Note that Track Changes API does not support this. Setting it in calls to
+    /// [`track_changes_from_delta_url_with_option`][track_delta_opt] or
+    /// [`track_changes_from_initial_with_option`][track_init_opt] will cause a panic.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter)
+    ///
+    /// [track_delta_opt]: ../struct.OneDrive.html#method.track_changes_from_delta_url_with_option
+    /// [track_init_opt]: ../struct.OneDrive.html#method.track_changes_from_initial_with_option
     pub fn get_count(mut self, get_count: bool) -> Self {
-        self.get_count_buf = Some(get_count);
+        self.get_count_buf = get_count;
         self
+    }
+
+    pub(crate) fn has_get_count(&self) -> bool {
+        self.get_count_buf
     }
 }
 
@@ -289,9 +298,8 @@ impl<Field: ResourceField> RequestBuilderTransformer for CollectionOption<Field>
         if let Some(s) = &self.page_size_buf {
             req = req.query(&[("$top", s)]);
         }
-        if let Some(v) = self.get_count_buf {
-            let v = if v { "true" } else { "false" };
-            req = req.query(&[("$count", v)]);
+        if self.get_count_buf {
+            req = req.query(&[("$count", "true")]);
         }
         req
     }
