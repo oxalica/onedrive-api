@@ -794,17 +794,30 @@ impl OneDrive {
     /// The delta url can be used in [`track_changes_from_delta_url`][track_from_delta] later
     /// to get diffs between two snapshots of states.
     ///
+    /// Note that options (query parameters) are saved in delta url, so they are applied to all later
+    /// requests by `track_changes_from_delta_url` without need for specifying them every time.
+    ///
+    /// # Panic
+    /// Track Changes API does not support [`$count=true` query parameter][dollar_count].
+    /// If [`CollectionOption::get_count`][opt_get_count] is set in option, it will panic.
+    ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#retrieving-the-current-deltalink)
     ///
     /// [track_from_delta]: #method.track_changes_from_delta_url
-    pub async fn get_latest_delta_url<'a>(
+    pub async fn get_latest_delta_url_with_option<'a>(
         &self,
         folder: impl Into<ItemLocation<'a>>,
+        option: CollectionOption<DriveItemField>,
     ) -> Result<String> {
+        assert!(
+            !option.has_get_count(),
+            "`get_count` is not supported by Track Changes API",
+        );
         self.client
             .get(api_url![&self.drive, &folder.into(), "delta"])
             .query(&[("token", "latest")])
+            .apply(option)
             .bearer_auth(&self.token)
             .send()
             .await?
@@ -816,6 +829,23 @@ impl OneDrive {
                     "Missing field `@odata.deltaLink` for getting latest delta",
                 )
             })
+    }
+
+    /// Shortcut to `get_latest_delta_url_with_option` with default parameters.
+    ///
+    /// # See also
+    /// [`get_latest_delta_url_with_option`][with_opt]
+    ///
+    /// [`TrackChangeFetcher`][fetcher]
+    ///
+    /// [with_opt]: #method.get_latest_delta_url_with_option
+    /// [fetcher]: ./struct.TrackChangeFetcher.html
+    pub async fn get_latest_delta_url<'a>(
+        &self,
+        folder: impl Into<ItemLocation<'a>>,
+    ) -> Result<String> {
+        self.get_latest_delta_url_with_option(folder.into(), Default::default())
+            .await
     }
 }
 
