@@ -599,22 +599,6 @@ async fn test_track_changes(one_drive: &OneDrive) {
     );
 
     // #8
-    let (delta_changes2, _) = one_drive
-        .track_changes_from_delta_url_with_option(
-            &delta_url,
-            CollectionOption::new().select(&[DriveItemField::name]),
-        )
-        .await
-        .expect("Failed to track changes with delta url")
-        .fetch_all(one_drive)
-        .await
-        .expect("Failed to fetch all changes with delta url");
-    // `id` is not selected.
-    assert!(delta_changes2
-        .iter()
-        .all(|item| item.id.is_none() && item.name.is_some()));
-
-    // #9
     one_drive.delete(container_loc).await.unwrap();
 }
 

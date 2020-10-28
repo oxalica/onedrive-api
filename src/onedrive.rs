@@ -765,55 +765,28 @@ impl OneDrive {
 
     /// Track changes for a folder from snapshot (delta url) to snapshot of current states.
     ///
-    /// # Panic
-    /// Track Changes API does not support [`$count=true` query parameter][dollar_count].
-    /// If [`CollectionOption::get_count`][opt_get_count] is set in option, it will panic.
-    ///
-    /// # See also
-    /// [`OneDrive::track_changes_from_initial_with_option`][track_initial]
+    /// # Note
+    /// There is no `with_option` version of this function. Since delta URL already carries
+    /// query parameters when you get it. The initial parameters will be automatically used
+    /// in all following requests through delta URL.
     ///
     /// [`TrackChangeFetcher`][fetcher]
     ///
     /// [track_initial]: #method.track_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    /// [dollar_count]: https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
-    /// [opt_get_count]: ./option/struct.CollectionOption.html#method.get_count
-    pub async fn track_changes_from_delta_url_with_option(
+    pub async fn track_changes_from_delta_url(
         &self,
         delta_url: &str,
-        option: CollectionOption<DriveItemField>,
     ) -> Result<TrackChangeFetcher> {
-        assert!(
-            !option.has_get_count(),
-            "`get_count` is not supported by Track Changes API",
-        );
         let resp: DriveItemCollectionResponse = self
             .client
             .get(delta_url)
-            .apply(option)
             .bearer_auth(&self.token)
             .send()
             .await?
             .parse()
             .await?;
         Ok(TrackChangeFetcher::new(resp))
-    }
-
-    /// Shortcut to `track_changes_from_delta_url_with_option` with default parameters.
-    ///
-    /// # See also
-    /// [`track_changes_from_delta_url_with_option`][with_opt]
-    ///
-    /// [`TrackChangeFetcher`][fetcher]
-    ///
-    /// [with_opt]: #method.track_changes_from_delta_url_with_option
-    /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub async fn track_changes_from_delta_url(
-        &self,
-        delta_url: &str,
-    ) -> Result<TrackChangeFetcher> {
-        self.track_changes_from_delta_url_with_option(delta_url, Default::default())
-            .await
     }
 
     /// Get a delta url representing the snapshot of current states.
