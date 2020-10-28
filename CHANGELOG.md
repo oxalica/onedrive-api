@@ -1,4 +1,10 @@
-# v0.6.2
+# v0.6.3
+
+## Fixes
+- Revert `track_changes_from_delta_url_with_option` since it will cause duplicated query parameters.
+  Instead, we introduced `get_latest_delta_url_with_option` for setting options at beginning.
+
+# v0.6.2 (Yanked)
 
 ## Features
 - Add missing `track_changes_from_delta_url_with_option` for customizing `track_changes_from_delta_url`.
