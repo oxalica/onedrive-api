@@ -19,10 +19,11 @@ mod util;
 use util::*;
 
 macro_rules! define_tests {
-    ($($f:ident;)*) => {
+    ($($(#[$meta:meta])* $f:ident;)*) => {
         mod wrapper {
             $(
                 #[tokio::test]
+                $(#[$meta])*
                 async fn $f() {
                     let one_drive = super::util::get_logined_onedrive().await;
                     super::$f(&one_drive).await;
@@ -41,7 +42,7 @@ define_tests! {
     test_file_upload_small_and_move;
     test_file_upload_small_and_copy;
     test_file_upload_session;
-    test_track_changes;
+    #[ignore] test_track_changes;
 
     test_auth_error;
     test_get_drive_error_unauthorized;
@@ -506,7 +507,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
 
 /// 8 requests
 async fn test_track_changes(one_drive: &OneDrive) {
-    use std::{collections::HashSet, iter::FromIterator};
+    use std::collections::HashSet;
 
     let container_name = gen_filename();
     let container_loc = rooted_location(container_name);
@@ -535,33 +536,31 @@ async fn test_track_changes(one_drive: &OneDrive) {
         .id
         .expect("Missing `id`");
 
-    // #4
-    let (initial_changes, _) = one_drive
-        .track_changes_from_initial(container_loc)
-        .await
-        .expect("Cannot track initial changes")
-        .fetch_all(one_drive)
-        .await
-        .expect("Cannot fetch all initial changes");
+    {
+        // #4
+        let (initial_changes, _) = one_drive
+            .track_root_changes_from_initial()
+            .await
+            .expect("Cannot track initial changes")
+            .fetch_all(one_drive)
+            .await
+            .expect("Cannot fetch all initial changes");
 
-    // Items may duplicate.
-    // See: https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#remarks
-    assert_eq!(
-        initial_changes
+        // Items may duplicate.
+        // See: https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#remarks
+        let ids = initial_changes
             .into_iter()
-            .map(|item| { item.id.expect("Missing `id`") })
-            .collect::<HashSet<ItemId>>(),
-        // The root folder itself is contained.
-        HashSet::from_iter(vec![
-            container_id.clone(),
-            folder1_id.clone(),
-            folder2_id.clone(),
-        ]),
-    );
+            .map(|item| item.id.expect("Missing `id`"))
+            .collect::<HashSet<ItemId>>();
+        // We track changes of root directory, so there may be other files.
+        assert!(ids.contains(&container_id));
+        assert!(ids.contains(&folder1_id));
+        assert!(ids.contains(&folder2_id));
+    }
 
     // #5
     let delta_url = one_drive
-        .get_latest_delta_url(container_loc)
+        .get_root_latest_delta_url()
         .await
         .expect("Failed to get latest track change delta url");
 
@@ -574,29 +573,33 @@ async fn test_track_changes(one_drive: &OneDrive) {
         .id
         .expect("Missing `id`");
 
-    // (`*` for update path)
+    // `*`: Update path, from tracing root to every changed file
     // root*
     // |- container*
     //    |- folder1*
     //    |  |- folder3*
     //    |- folder2
 
-    // #7
-    let (delta_changes, _) = one_drive
-        .track_changes_from_delta_url(&delta_url)
-        .await
-        .expect("Failed to track changes with delta url")
-        .fetch_all(one_drive)
-        .await
-        .expect("Failed to fetch all changes with delta url");
-    assert_eq!(
-        delta_changes
+    {
+        // #7
+        let (delta_changes, _) = one_drive
+            .track_root_changes_from_delta_url(&delta_url)
+            .await
+            .expect("Failed to track changes with delta url")
+            .fetch_all(one_drive)
+            .await
+            .expect("Failed to fetch all changes with delta url");
+
+        let ids = delta_changes
             .into_iter()
             .map(|item| item.id.expect("Missing `id`"))
-            .collect::<HashSet<ItemId>>(),
-        // The path from root to every changed file
-        HashSet::from_iter(vec![container_id.clone(), folder1_id, folder3_id]),
-    );
+            .collect::<HashSet<ItemId>>();
+        // We track changes of root directory, so there may be other changes.
+        assert!(ids.contains(&container_id));
+        assert!(ids.contains(&folder1_id));
+        assert!(ids.contains(&folder3_id));
+        assert!(!ids.contains(&folder2_id)); // This is not updated.
+    }
 
     // #8
     one_drive.delete(container_loc).await.unwrap();

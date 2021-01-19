@@ -702,7 +702,7 @@ impl OneDrive {
         self.delete_with_option(item, Default::default()).await
     }
 
-    /// Track changes for a folder from initial state (empty state) to snapshot of current states.
+    /// Track changes for root folder from initial state (empty state) to snapshot of current states.
     ///
     /// This method allows your app to track changes to a drive and its children over time.
     /// Deleted items are returned with the deleted facet. Items with this property set
@@ -725,9 +725,8 @@ impl OneDrive {
     /// [fetcher]: ./struct.TrackChangeFetcher.html
     /// [dollar_count]: https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
     /// [opt_get_count]: ./option/struct.CollectionOption.html#method.get_count
-    pub async fn track_changes_from_initial_with_option<'a>(
+    pub async fn track_root_changes_from_initial_with_option<'a>(
         &self,
-        folder: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
     ) -> Result<TrackChangeFetcher> {
         assert!(
@@ -736,7 +735,7 @@ impl OneDrive {
         );
         let resp = self
             .client
-            .get(api_url![&self.drive, &folder.into(), "delta"])
+            .get(api_url![&self.drive, "root", "delta"])
             .apply(option)
             .bearer_auth(&self.token)
             .send()
@@ -746,24 +745,21 @@ impl OneDrive {
         Ok(TrackChangeFetcher::new(resp))
     }
 
-    /// Shortcut to `track_changes_from_initial_with_option` with default parameters.
+    /// Shortcut to `track_root_changes_from_initial_with_option` with default parameters.
     ///
     /// # See also
-    /// [`track_changes_from_initial_with_option`][with_opt]
+    /// [`track_root_changes_from_initial_with_option`][with_opt]
     ///
     /// [`TrackChangeFetcher`][fetcher]
     ///
-    /// [with_opt]: #method.track_changes_from_initial_with_option
+    /// [with_opt]: #method.track_root_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub async fn track_changes_from_initial<'a>(
-        &self,
-        folder: impl Into<ItemLocation<'a>>,
-    ) -> Result<TrackChangeFetcher> {
-        self.track_changes_from_initial_with_option(folder, Default::default())
+    pub async fn track_root_changes_from_initial<'a>(&self) -> Result<TrackChangeFetcher> {
+        self.track_root_changes_from_initial_with_option(Default::default())
             .await
     }
 
-    /// Track changes for a folder from snapshot (delta url) to snapshot of current states.
+    /// Track changes for root folder from snapshot (delta url) to snapshot of current states.
     ///
     /// # Note
     /// There is no `with_option` version of this function. Since delta URL already carries
@@ -772,9 +768,8 @@ impl OneDrive {
     ///
     /// [`TrackChangeFetcher`][fetcher]
     ///
-    /// [track_initial]: #method.track_changes_from_initial_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub async fn track_changes_from_delta_url(
+    pub async fn track_root_changes_from_delta_url(
         &self,
         delta_url: &str,
     ) -> Result<TrackChangeFetcher> {
@@ -789,9 +784,9 @@ impl OneDrive {
         Ok(TrackChangeFetcher::new(resp))
     }
 
-    /// Get a delta url representing the snapshot of current states.
+    /// Get a delta url representing the snapshot of current states of root folder.
     ///
-    /// The delta url can be used in [`track_changes_from_delta_url`][track_from_delta] later
+    /// The delta url can be used in [`track_root_changes_from_delta_url`][track_from_delta] later
     /// to get diffs between two snapshots of states.
     ///
     /// Note that options (query parameters) are saved in delta url, so they are applied to all later
@@ -804,10 +799,9 @@ impl OneDrive {
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#retrieving-the-current-deltalink)
     ///
-    /// [track_from_delta]: #method.track_changes_from_delta_url
-    pub async fn get_latest_delta_url_with_option<'a>(
+    /// [track_from_delta]: #method.track_root_changes_from_delta_url
+    pub async fn get_root_latest_delta_url_with_option<'a>(
         &self,
-        folder: impl Into<ItemLocation<'a>>,
         option: CollectionOption<DriveItemField>,
     ) -> Result<String> {
         assert!(
@@ -815,7 +809,7 @@ impl OneDrive {
             "`get_count` is not supported by Track Changes API",
         );
         self.client
-            .get(api_url![&self.drive, &folder.into(), "delta"])
+            .get(api_url![&self.drive, "root", "delta"])
             .query(&[("token", "latest")])
             .apply(option)
             .bearer_auth(&self.token)
@@ -831,20 +825,17 @@ impl OneDrive {
             })
     }
 
-    /// Shortcut to `get_latest_delta_url_with_option` with default parameters.
+    /// Shortcut to `get_root_latest_delta_url_with_option` with default parameters.
     ///
     /// # See also
-    /// [`get_latest_delta_url_with_option`][with_opt]
+    /// [`get_root_latest_delta_url_with_option`][with_opt]
     ///
     /// [`TrackChangeFetcher`][fetcher]
     ///
-    /// [with_opt]: #method.get_latest_delta_url_with_option
+    /// [with_opt]: #method.get_root_latest_delta_url_with_option
     /// [fetcher]: ./struct.TrackChangeFetcher.html
-    pub async fn get_latest_delta_url<'a>(
-        &self,
-        folder: impl Into<ItemLocation<'a>>,
-    ) -> Result<String> {
-        self.get_latest_delta_url_with_option(folder.into(), Default::default())
+    pub async fn get_root_latest_delta_url<'a>(&self) -> Result<String> {
+        self.get_root_latest_delta_url_with_option(Default::default())
             .await
     }
 }

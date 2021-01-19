@@ -18,11 +18,15 @@ jobs:
         with:
           profile: minimal
           toolchain: stable
-      - name: Real Test
+      - name: Build onedrive-api-test
+        run: |
+          cd onedrive-api-test
+          cargo test --no-run
+      - name: Run real Test
         env:
           ONEDRIVE_API_TEST_CLIENT_ID: ${{ secrets.ONEDRIVE_API_TEST_CLIENT_ID }}
           ONEDRIVE_API_TEST_REDIRECT_URI: ${{ secrets.ONEDRIVE_API_TEST_REDIRECT_URI }}
           ONEDRIVE_API_TEST_REFRESH_TOKEN: ${{ secrets.ONEDRIVE_API_TEST_REFRESH_TOKEN }}
         run: |
           cd onedrive-api-test
-          cargo test
+          cargo test -- -Z unstable-options --include-ignored
