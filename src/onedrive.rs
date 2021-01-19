@@ -115,7 +115,7 @@ impl OneDrive {
     /// of the given one.
     ///
     /// # Response
-    /// If successful, respond a [fetcher][fetcher] for fetching changes from initial state (empty) to the snapshot of
+    /// If successful, respond a fetcher for fetching changes from initial state (empty) to the snapshot of
     /// current states. See [`ListChildrenFetcher`][fetcher] for more details.
     ///
     /// If [`if_none_match`][if_none_match] is set and it matches the item tag, return an `None`.
@@ -716,7 +716,7 @@ impl OneDrive {
     /// If [`CollectionOption::get_count`][opt_get_count] is set in option, it will panic.
     ///
     /// # Response
-    /// Respond a [fetcher][fetcher] for fetching changes from initial state (empty) to the snapshot of
+    /// Respond a fetcher for fetching changes from initial state (empty) to the snapshot of
     /// current states. See [`TrackChangeFetcher`][fetcher] for more details.
     ///
     /// # See also
@@ -750,10 +750,7 @@ impl OneDrive {
     /// # See also
     /// [`track_root_changes_from_initial_with_option`][with_opt]
     ///
-    /// [`TrackChangeFetcher`][fetcher]
-    ///
     /// [with_opt]: #method.track_root_changes_from_initial_with_option
-    /// [fetcher]: ./struct.TrackChangeFetcher.html
     pub async fn track_root_changes_from_initial<'a>(&self) -> Result<TrackChangeFetcher> {
         self.track_root_changes_from_initial_with_option(Default::default())
             .await
@@ -765,10 +762,6 @@ impl OneDrive {
     /// There is no `with_option` version of this function. Since delta URL already carries
     /// query parameters when you get it. The initial parameters will be automatically used
     /// in all following requests through delta URL.
-    ///
-    /// [`TrackChangeFetcher`][fetcher]
-    ///
-    /// [fetcher]: ./struct.TrackChangeFetcher.html
     pub async fn track_root_changes_from_delta_url(
         &self,
         delta_url: &str,
@@ -800,6 +793,8 @@ impl OneDrive {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#retrieving-the-current-deltalink)
     ///
     /// [track_from_delta]: #method.track_root_changes_from_delta_url
+    /// [dollar_count]: https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
+    /// [opt_get_count]: ./option/struct.CollectionOption.html#method.get_count
     pub async fn get_root_latest_delta_url_with_option<'a>(
         &self,
         option: CollectionOption<DriveItemField>,
@@ -830,10 +825,7 @@ impl OneDrive {
     /// # See also
     /// [`get_root_latest_delta_url_with_option`][with_opt]
     ///
-    /// [`TrackChangeFetcher`][fetcher]
-    ///
     /// [with_opt]: #method.get_root_latest_delta_url_with_option
-    /// [fetcher]: ./struct.TrackChangeFetcher.html
     pub async fn get_root_latest_delta_url<'a>(&self) -> Result<String> {
         self.get_root_latest_delta_url_with_option(Default::default())
             .await
@@ -857,7 +849,7 @@ pub struct CopyProgressMonitor {
     monitor_url: String,
 }
 
-/// The progress of a asynchronous `copy` operation. [Beta]
+/// The progress of a asynchronous `copy` operation. (Beta)
 ///
 /// # See also
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta)
@@ -872,7 +864,7 @@ pub struct CopyProgress {
     _private: (),
 }
 
-/// The status of a `copy` operation. [Beta]
+/// The status of a `copy` operation. (Beta)
 ///
 /// # See also
 /// [`CopyProgress`][copy_progress]
@@ -911,7 +903,7 @@ impl CopyProgressMonitor {
         &self.monitor_url
     }
 
-    /// Fetch the `copy` progress. [Beta]
+    /// Fetch the `copy` progress. (Beta)
     ///
     /// # See also
     /// [`CopyProgress`][copy_progress]
