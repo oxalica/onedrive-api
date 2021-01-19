@@ -18,47 +18,22 @@ use serde_json::json;
 mod util;
 use util::*;
 
-macro_rules! define_tests {
-    ($($(#[$meta:meta])* $f:ident;)*) => {
-        mod wrapper {
-            $(
-                #[tokio::test]
-                $(#[$meta])*
-                async fn $f() {
-                    let one_drive = super::util::get_logined_onedrive().await;
-                    super::$f(&one_drive).await;
-                }
-            )*
-        }
-    };
-}
+use util::get_logined_onedrive as onedrive;
 
-define_tests! {
-    test_get_drive;
-    test_get_item;
-    test_folder_create_and_list_children;
-    test_folder_create_and_delete;
-    test_folder_create_and_update;
-    test_file_upload_small_and_move;
-    test_file_upload_small_and_copy;
-    test_file_upload_session;
-    #[ignore] test_track_changes;
+// 3 requests
+#[tokio::test]
+async fn test_get_drive() {
+    let onedrive = onedrive().await;
 
-    test_auth_error;
-    test_get_drive_error_unauthorized;
-}
-
-/// 3 requests
-async fn test_get_drive(one_drive: &OneDrive) {
     // #1
-    let drive1 = one_drive.get_drive().await.expect("Cannot get drive #1");
+    let drive1 = onedrive.get_drive().await.expect("Cannot get drive #1");
     assert!(drive1.quota.is_some());
     assert!(drive1.owner.is_some());
 
     let drive_id = drive1.id.as_ref().expect("drive1 has no id");
 
     // #2
-    let drive2 = OneDrive::new(one_drive.access_token().to_owned(), drive_id.clone())
+    let drive2 = OneDrive::new(onedrive.access_token().to_owned(), drive_id.clone())
         .get_drive_with_option(ObjectOption::new().select(&[DriveField::id, DriveField::owner]))
         .await
         .expect("Cannot get drive #2");
@@ -69,7 +44,7 @@ async fn test_get_drive(one_drive: &OneDrive) {
     // #3
     assert_eq!(
         OneDrive::new(
-            one_drive.access_token().to_owned(),
+            onedrive.access_token().to_owned(),
             DriveId(format!("{}_inva_lid", drive_id.as_str())),
         )
         .get_drive()
@@ -81,17 +56,20 @@ async fn test_get_drive(one_drive: &OneDrive) {
     );
 }
 
-/// 3 requests
-async fn test_get_item(one_drive: &OneDrive) {
+// 3 requests
+#[tokio::test]
+async fn test_get_item() {
+    let onedrive = onedrive().await;
+
     // #1
-    let item_by_path = one_drive
+    let item_by_path = onedrive
         .get_item(ItemLocation::from_path("/").unwrap())
         .await
         .expect("Cannot get item by path");
     let item_id = item_by_path.id.clone().expect("Missing `id`");
 
     // #2
-    let item_by_id = one_drive
+    let item_by_id = onedrive
         .get_item(&item_id)
         .await
         .expect("Cannot get item by id");
@@ -101,7 +79,7 @@ async fn test_get_item(one_drive: &OneDrive) {
     // Some fields may change since other tests will modify the content of root dir.
 
     // #3
-    let item_custom = one_drive
+    let item_custom = onedrive
         .get_item_with_option(&item_id, ObjectOption::new().select(&[DriveItemField::id]))
         .await
         .expect("Cannot get item with option")
@@ -113,8 +91,11 @@ async fn test_get_item(one_drive: &OneDrive) {
     // So we don't test it.
 }
 
-/// 7 requests
-async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
+// 7 requests
+#[tokio::test]
+async fn test_folder_create_and_list_children() {
+    let onedrive = onedrive().await;
+
     fn to_names(v: Vec<DriveItem>) -> Vec<String> {
         let mut v = v
             .into_iter()
@@ -131,22 +112,22 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
     let items_origin = vec![sub_name1.as_str().to_owned(), sub_name2.as_str().to_owned()];
 
     // #1
-    one_drive
+    onedrive
         .create_folder(ItemLocation::root(), container_name)
         .await
         .expect("Cannot create folder");
 
-    one_drive
+    onedrive
         .create_folder(container_loc, sub_name1)
         .await
         .expect("Cannot create sub folder 1");
-    one_drive
+    onedrive
         .create_folder(container_loc, sub_name2)
         .await
         .expect("Cannot create sub folder 2");
 
     // #2
-    let mut fetcher = one_drive
+    let mut fetcher = onedrive
         .list_children_with_option(
             container_loc,
             CollectionOption::new()
@@ -165,7 +146,7 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
     // No request for the first page
     let t = std::time::Instant::now();
     let page1 = fetcher
-        .fetch_next_page(one_drive)
+        .fetch_next_page(&onedrive)
         .await
         .expect("Cannot fetch page 1")
         .expect("Page 1 should not be None");
@@ -183,7 +164,7 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
 
     // #3
     let page2 = fetcher
-        .fetch_next_page(one_drive)
+        .fetch_next_page(&onedrive)
         .await
         .expect("Cannot fetch page 2")
         .expect("Page 2 should not be None");
@@ -191,7 +172,7 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
 
     assert!(
         fetcher
-            .fetch_next_page(one_drive)
+            .fetch_next_page(&onedrive)
             .await
             .expect("Cannot fetch page 3")
             .is_none(),
@@ -207,14 +188,14 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
     let items_manual = to_names(items_manual);
 
     // #4, #5
-    let items_shortcut = one_drive
+    let items_shortcut = onedrive
         .list_children(container_loc)
         .await
         .expect("Cannot list children");
     let items_shortcut = to_names(items_shortcut);
 
     // #6
-    let items_expand = one_drive
+    let items_expand = onedrive
         .get_item_with_option(
             container_loc,
             ObjectOption::new().expand(DriveItemField::children, Some(&["name"])),
@@ -231,25 +212,28 @@ async fn test_folder_create_and_list_children(one_drive: &OneDrive) {
     assert_eq!(items_origin, items_expand);
 
     // #7
-    one_drive.delete(container_loc).await.unwrap();
+    onedrive.delete(container_loc).await.unwrap();
 }
 
-/// 4 requests
-async fn test_folder_create_and_delete(one_drive: &OneDrive) {
+// 4 requests
+#[tokio::test]
+async fn test_folder_create_and_delete() {
+    let onedrive = onedrive().await;
+
     let folder_name = gen_filename();
     let folder_loc = rooted_location(folder_name);
     let invalid_path = format!("/{}/invalid", folder_name.as_str());
     let invalid_loc = ItemLocation::from_path(&invalid_path).unwrap();
 
     // #1
-    one_drive
+    onedrive
         .create_folder(ItemLocation::root(), folder_name)
         .await
         .expect("Cannot create folder");
 
     // #2
     assert_eq!(
-        one_drive
+        onedrive
             .create_folder(ItemLocation::root(), folder_name)
             .await
             .expect_err("Re-create folder should fail by default")
@@ -259,7 +243,7 @@ async fn test_folder_create_and_delete(one_drive: &OneDrive) {
 
     // #3
     assert_eq!(
-        one_drive
+        onedrive
             .delete(invalid_loc)
             .await
             .expect_err("Should not delete non-existent folder")
@@ -268,11 +252,14 @@ async fn test_folder_create_and_delete(one_drive: &OneDrive) {
     );
 
     // #4
-    one_drive.delete(folder_loc).await.unwrap();
+    onedrive.delete(folder_loc).await.unwrap();
 }
 
-/// 4 requests
-async fn test_folder_create_and_update(one_drive: &OneDrive) {
+// 4 requests
+#[tokio::test]
+async fn test_folder_create_and_update() {
+    let onedrive = onedrive().await;
+
     const FAKE_TIME: &str = "2017-01-01T00:00:00Z";
 
     let folder_name = gen_filename();
@@ -287,7 +274,7 @@ async fn test_folder_create_and_update(one_drive: &OneDrive) {
     }
 
     // #1
-    let item_before = one_drive
+    let item_before = onedrive
         .create_folder(ItemLocation::root(), folder_name)
         .await
         .expect("Cannot create folder");
@@ -303,25 +290,28 @@ async fn test_folder_create_and_update(one_drive: &OneDrive) {
         "createdDateTime": FAKE_TIME,
         "lastModifiedDateTime": FAKE_TIME,
     })));
-    let item_response = one_drive
+    let item_response = onedrive
         .update_item(folder_loc, &patch)
         .await
         .expect("Cannot update folder metadata");
     assert_eq!(get_bmtime(&item_response), Some((FAKE_TIME, FAKE_TIME)));
 
     // #3
-    let item_after = one_drive
+    let item_after = onedrive
         .get_item(folder_loc)
         .await
         .expect("Cannot get folder before update");
     assert_eq!(get_bmtime(&item_after), Some((FAKE_TIME, FAKE_TIME)));
 
     // #4
-    one_drive.delete(folder_loc).await.unwrap();
+    onedrive.delete(folder_loc).await.unwrap();
 }
 
-/// 6 requests
-async fn test_file_upload_small_and_move(one_drive: &OneDrive) {
+// 6 requests
+#[tokio::test]
+async fn test_file_upload_small_and_move() {
+    let onedrive = onedrive().await;
+
     // Different length, since we use `size` to check if replacement is successful.
     const CONTENT1: &[u8] = b"aaa";
     const CONTENT2: &[u8] = b"bbbbbb";
@@ -331,20 +321,20 @@ async fn test_file_upload_small_and_move(one_drive: &OneDrive) {
     let file2_loc = rooted_location(file2_name);
 
     // #1
-    one_drive
+    onedrive
         .upload_small(file1_loc, CONTENT1)
         .await
         .expect("Cannot upload file 1");
 
     // #2
-    one_drive
+    onedrive
         .upload_small(file2_loc, CONTENT2)
         .await
         .expect("Cannot upload file 2");
 
     // #3
     assert_eq!(
-        one_drive
+        onedrive
             .move_(file1_loc, ItemLocation::root(), Some(file2_name))
             .await
             .expect_err("Should not move with overwrite by default")
@@ -353,7 +343,7 @@ async fn test_file_upload_small_and_move(one_drive: &OneDrive) {
     );
 
     // #4
-    one_drive
+    onedrive
         .move_with_option(
             file1_loc,
             ItemLocation::root(),
@@ -365,7 +355,7 @@ async fn test_file_upload_small_and_move(one_drive: &OneDrive) {
 
     // #5
     assert_eq!(
-        one_drive
+        onedrive
             .get_item(file2_loc)
             .await
             .expect("Cannot get file2")
@@ -377,11 +367,14 @@ async fn test_file_upload_small_and_move(one_drive: &OneDrive) {
 
     // #6
     // `file1_loc` is already moved.
-    one_drive.delete(file2_loc).await.unwrap();
+    onedrive.delete(file2_loc).await.unwrap();
 }
 
-/// 5 requests
-async fn test_file_upload_small_and_copy(one_drive: &OneDrive) {
+// 5 requests
+#[tokio::test]
+async fn test_file_upload_small_and_copy() {
+    let onedrive = onedrive().await;
+
     const CONTENT: &[u8] = b"hello, copy";
     const WAIT_TIME: std::time::Duration = std::time::Duration::from_millis(1000);
     const MAX_WAIT_COUNT: usize = 5;
@@ -392,13 +385,13 @@ async fn test_file_upload_small_and_copy(one_drive: &OneDrive) {
     let loc2 = rooted_location(name2);
 
     // #1
-    one_drive
+    onedrive
         .upload_small(loc1, CONTENT)
         .await
         .expect("Cannot upload file");
 
     // #2
-    let monitor = one_drive
+    let monitor = onedrive
         .copy(loc1, ItemLocation::root(), name2)
         .await
         .expect("Cannot start copy");
@@ -407,7 +400,7 @@ async fn test_file_upload_small_and_copy(one_drive: &OneDrive) {
 
         // #3
         match monitor
-            .fetch_progress(one_drive)
+            .fetch_progress(&onedrive)
             .await
             .expect("Failed to check `copy` progress")
             .status
@@ -423,12 +416,15 @@ async fn test_file_upload_small_and_copy(one_drive: &OneDrive) {
     }
 
     // #4, #5
-    one_drive.delete(loc2).await.unwrap();
-    one_drive.delete(loc1).await.unwrap();
+    onedrive.delete(loc2).await.unwrap();
+    onedrive.delete(loc1).await.unwrap();
 }
 
-/// 8 requests
-async fn test_file_upload_session(one_drive: &OneDrive) {
+// 8 requests
+#[tokio::test]
+async fn test_file_upload_session() {
+    let onedrive = onedrive().await;
+
     type Range = std::ops::Range<usize>;
     const CONTENT: &[u8] = b"12345678";
     const CONTENT_LEN: u64 = CONTENT.len() as u64;
@@ -443,7 +439,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
     let item_loc = rooted_location(gen_filename());
 
     // #1
-    let sess = one_drive
+    let sess = onedrive
         .new_upload_session(item_loc, CONTENT_LEN)
         .await
         .expect("Cannot create upload session");
@@ -455,7 +451,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
 
     // #2
     assert!(
-        sess.upload_part(&one_drive, &CONTENT[RANGE1], as_range_u64(RANGE1))
+        sess.upload_part(&onedrive, &CONTENT[RANGE1], as_range_u64(RANGE1))
             .await
             .expect("Cannot upload part 1")
             .is_none(),
@@ -463,7 +459,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
     );
 
     // #3
-    let sess = one_drive
+    let sess = onedrive
         .get_upload_session(sess.upload_url().to_owned(), CONTENT_LEN)
         .await
         .expect("Cannot re-get upload session");
@@ -479,7 +475,7 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
     // #4
     assert_eq!(
         sess.upload_part(
-            &one_drive,
+            &onedrive,
             &CONTENT[RANGE2_ERROR],
             as_range_u64(RANGE2_ERROR),
         )
@@ -490,30 +486,35 @@ async fn test_file_upload_session(one_drive: &OneDrive) {
     );
 
     // #5
-    sess.upload_part(&one_drive, &CONTENT[RANGE2], as_range_u64(RANGE2))
+    sess.upload_part(&onedrive, &CONTENT[RANGE2], as_range_u64(RANGE2))
         .await
         .expect("Failed to upload part 2")
         .expect("Uploading should be completed");
 
     // #6
-    let download_url = one_drive.get_item_download_url(item_loc).await.unwrap();
+    let download_url = onedrive.get_item_download_url(item_loc).await.unwrap();
 
     // #7
     assert_eq!(download(&download_url).await, CONTENT);
 
     // #8
-    one_drive.delete(item_loc).await.unwrap();
+    onedrive.delete(item_loc).await.unwrap();
 }
 
-/// 8 requests
-async fn test_track_changes(one_drive: &OneDrive) {
+// 8 requests
+// This test fetch all changes from root folder, which may contains lots of files and take lots of time.
+#[tokio::test]
+#[ignore]
+async fn test_track_changes() {
+    let onedrive = onedrive().await;
+
     use std::collections::HashSet;
 
     let container_name = gen_filename();
     let container_loc = rooted_location(container_name);
 
     // #1
-    let container_id = one_drive
+    let container_id = onedrive
         .create_folder(ItemLocation::root(), container_name)
         .await
         .expect("Cannot create container folder")
@@ -521,7 +522,7 @@ async fn test_track_changes(one_drive: &OneDrive) {
         .expect("Missing `id`");
 
     // #2
-    let folder1_id = one_drive
+    let folder1_id = onedrive
         .create_folder(container_loc, gen_filename())
         .await
         .expect("Failed to create folder1")
@@ -529,7 +530,7 @@ async fn test_track_changes(one_drive: &OneDrive) {
         .expect("Missing `id`");
 
     // #3
-    let folder2_id = one_drive
+    let folder2_id = onedrive
         .create_folder(container_loc, gen_filename())
         .await
         .expect("Failed to create folder2")
@@ -538,11 +539,11 @@ async fn test_track_changes(one_drive: &OneDrive) {
 
     {
         // #4
-        let (initial_changes, _) = one_drive
+        let (initial_changes, _) = onedrive
             .track_root_changes_from_initial()
             .await
             .expect("Cannot track initial changes")
-            .fetch_all(one_drive)
+            .fetch_all(&onedrive)
             .await
             .expect("Cannot fetch all initial changes");
 
@@ -559,14 +560,14 @@ async fn test_track_changes(one_drive: &OneDrive) {
     }
 
     // #5
-    let delta_url = one_drive
+    let delta_url = onedrive
         .get_root_latest_delta_url()
         .await
         .expect("Failed to get latest track change delta url");
 
     // #6
     // Create under folder1
-    let folder3_id = one_drive
+    let folder3_id = onedrive
         .create_folder(&folder1_id, gen_filename())
         .await
         .expect("Failed to create folder3")
@@ -582,11 +583,11 @@ async fn test_track_changes(one_drive: &OneDrive) {
 
     {
         // #7
-        let (delta_changes, _) = one_drive
+        let (delta_changes, _) = onedrive
             .track_root_changes_from_delta_url(&delta_url)
             .await
             .expect("Failed to track changes with delta url")
-            .fetch_all(one_drive)
+            .fetch_all(&onedrive)
             .await
             .expect("Failed to fetch all changes with delta url");
 
@@ -602,10 +603,11 @@ async fn test_track_changes(one_drive: &OneDrive) {
     }
 
     // #8
-    one_drive.delete(container_loc).await.unwrap();
+    onedrive.delete(container_loc).await.unwrap();
 }
 
-async fn test_auth_error(_: &OneDrive) {
+#[tokio::test]
+async fn test_auth_error() {
     let auth = Auth::new(
         "11111111-2222-3333-4444-555555555555".to_owned(),
         Permission::new_read().offline_access(true),
@@ -632,9 +634,10 @@ async fn test_auth_error(_: &OneDrive) {
     }
 }
 
-async fn test_get_drive_error_unauthorized(_: &OneDrive) {
-    let one_drive = OneDrive::new("42".to_owned(), DriveLocation::me());
-    let err = one_drive.get_drive().await.unwrap_err();
+#[tokio::test]
+async fn test_get_drive_error_unauthorized() {
+    let onedrive = OneDrive::new("42".to_owned(), DriveLocation::me());
+    let err = onedrive.get_drive().await.unwrap_err();
     assert_eq!(err.status_code(), Some(StatusCode::UNAUTHORIZED));
     assert_eq!(
         err.error_response().unwrap().code,
