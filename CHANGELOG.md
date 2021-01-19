@@ -1,3 +1,18 @@
+# v0.7.0
+
+## Breaking Changes
+- Limit tracking API to root folders only since they are undocumented and doesn't work in some cases.
+
+  These API are affected:
+  - `track_changes_from_{initial,delta_url}{,_with_option}` -> `track_root_changes*`
+  - `get_latest_delta_url{,_with_option}` -> `get_root_latest_delta_url*`
+
+  The new API works only for root folders, and the previous `folder` parameter is removed.
+
+## Others
+- Update dependencies to `tokio` 1.0 ecosystem.
+
+
 # v0.6.3
 
 ## Fixes
