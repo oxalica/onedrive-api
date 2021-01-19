@@ -11,13 +11,13 @@ publish = false
 anyhow = "1.0.28"
 onedrive-api = { path = "..", features = ["beta"] }
 open = "1.4.0"
-pico-args = "0.3.1"
-tokio = { version = "0.2.18", features = ["macros"] }
+pico-args = "0.4.0"
+tokio = { version = "1.0.2", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]
 envy = "0.4.1"
 lazy_static = "1.4.0"
-rand = "0.7.3"
-reqwest = "0.10.4"
+rand = "0.8.2"
+reqwest = "0.11.0"
 serde = "1.0.104"
 serde_json = "1.0.48"

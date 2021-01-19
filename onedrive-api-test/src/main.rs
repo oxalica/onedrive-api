@@ -1,4 +1,4 @@
-use anyhow::{Context as _, Result};
+use anyhow::{ensure, Context as _, Result};
 use onedrive_api::{Auth, Permission};
 use std::{
     env,
@@ -26,8 +26,10 @@ fn parse_args() -> Result<Args> {
         .opt_value_from_str("-r")?
         .unwrap_or_else(|| DEFAULT_REDIRECT_URI.to_owned());
     let client_secret = args.opt_value_from_str("-s")?;
-    let client_id = args.free_from_str()?.context("Missing client id")?;
-    args.finish()?;
+    let client_id = args
+        .free_from_str::<String>()
+        .context("Missing client id")?;
+    ensure!(args.finish().is_empty(), "Too many arguments");
     Ok(Args {
         client_id,
         client_secret,
