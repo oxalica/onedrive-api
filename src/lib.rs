@@ -72,6 +72,7 @@ pub use self::{
     error::{Error, Result},
     onedrive::{
         CopyProgressMonitor, ListChildrenFetcher, OneDrive, TrackChangeFetcher, UploadSession,
+        UploadSessionMeta,
     },
     resource::{DriveId, ItemId, Tag},
     util::{DriveLocation, FileName, ItemLocation},
