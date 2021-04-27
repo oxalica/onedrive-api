@@ -75,6 +75,11 @@ impl OneDrive {
         }
     }
 
+    /// Get the `reqwest::Client` used to create the OneDrive instance.
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
+
     /// Get the access token used to create the OneDrive instance.
     pub fn access_token(&self) -> &str {
         &self.token
