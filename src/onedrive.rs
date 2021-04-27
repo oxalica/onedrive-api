@@ -401,6 +401,8 @@ impl OneDrive {
         self.client
             .put(api_url![&self.drive, &item.into(), "content"])
             .bearer_auth(&self.token)
+            .header(header::CONTENT_TYPE, "application/octet-stream")
+            .header(header::CONTENT_LENGTH, data.len().to_string())
             .body(data)
             .send()
             .await?
