@@ -1,7 +1,6 @@
 [package]
 name = "onedrive-api-test"
 version = "0.0.0"
-authors = ["oxalica <oxalicc@pm.me>"]
 edition = "2018"
 publish = false
 
