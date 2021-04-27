@@ -375,7 +375,14 @@ impl OneDrive {
             .await
     }
 
-    const UPLOAD_SMALL_LIMIT: usize = 4_000_000; // 4 MB
+    /// The upload size limit of [`upload_small`].
+    ///
+    /// The value is from
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0)
+    /// and may not be accurate or stable.
+    ///
+    /// [`upload_small`]: #method.upload_small
+    pub const UPLOAD_SMALL_MAX_SIZE: usize = 4_000_000; // 4 MB
 
     /// Upload or replace the contents of a `DriveItem` file.
     ///
@@ -397,10 +404,10 @@ impl OneDrive {
     ) -> Result<DriveItem> {
         let data = data.into();
         assert!(
-            data.len() <= Self::UPLOAD_SMALL_LIMIT,
+            data.len() <= Self::UPLOAD_SMALL_MAX_SIZE,
             "Data too large for upload_small ({} B > {} B)",
             data.len(),
-            Self::UPLOAD_SMALL_LIMIT,
+            Self::UPLOAD_SMALL_MAX_SIZE,
         );
 
         self.client
@@ -1183,7 +1190,14 @@ struct UploadSessionMeta {
 }
 
 impl UploadSession {
-    const MAX_PART_SIZE: usize = 60 << 20; // 60 MiB
+    /// The upload size limit of a single [`upload_part`] call.
+    ///
+    /// The value is from
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
+    /// and may not be accurate or stable.
+    ///
+    /// [`upload_part`]: #method.upload_part
+    pub const MAX_PART_SIZE: usize = 60 << 20; // 60 MiB
 
     /// The URL endpoint accepting PUT requests.
     ///
