@@ -439,31 +439,36 @@ async fn test_file_upload_session() {
     let item_loc = rooted_location(gen_filename());
 
     // #1
-    let sess = onedrive
-        .new_upload_session(item_loc, CONTENT_LEN)
+    let (sess, meta1) = onedrive
+        .new_upload_session(item_loc)
         .await
         .expect("Cannot create upload session");
 
     println!(
         "Upload session will expire at {:?}",
-        sess.expiration_date_time(),
+        meta1.expiration_date_time,
     );
 
     // #2
     assert!(
-        sess.upload_part(&onedrive, &CONTENT[RANGE1], as_range_u64(RANGE1))
-            .await
-            .expect("Cannot upload part 1")
-            .is_none(),
+        sess.upload_part(
+            &CONTENT[RANGE1],
+            as_range_u64(RANGE1),
+            CONTENT_LEN,
+            onedrive.client()
+        )
+        .await
+        .expect("Cannot upload part 1")
+        .is_none(),
         "Uploading part 1 should not complete",
     );
 
     // #3
-    let sess = onedrive
-        .get_upload_session(sess.upload_url().to_owned(), CONTENT_LEN)
+    let meta2 = sess
+        .get_meta(onedrive.client())
         .await
-        .expect("Cannot re-get upload session");
-    let next_ranges = sess.next_expected_ranges();
+        .expect("Cannot get metadata of the upload session");
+    let next_ranges = &meta2.next_expected_ranges;
     assert!(
         next_ranges.len() == 1
             && next_ranges[0].start == RANGE2.start as u64
@@ -475,9 +480,10 @@ async fn test_file_upload_session() {
     // #4
     assert_eq!(
         sess.upload_part(
-            &onedrive,
             &CONTENT[RANGE2_ERROR],
             as_range_u64(RANGE2_ERROR),
+            CONTENT_LEN,
+            onedrive.client(),
         )
         .await
         .expect_err("Upload wrong range should fail")
@@ -486,10 +492,15 @@ async fn test_file_upload_session() {
     );
 
     // #5
-    sess.upload_part(&onedrive, &CONTENT[RANGE2], as_range_u64(RANGE2))
-        .await
-        .expect("Failed to upload part 2")
-        .expect("Uploading should be completed");
+    sess.upload_part(
+        &CONTENT[RANGE2],
+        as_range_u64(RANGE2),
+        CONTENT_LEN,
+        onedrive.client(),
+    )
+    .await
+    .expect("Failed to upload part 2")
+    .expect("Uploading should be completed");
 
     // #6
     let download_url = onedrive.get_item_download_url(item_loc).await.unwrap();
