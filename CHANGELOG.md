@@ -1,3 +1,21 @@
+# v0.8.0
+
+## Breaking Changes
+- Split metadata out from `UploadSession` and make it works without `OneDrive` instance since it doesn't
+  require token.
+
+  - New struct `UploadSessionMeta`
+  - `file_size` is separated from `UploadSession` now and is required in each `UploadSession::upload_part`
+    call.
+  - `OneDrive::get_upload_session` is moved to `UploadSession::get_meta`.
+
+## Features
+- Add method `OneDrive::client` to get the `Client` used to constuct the instance.
+- Expose constants `OneDrive::UPLOAD_SMALL_MAX_SIZE` and `UploadSession::MAX_PART_SIZE`.
+
+## Fixes
+- Fix deserialization error of `OneDrive::upload_small` when uploading empty data.
+
 # v0.7.0
 
 ## Breaking Changes
