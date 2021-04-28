@@ -1174,7 +1174,7 @@ impl UploadSession {
     pub const MAX_PART_SIZE: usize = 60 << 20; // 60 MiB
 
     /// Construct back the upload session from upload URL.
-    pub fn new(upload_url: String) -> Self {
+    pub fn from_upload_url(upload_url: String) -> Self {
         Self { upload_url }
     }
 
@@ -1195,9 +1195,9 @@ impl UploadSession {
 
     /// The URL endpoint accepting PUT requests.
     ///
-    /// It is exactly what you passed in [`UploadSession::new`].
+    /// It is exactly what you passed in [`UploadSession::from_upload_url`].
     ///
-    /// [`UploadSession::new`]: #method.new
+    /// [`UploadSession::from_upload_url`]: #method.new
     pub fn upload_url(&self) -> &str {
         &self.upload_url
     }
