@@ -444,20 +444,23 @@ impl OneDrive {
     /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
     /// [upload_sess]: ./struct.UploadSession.html
     /// [upload_part]: ./struct.UploadSession.html#method.upload_part
-    pub async fn new_upload_session_with_option<'a>(
+    pub async fn new_upload_session_with_initial_option<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
+        initial: &DriveItem,
         option: DriveItemPutOption,
     ) -> Result<(UploadSession, UploadSessionMeta)> {
         #[derive(Serialize)]
-        struct Item {
+        struct Item<'a> {
             #[serde(rename = "@microsoft.graph.conflictBehavior")]
             conflict_behavior: ConflictBehavior,
+            #[serde(flatten)]
+            initial: &'a DriveItem,
         }
 
         #[derive(Serialize)]
-        struct Req {
-            item: Item,
+        struct Req<'a> {
+            item: Item<'a>,
         }
 
         #[derive(Deserialize)]
@@ -477,7 +480,10 @@ impl OneDrive {
             .apply(option)
             .bearer_auth(&self.token)
             .json(&Req {
-                item: Item { conflict_behavior },
+                item: Item {
+                    conflict_behavior,
+                    initial,
+                },
             })
             .send()
             .await?
@@ -492,12 +498,22 @@ impl OneDrive {
         ))
     }
 
-    /// Shortcut to `new_upload_session_with_option` with `ConflictBehavior::Fail`.
+    /// Shortcut to [`new_upload_session_with_initial_option`] without initial attributes.
     ///
-    /// # See also
-    /// [`new_upload_session_with_option`][with_opt]
+    /// [`new_upload_session_with_initial_option`]: #method.new_upload_session_with_initial_option
+    pub async fn new_upload_session_with_option<'a>(
+        &self,
+        item: impl Into<ItemLocation<'a>>,
+        option: DriveItemPutOption,
+    ) -> Result<(UploadSession, UploadSessionMeta)> {
+        let initial = DriveItem::default();
+        self.new_upload_session_with_initial_option(item, &initial, option)
+            .await
+    }
+
+    /// Shortcut to [`new_upload_session_with_option`] with `ConflictBehavior::Fail`.
     ///
-    /// [with_opt]: #method.new_upload_session_with_option
+    /// [`new_upload_session_with_option`]: #method.new_upload_session_with_option
     pub async fn new_upload_session<'a>(
         &self,
         item: impl Into<ItemLocation<'a>>,
