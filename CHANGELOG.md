@@ -1,3 +1,8 @@
+# v0.8.1
+
+## Features
+- Support initial state of upload sessions (`OneDrive::new_upload_session_with_initial_option`)
+
 # v0.8.0
 
 ## Breaking Changes
