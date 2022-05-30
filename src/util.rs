@@ -43,9 +43,9 @@ impl DriveLocation {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-users-onedrive)
-    pub fn from_user(id_or_principal_name: String) -> Self {
+    pub fn from_user(id_or_principal_name: impl Into<String>) -> Self {
         Self {
-            inner: DriveLocationEnum::User(id_or_principal_name),
+            inner: DriveLocationEnum::User(id_or_principal_name.into()),
         }
     }
 
@@ -53,9 +53,9 @@ impl DriveLocation {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-associated-with-a-group)
-    pub fn from_group(group_id: String) -> Self {
+    pub fn from_group(group_id: impl Into<String>) -> Self {
         Self {
-            inner: DriveLocationEnum::Group(group_id),
+            inner: DriveLocationEnum::Group(group_id.into()),
         }
     }
 
@@ -63,9 +63,9 @@ impl DriveLocation {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-the-document-library-for-a-site)
-    pub fn from_site(site_id: String) -> Self {
+    pub fn from_site(site_id: impl Into<String>) -> Self {
         Self {
-            inner: DriveLocationEnum::Site(site_id),
+            inner: DriveLocationEnum::Site(site_id.into()),
         }
     }
 

@@ -12,7 +12,7 @@
 //! # async fn run() -> onedrive_api::Result<()> {
 //! let client = Client::new();
 //! let drive = OneDrive::new(
-//!     "<...TOKEN...>".to_owned(), // Login token to Microsoft Graph.
+//!     "<...TOKEN...>", // Login token to Microsoft Graph.
 //!     DriveLocation::me(),
 //! );
 //!

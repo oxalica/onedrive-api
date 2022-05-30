@@ -33,7 +33,7 @@ async fn test_get_drive() {
     let drive_id = drive1.id.as_ref().expect("drive1 has no id");
 
     // #2
-    let drive2 = OneDrive::new(onedrive.access_token().to_owned(), drive_id.clone())
+    let drive2 = OneDrive::new(onedrive.access_token(), drive_id.clone())
         .get_drive_with_option(ObjectOption::new().select(&[DriveField::id, DriveField::owner]))
         .await
         .expect("Cannot get drive #2");
@@ -44,7 +44,7 @@ async fn test_get_drive() {
     // #3
     assert_eq!(
         OneDrive::new(
-            onedrive.access_token().to_owned(),
+            onedrive.access_token(),
             DriveId(format!("{}_inva_lid", drive_id.as_str())),
         )
         .get_drive()
@@ -620,9 +620,9 @@ async fn test_track_changes() {
 #[tokio::test]
 async fn test_auth_error() {
     let auth = Auth::new(
-        "11111111-2222-3333-4444-555555555555".to_owned(),
+        "11111111-2222-3333-4444-555555555555",
         Permission::new_read().offline_access(true),
-        "https://login.microsoftonline.com/common/oauth2/nativeclient".to_owned(),
+        "https://login.microsoftonline.com/common/oauth2/nativeclient",
     );
 
     {

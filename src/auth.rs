@@ -76,7 +76,7 @@ pub struct Auth {
 impl Auth {
     /// Create an new instance for OAuth2 to Microsoft Graph
     /// with specified client identifier and permission.
-    pub fn new(client_id: String, permission: Permission, redirect_uri: String) -> Self {
+    pub fn new(client_id: impl Into<String>, permission: Permission, redirect_uri: impl Into<String>) -> Self {
         Self::new_with_client(Client::new(), client_id, permission, redirect_uri)
     }
 
@@ -85,15 +85,15 @@ impl Auth {
     /// [auth_new]: #method.new
     pub fn new_with_client(
         client: Client,
-        client_id: String,
+        client_id: impl Into<String>,
         permission: Permission,
-        redirect_uri: String,
+        redirect_uri: impl Into<String>,
     ) -> Self {
         Self {
             client,
-            client_id,
+            client_id: client_id.into(),
             permission,
-            redirect_uri,
+            redirect_uri: redirect_uri.into(),
         }
     }
 

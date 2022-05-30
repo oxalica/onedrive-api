@@ -45,7 +45,7 @@ pub struct OneDrive {
 
 impl OneDrive {
     /// Create a new OneDrive instance with access token given to perform operations in a Drive.
-    pub fn new(access_token: String, drive: impl Into<DriveLocation>) -> Self {
+    pub fn new(access_token: impl Into<String>, drive: impl Into<DriveLocation>) -> Self {
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .gzip(true)
@@ -65,12 +65,12 @@ impl OneDrive {
     /// [get_url]: #method.get_item_download_url_with_option
     pub fn new_with_client(
         client: Client,
-        access_token: String,
+        access_token: impl Into<String>,
         drive: impl Into<DriveLocation>,
     ) -> Self {
         OneDrive {
             client,
-            token: access_token,
+            token: access_token.into(),
             drive: drive.into(),
         }
     }
@@ -891,8 +891,8 @@ impl CopyProgressMonitor {
     /// `monitor_url` should be got from [`CopyProgressMonitor::monitor_url`][monitor_url]
     ///
     /// [monitor_url]: #method.monitor_url
-    pub fn from_monitor_url(monitor_url: String) -> Self {
-        Self { monitor_url }
+    pub fn from_monitor_url(monitor_url: impl Into<String>) -> Self {
+        Self { monitor_url: monitor_url.into() }
     }
 
     /// Get the monitor url.
@@ -940,10 +940,10 @@ impl DriveItemFetcher {
         }
     }
 
-    fn resume_from(next_url: String) -> Self {
+    fn resume_from(next_url: impl Into<String>) -> Self {
         Self::new(DriveItemCollectionResponse {
             value: None,
-            next_url: Some(next_url),
+            next_url: Some(next_url.into()),
             delta_url: None,
         })
     }
@@ -1015,7 +1015,7 @@ impl ListChildrenFetcher {
     /// [`ListChildrenFetcher::next_url`][next_url].
     ///
     /// [next_url]: #method.next_url
-    pub fn resume_from(next_url: String) -> Self {
+    pub fn resume_from(next_url: impl Into<String>) -> Self {
         Self {
             fetcher: DriveItemFetcher::resume_from(next_url),
         }
@@ -1082,7 +1082,7 @@ impl TrackChangeFetcher {
     /// The url should be from [`TrackChangeFetcher::next_url`][next_url].
     ///
     /// [next_url]: #method.next_url
-    pub fn resume_from(next_url: String) -> Self {
+    pub fn resume_from(next_url: impl Into<String>) -> Self {
         Self {
             fetcher: DriveItemFetcher::resume_from(next_url),
         }
@@ -1190,8 +1190,8 @@ impl UploadSession {
     pub const MAX_PART_SIZE: usize = 60 << 20; // 60 MiB
 
     /// Construct back the upload session from upload URL.
-    pub fn from_upload_url(upload_url: String) -> Self {
-        Self { upload_url }
+    pub fn from_upload_url(upload_url: impl Into<String>) -> Self {
+        Self { upload_url: upload_url.into() }
     }
 
     /// Query the metadata of the upload to find out which byte ranges
