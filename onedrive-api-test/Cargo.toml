@@ -9,8 +9,8 @@ publish = false
 [dependencies]
 anyhow = "1.0.28"
 onedrive-api = { path = "..", features = ["beta"] }
-open = "1.4.0"
-pico-args = "0.4.0"
+open = "3"
+pico-args = "0.5"
 tokio = { version = "1.0.2", features = ["macros", "rt-multi-thread"] }
 
 [dev-dependencies]

@@ -123,7 +123,7 @@ impl Auth {
             ],
         )
         .unwrap()
-        .into_string()
+        .into()
     }
 
     /// Get the URL for web browser for code flow.

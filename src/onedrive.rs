@@ -853,12 +853,11 @@ pub struct CopyProgressMonitor {
 #[cfg(feature = "beta")]
 #[allow(missing_docs)]
 #[derive(Debug, Deserialize)]
+#[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct CopyProgress {
     pub percentage_complete: f64,
     pub status: CopyStatus,
-    #[serde(default)]
-    _private: (),
 }
 
 /// The status of a `copy` operation. (Beta)
@@ -1201,12 +1200,12 @@ impl UploadSession {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#resuming-an-in-progress-upload)
     pub async fn get_meta(&self, client: &Client) -> Result<UploadSessionMeta> {
         // No bearer auth.
-        Ok(client
+        client
             .get(&self.upload_url)
             .send()
             .await?
             .parse::<UploadSessionMeta>()
-            .await?)
+            .await
     }
 
     /// The URL endpoint accepting PUT requests.
