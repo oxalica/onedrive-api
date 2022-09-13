@@ -1335,8 +1335,8 @@ impl UploadSession {
 
 #[cfg(test)]
 mod test {
-    use crate::ItemId;
     use super::*;
+    use crate::ItemId;
 
     #[test]
     fn test_api_url() {
