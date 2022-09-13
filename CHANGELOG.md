@@ -1,3 +1,15 @@
+# v0.9.0
+
+## API changes
+- Accept `impl Into<String>` in parameters of `OneDrive::*`, which previously only accept `String`.
+- `resource::*Field::raw_name` takes `self` instead of `&self`, since they are now `Copy`.
+
+## Others
+- Update dependencies.
+- Derive more std traits for resource and option types, including `Clone`, `Copy`, `PartialEq` and `Eq`.
+- More `#[must_use]` are added to warn incorrect usages.
+- Documentation fixes.
+
 # v0.8.1
 
 ## Features
