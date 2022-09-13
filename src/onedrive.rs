@@ -1,7 +1,7 @@
 use crate::{
     error::{Error, Result},
     option::{CollectionOption, DriveItemPutOption, ObjectOption},
-    resource::*,
+    resource::{Drive, DriveField, DriveItem, DriveItemField, TimestampString},
     util::{
         handle_error_response, ApiPathComponent, DriveLocation, FileName, ItemLocation,
         RequestBuilderExt as _, ResponseExt as _,
@@ -45,6 +45,9 @@ pub struct OneDrive {
 
 impl OneDrive {
     /// Create a new OneDrive instance with access token given to perform operations in a Drive.
+    ///
+    /// # Panics
+    /// It panics if the underlying `reqwest::Client` cannot be created.
     pub fn new(access_token: impl Into<String>, drive: impl Into<DriveLocation>) -> Self {
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
@@ -76,11 +79,13 @@ impl OneDrive {
     }
 
     /// Get the `reqwest::Client` used to create the OneDrive instance.
+    #[must_use]
     pub fn client(&self) -> &Client {
         &self.client
     }
 
     /// Get the access token used to create the OneDrive instance.
+    #[must_use]
     pub fn access_token(&self) -> &str {
         &self.token
     }
@@ -264,12 +269,12 @@ impl OneDrive {
             .await
     }
 
-    /// Create a new folder under an DriveItem
+    /// Create a new folder under an `DriveItem`
     ///
     /// Create a new folder [`DriveItem`][drive_item] with a specified parent item or path.
     ///
     /// # Errors
-    /// Will result in `Err` with HTTP 409 CONFLICT if [`conflict_behavior`][conflict_behavior]
+    /// Will result in `Err` with HTTP `409 CONFLICT` if [`conflict_behavior`][conflict_behavior]
     /// is set to [`Fail`][conflict_fail] and the target already exists.
     ///
     /// # See also
@@ -329,7 +334,7 @@ impl OneDrive {
             .await
     }
 
-    /// Update DriveItem properties
+    /// Update `DriveItem` properties
     ///
     /// Update the metadata for a [`DriveItem`][drive_item].
     ///
@@ -390,7 +395,7 @@ impl OneDrive {
     /// update the contents of an existing file in a single API call. This method
     /// only supports files up to 4MB in size.
     ///
-    /// # Panic
+    /// # Panics
     /// Panic if `data` is larger than 4 MB (4,000,000 bytes).
     ///
     /// # See also
@@ -431,7 +436,7 @@ impl OneDrive {
     /// while the upload is in progress.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP 412 PRECONDITION_FAILED if [`if_match`][if_match] is set
+    /// Will return `Err` with HTTP `412 PRECONDITION_FAILED` if [`if_match`][if_match] is set
     /// but does not match the item.
     ///
     /// # Note
@@ -522,7 +527,7 @@ impl OneDrive {
             .await
     }
 
-    /// Copy a DriveItem.
+    /// Copy a `DriveItem`.
     ///
     /// Asynchronously creates a copy of an driveItem (including any children),
     /// under a new parent item or with a new name.
@@ -578,7 +583,7 @@ impl OneDrive {
         Ok(CopyProgressMonitor::from_monitor_url(url))
     }
 
-    /// Move a DriveItem to a new folder.
+    /// Move a `DriveItem` to a new folder.
     ///
     /// This is a special case of the Update method. Your app can combine
     /// moving an item to a new container and updating other properties of
@@ -590,7 +595,7 @@ impl OneDrive {
     /// [`conflict_behavior`][conflict_behavior] is supported.
     ///
     /// # Errors
-    /// Will return `Err` with HTTP 412 PRECONDITION_FAILED if [`if_match`][if_match] is set
+    /// Will return `Err` with HTTP `412 PRECONDITION_FAILED` if [`if_match`][if_match] is set
     /// but it does not match the item.
     ///
     /// # See also
@@ -657,7 +662,7 @@ impl OneDrive {
     /// deleting the item.
     ///
     /// # Error
-    /// Will result in error with HTTP 412 PRECONDITION_FAILED if [`if_match`][if_match] is set but
+    /// Will result in error with HTTP `412 PRECONDITION_FAILED` if [`if_match`][if_match] is set but
     /// does not match the item.
     ///
     /// # Panic
@@ -708,12 +713,12 @@ impl OneDrive {
     /// Note: you should only delete a folder locally if it is empty after
     /// syncing all the changes.
     ///
-    /// # Panic
+    /// # Panics
     /// Track Changes API does not support [`$count=true` query parameter][dollar_count].
     /// If [`CollectionOption::get_count`][opt_get_count] is set in option, it will panic.
     ///
-    /// # Response
-    /// Respond a fetcher for fetching changes from initial state (empty) to the snapshot of
+    /// # Results
+    /// Return a fetcher for fetching changes from initial state (empty) to the snapshot of
     /// current states. See [`TrackChangeFetcher`][fetcher] for more details.
     ///
     /// # See also
@@ -782,7 +787,7 @@ impl OneDrive {
     /// Note that options (query parameters) are saved in delta url, so they are applied to all later
     /// requests by `track_changes_from_delta_url` without need for specifying them every time.
     ///
-    /// # Panic
+    /// # Panics
     /// Track Changes API does not support [`$count=true` query parameter][dollar_count].
     /// If [`CollectionOption::get_count`][opt_get_count] is set in option, it will panic.
     ///
@@ -1016,6 +1021,7 @@ impl ListChildrenFetcher {
     /// [`ListChildrenFetcher::next_url`][next_url].
     ///
     /// [next_url]: #method.next_url
+    #[must_use]
     pub fn resume_from(next_url: impl Into<String>) -> Self {
         Self {
             fetcher: DriveItemFetcher::resume_from(next_url),
@@ -1034,6 +1040,7 @@ impl ListChildrenFetcher {
     /// will be cached and have no idempotent url to resume/re-fetch.
     ///
     /// [list_children_with_opt]: ./struct.OneDrive.html#method.list_children_with_option
+    #[must_use]
     pub fn next_url(&self) -> Option<&str> {
         self.fetcher.next_url()
     }
@@ -1083,6 +1090,7 @@ impl TrackChangeFetcher {
     /// The url should be from [`TrackChangeFetcher::next_url`][next_url].
     ///
     /// [next_url]: #method.next_url
+    #[must_use]
     pub fn resume_from(next_url: impl Into<String>) -> Self {
         Self {
             fetcher: DriveItemFetcher::resume_from(next_url),
@@ -1102,6 +1110,7 @@ impl TrackChangeFetcher {
     /// will be cached and have no idempotent url to resume/re-fetch.
     ///
     /// [track_initial]: ./struct.OneDrive.html#method.track_changes_from_initial
+    #[must_use]
     pub fn next_url(&self) -> Option<&str> {
         self.fetcher.next_url()
     }
@@ -1120,6 +1129,7 @@ impl TrackChangeFetcher {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-delta?view=graph-rest-1.0#example-last-page-in-a-set)
     ///
     /// [track_delta]: ./struct.OneDrive.html#method.track_changes_from_delta_url
+    #[must_use]
     pub fn delta_url(&self) -> Option<&str> {
         self.fetcher.delta_url()
     }
@@ -1217,6 +1227,7 @@ impl UploadSession {
     /// It is exactly what you passed in [`UploadSession::from_upload_url`].
     ///
     /// [`UploadSession::from_upload_url`]: #method.new
+    #[must_use]
     pub fn upload_url(&self) -> &str {
         &self.upload_url
     }
@@ -1228,7 +1239,7 @@ impl UploadSession {
     /// if the user cancels the transfer.
     ///
     /// Temporary files and their accompanying upload session are automatically
-    /// cleaned up after the expirationDateTime has passed. Temporary files may
+    /// cleaned up after the `expirationDateTime` has passed. Temporary files may
     /// not be deleted immedately after the expiration time has elapsed.
     ///
     /// # See also
@@ -1250,7 +1261,7 @@ impl UploadSession {
     /// The fragments of the file must be uploaded sequentially in order. Uploading
     /// fragments out of order will result in an error.
     ///
-    /// # Note
+    /// # Notes
     /// If your app splits a file into multiple byte ranges, the size of each
     /// byte range MUST be a multiple of 320 KiB (327,680 bytes). Using a fragment
     /// size that does not divide evenly by 320 KiB will result in errors committing
@@ -1258,18 +1269,18 @@ impl UploadSession {
     ///
     /// The `file_size` of all part upload requests should be identical.
     ///
-    /// # Response
+    /// # Results
     /// - If the part is uploaded successfully, but the file is not complete yet,
-    ///   will respond `None`.
+    ///   will return `None`.
     /// - If this is the last part and it is uploaded successfully,
     ///   will return `Some(<newly_created_drive_item>)`.
     ///
-    /// # Error
+    /// # Errors
     /// When the file is completely uploaded, if an item with the same name is created
     /// during uploading, the last `upload_to_session` call will return `Err` with
-    /// HTTP 409 CONFLICT.
+    /// HTTP `409 CONFLICT`.
     ///
-    /// # Panic
+    /// # Panics
     /// Panic if `remote_range` is invalid, not match the length of `data`, or
     /// `data` is larger than 60 MiB (62,914,560 bytes).
     ///
@@ -1324,7 +1335,9 @@ impl UploadSession {
 
 #[cfg(test)]
 mod test {
+    use crate::ItemId;
     use super::*;
+
     #[test]
     fn test_api_url() {
         let mock_item_id = ItemId("1234".to_owned());

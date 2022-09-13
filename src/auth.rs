@@ -26,12 +26,14 @@ impl Permission {
     }
 
     /// Set the write permission.
+    #[must_use]
     pub fn write(mut self, write: bool) -> Self {
         self.write = write;
         self
     }
 
     /// Set the permission to the shared files.
+    #[must_use]
     pub fn access_shared(mut self, access_shared: bool) -> Self {
         self.access_shared = access_shared;
         self
@@ -45,11 +47,13 @@ impl Permission {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-21)
     ///
     /// [refresh_token]: ./struct.TokenResponse.html#structfield.refresh_token
+    #[must_use]
     pub fn offline_access(mut self, offline_access: bool) -> Self {
         self.offline_access = offline_access;
         self
     }
 
+    #[must_use]
     #[rustfmt::skip]
     fn to_scope_string(&self) -> String {
         format!(
@@ -102,16 +106,19 @@ impl Auth {
     }
 
     /// Get the `client_id` used to create this instance.
+    #[must_use]
     pub fn client_id(&self) -> &str {
         &self.client_id
     }
 
     /// Get the `permission` used to create this instance.
+    #[must_use]
     pub fn permission(&self) -> &Permission {
         &self.permission
     }
 
     /// Get the `redirect_uri` used to create this instance.
+    #[must_use]
     pub fn redirect_uri(&self) -> &str {
         &self.redirect_uri
     }
@@ -134,6 +141,7 @@ impl Auth {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request)
+    #[must_use]
     pub fn code_auth_url(&self) -> String {
         self.auth_url("code")
     }
@@ -187,7 +195,7 @@ impl Auth {
     /// This requires [`offline_access`][offline_access], and will **ALWAYS** return
     /// a new [`refresh_token`][refresh_token] if success.
     ///
-    /// # Panic
+    /// # Panics
     /// Panic if the current [`Auth`][auth] is created with no
     /// [`offline_access`][offline_access] permission.
     ///

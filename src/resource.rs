@@ -61,6 +61,8 @@ macro_rules! define_string_wrapper {
 
         impl $name {
             /// View as str.
+            #[inline]
+            #[must_use]
             pub fn as_str(&self) -> &str {
                 &self.0
             }
@@ -98,8 +100,8 @@ define_string_wrapper! {
 
 // Used for generalization over any resource field enums in `option`.
 #[doc(hidden)]
-pub trait ResourceField {
-    fn __raw_name(&self) -> &'static str;
+pub trait ResourceField: Copy {
+    fn __raw_name(self) -> &'static str;
 }
 
 macro_rules! define_resource_object {
@@ -119,7 +121,7 @@ macro_rules! define_resource_object {
     )*) => {
         $(
             $(#[$meta])*
-            #[derive(Debug, Default, Deserialize, Serialize)]
+            #[derive(Debug, Default, Clone, Deserialize, Serialize)]
             #[serde(rename_all = "camelCase")]
             #[non_exhaustive]
             $vis struct $struct_name {
@@ -138,7 +140,7 @@ macro_rules! define_resource_object {
             /// More details in [mod documentation][mod].
             ///
             /// [mod]: ./index.html
-            #[derive(Clone, Copy, Debug, Eq, PartialEq, strum::EnumVariantNames)]
+            #[derive(Debug, Clone, Copy, Eq, PartialEq, strum::EnumVariantNames)]
             #[strum(serialize_all = "camelCase")]
             #[non_exhaustive]
             #[allow(missing_docs, non_camel_case_types)]
@@ -152,15 +154,15 @@ macro_rules! define_resource_object {
 
             impl $field_enum_name {
                 /// Get the raw camelCase name of the field.
-                #[inline]
-                pub fn raw_name(&self) -> &'static str {
-                    <Self as strum::VariantNames>::VARIANTS[*self as usize]
+                #[must_use]
+                pub fn raw_name(self) -> &'static str {
+                    <Self as strum::VariantNames>::VARIANTS[self as usize]
                 }
             }
 
             impl ResourceField for $field_enum_name {
                 #[inline]
-                fn __raw_name(&self) -> &'static str {
+                fn __raw_name(self) -> &'static str {
                     self.raw_name()
                 }
             }
@@ -287,7 +289,7 @@ define_resource_object! {
 /// [error]: ../struct.Error.html
 /// [one_drive]: ../struct.OneDrive.html
 /// [list_children_fetcher]: ../struct.ListChildrenFetcher.html
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[non_exhaustive]
 pub struct ErrorResponse {
     /// OData `code`. Non-exhaustive.
@@ -319,7 +321,7 @@ pub struct ErrorResponse {
 /// [error_response]: ./struct.ErrorResponse.html
 /// [error]: ../struct.Error.html
 /// [auth]: ../struct.Auth.html
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[allow(missing_docs)]
 #[non_exhaustive]
 pub struct OAuth2ErrorResponse {

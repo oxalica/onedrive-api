@@ -17,7 +17,7 @@ use crate::{
 use reqwest::{header, RequestBuilder};
 use std::{fmt::Write, marker::PhantomData};
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 struct AccessOption {
     if_match: Option<String>,
     if_none_match: Option<String>,
@@ -48,7 +48,7 @@ impl RequestBuilderTransformer for AccessOption {
 }
 
 /// Option for GET-like requests to one resource object.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ObjectOption<Field> {
     access_opt: AccessOption,
     select_buf: String,
@@ -60,7 +60,7 @@ impl<Field: ResourceField> ObjectOption<Field> {
     /// Create an empty (default) option.
     pub fn new() -> Self {
         Self {
-            access_opt: Default::default(),
+            access_opt: AccessOption::default(),
             select_buf: String::new(),
             expand_buf: String::new(),
             _marker: PhantomData,
@@ -75,6 +75,7 @@ impl<Field: ResourceField> ObjectOption<Field> {
     /// most of GET-like requests also support it.
     ///
     /// It will add `If-Match` to the request header.
+    #[must_use]
     pub fn if_match(mut self, tag: &Tag) -> Self {
         self.access_opt = self.access_opt.if_match(tag);
         self
@@ -88,6 +89,7 @@ impl<Field: ResourceField> ObjectOption<Field> {
     /// cached data can be reused.
     ///
     /// This will add `If-None-Match` to the request header.
+    #[must_use]
     pub fn if_none_match(mut self, tag: &Tag) -> Self {
         self.access_opt = self.access_opt.if_none_match(tag);
         self
@@ -104,6 +106,7 @@ impl<Field: ResourceField> ObjectOption<Field> {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#select-parameter)
     ///
     /// [resource]: ../resource/index.html#field-descriptors
+    #[must_use]
     pub fn select(mut self, fields: &[Field]) -> Self {
         for sel in fields {
             self = self.select_raw(&[sel.__raw_name()]);
@@ -168,7 +171,7 @@ impl<Field: ResourceField> Default for ObjectOption<Field> {
 }
 
 /// Option for GET-like requests for a collection of resource objects.
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CollectionOption<Field> {
     obj_option: ObjectOption<Field>,
     order_buf: Option<String>,
@@ -180,7 +183,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     /// Create an empty (default) option.
     pub fn new() -> Self {
         Self {
-            obj_option: Default::default(),
+            obj_option: ObjectOption::default(),
             order_buf: None,
             page_size_buf: None,
             get_count_buf: false,
@@ -193,6 +196,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     /// [`ObjectOption::if_match`][if_match]
     ///
     /// [if_match]: ./struct.ObjectOption.html#method.if_match
+    #[must_use]
     pub fn if_match(mut self, tag: &Tag) -> Self {
         self.obj_option = self.obj_option.if_match(tag);
         self
@@ -204,6 +208,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     /// [`ObjectOption::if_none_match`][if_none_match]
     ///
     /// [if_none_match]: ./struct.ObjectOption.html#method.if_none_match
+    #[must_use]
     pub fn if_none_match(mut self, tag: &Tag) -> Self {
         self.obj_option = self.obj_option.if_none_match(tag);
         self
@@ -218,6 +223,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     ///
     /// [select]: ./struct.ObjectOption.html#method.select
     /// [resource]: ../resource/index.html#field-descriptors
+    #[must_use]
     pub fn select(mut self, fields: &[Field]) -> Self {
         self.obj_option = self.obj_option.select(fields);
         self
@@ -232,6 +238,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     ///
     /// [expand]: ./struct.ObjectOption.html#method.expand
     /// [resource]: ../resource/index.html#field-descriptors
+    #[must_use]
     pub fn expand(mut self, field: Field, select_children: Option<&[&str]>) -> Self {
         self.obj_option = self.obj_option.expand(field, select_children);
         self
@@ -244,6 +251,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#orderby-parameter)
+    #[must_use]
     pub fn order_by(mut self, field: Field, order: Order) -> Self {
         let order = match order {
             Order::Ascending => "asc",
@@ -260,6 +268,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#top-parameter)
+    #[must_use]
     pub fn page_size(mut self, size: usize) -> Self {
         self.page_size_buf = Some(size.to_string());
         self
@@ -277,6 +286,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter)
     ///
     /// [track_init_opt]: ../struct.OneDrive.html#method.track_changes_from_initial_with_option
+    #[must_use]
     pub fn get_count(mut self, get_count: bool) -> Self {
         self.get_count_buf = get_count;
         self
@@ -314,7 +324,7 @@ impl<Field: ResourceField> Default for CollectionOption<Field> {
 /// Used in [`CollectionOption::order_by`][order_by].
 ///
 /// [order_by]: ./struct.CollectionOption.html#method.order_by
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Order {
     /// Ascending order.
     Ascending,
@@ -323,7 +333,7 @@ pub enum Order {
 }
 
 /// Option for PUT-like requests of `DriveItem`.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct DriveItemPutOption {
     access_opt: AccessOption,
     conflict_behavior: Option<ConflictBehavior>,
@@ -332,7 +342,7 @@ pub struct DriveItemPutOption {
 impl DriveItemPutOption {
     /// Create an empty (default) option.
     pub fn new() -> Self {
-        Default::default()
+        Self::default()
     }
 
     /// Only response if the object matches the `tag`.
@@ -341,6 +351,7 @@ impl DriveItemPutOption {
     /// [`ObjectOption::if_match`][if_match]
     ///
     /// [if_match]: ./struct.ObjectOption.html#method.if_match
+    #[must_use]
     pub fn if_match(mut self, tag: &Tag) -> Self {
         self.access_opt = self.access_opt.if_match(tag);
         self
@@ -354,7 +365,8 @@ impl DriveItemPutOption {
     /// This not only available for DELETE-like requests. Read the docs first.
     ///
     /// # See also
-    /// `@microsoft.graph.conflictBehavior` of DriveItem on [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes)
+    /// `@microsoft.graph.conflictBehavior` of `DriveItem` on [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes)
+    #[must_use]
     pub fn conflict_behavior(mut self, conflict_behavior: ConflictBehavior) -> Self {
         self.conflict_behavior = Some(conflict_behavior);
         self

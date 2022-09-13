@@ -185,7 +185,7 @@ impl FileName {
     /// Returns None if contains invalid characters.
     ///
     /// # See also
-    /// [ItemLocation::from_path][from_path]
+    /// [`ItemLocation::from_path`][from_path]
     ///
     /// [from_path]: ./struct.ItemLocation.html#method.from_path
     pub fn new<S: AsRef<str> + ?Sized>(name: &S) -> Option<&Self> {
@@ -200,6 +200,7 @@ impl FileName {
     }
 
     /// View the file name as `&str`. It is cost-free.
+    #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -217,25 +218,23 @@ pub(crate) trait ApiPathComponent {
 
 impl ApiPathComponent for DriveLocation {
     fn extend_into(&self, buf: &mut PathSegmentsMut) {
-        use self::DriveLocationEnum::*;
         match &self.inner {
-            Me => buf.extend(&["me", "drive"]),
-            User(id) => buf.extend(&["users", id, "drive"]),
-            Group(id) => buf.extend(&["groups", id, "drive"]),
-            Site(id) => buf.extend(&["sites", id, "drive"]),
-            Id(id) => buf.extend(&["drives", id.as_str()]),
+            DriveLocationEnum::Me => buf.extend(&["me", "drive"]),
+            DriveLocationEnum::User(id) => buf.extend(&["users", id, "drive"]),
+            DriveLocationEnum::Group(id) => buf.extend(&["groups", id, "drive"]),
+            DriveLocationEnum::Site(id) => buf.extend(&["sites", id, "drive"]),
+            DriveLocationEnum::Id(id) => buf.extend(&["drives", id.as_str()]),
         };
     }
 }
 
 impl ApiPathComponent for ItemLocation<'_> {
     fn extend_into(&self, buf: &mut PathSegmentsMut) {
-        use self::ItemLocationEnum::*;
         match &self.inner {
-            Path("/") => buf.push("root"),
-            Path(path) => buf.push(&["root:", path, ":"].join("")),
-            Id(id) => buf.extend(&["items", id]),
-            ChildOfId {
+            ItemLocationEnum::Path("/") => buf.push("root"),
+            ItemLocationEnum::Path(path) => buf.push(&["root:", path, ":"].join("")),
+            ItemLocationEnum::Id(id) => buf.extend(&["items", id]),
+            ItemLocationEnum::ChildOfId {
                 parent_id,
                 child_name,
             } => buf.extend(&["items", parent_id, "children", child_name]),

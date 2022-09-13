@@ -56,6 +56,7 @@ impl Error {
     }
 
     /// Get the error response from API if caused by error status code.
+    #[must_use]
     pub fn error_response(&self) -> Option<&ErrorResponse> {
         match &*self.inner {
             ErrorKind::ErrorResponse { response, .. } => Some(response),
@@ -64,6 +65,7 @@ impl Error {
     }
 
     /// Get the OAuth2 error response from API if caused by OAuth2 error response.
+    #[must_use]
     pub fn oauth2_error_response(&self) -> Option<&OAuth2ErrorResponse> {
         match &*self.inner {
             ErrorKind::OAuth2Error { response, .. } => Some(response),
@@ -72,6 +74,7 @@ impl Error {
     }
 
     /// Get the HTTP status code if caused by error status code.
+    #[must_use]
     pub fn status_code(&self) -> Option<StatusCode> {
         match &*self.inner {
             ErrorKind::RequestError(source) => source.status(),
