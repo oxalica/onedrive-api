@@ -11,6 +11,7 @@ use crate::{
 use bytes::Bytes;
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
+use serde_json::json;
 use url::Url;
 
 macro_rules! api_url {
@@ -269,6 +270,56 @@ impl OneDrive {
             .await
     }
 
+    /// Create a new [`DriveItem`][drive_item] allowing to set supported attributes.
+    /// [`DriveItem`][drive_item] resources have facets modeled as properties that provide data
+    /// about the [`DriveItem`][drive_item]'s identities and capabilities. You must provide one
+    /// of the following facets to create an item: `bundle`, `file`, `folder`, `remote_item`.
+    ///
+    /// # Errors
+    /// * Will result in `Err` with HTTP `409 CONFLICT` if [`conflict_behavior`][conflict_behavior]
+    /// is set to [`Fail`][conflict_fail] and the target already exists.
+    /// * Will result in `Err` with HTTP `400 BAD REQUEST` if facets are not properly set.
+    ///
+    /// # See also
+    ///
+    /// [Microsoft Docs](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_post_children?view=graph-rest-1.0)
+    ///
+    /// [with_opt]: #method.create_folder_with_option
+    /// [drive_item]: ./resource/struct.DriveItem.html
+    /// [conflict_behavior]: ./option/struct.DriveItemPutOption.html#method.conflict_behavior
+    /// [conflict_fail]: ./enum.ConflictBehavior.html#variant.Fail
+    pub async fn create_drive_item<'a>(
+        &self,
+        parent_item: impl Into<ItemLocation<'a>>,
+        drive_item: DriveItem,
+        option: DriveItemPutOption,
+    ) -> Result<DriveItem> {
+        #[derive(Serialize)]
+        struct Req {
+            #[serde(rename = "@microsoft.graph.conflictBehavior")]
+            conflict_behavior: ConflictBehavior,
+            #[serde(flatten)]
+            drive_item: DriveItem,
+        }
+
+        let conflict_behavior = option
+            .get_conflict_behavior()
+            .unwrap_or(ConflictBehavior::Fail);
+
+        self.client
+            .post(api_url![&self.drive, &parent_item.into(), "children"])
+            .bearer_auth(&self.token)
+            .apply(option)
+            .json(&Req {
+                conflict_behavior,
+                drive_item,
+            })
+            .send()
+            .await?
+            .parse()
+            .await
+    }
+
     /// Create a new folder under an `DriveItem`
     ///
     /// Create a new folder [`DriveItem`][drive_item] with a specified parent item or path.
@@ -289,33 +340,13 @@ impl OneDrive {
         name: &FileName,
         option: DriveItemPutOption,
     ) -> Result<DriveItem> {
-        #[derive(Serialize)]
-        struct Folder {}
+        let drive_item = DriveItem {
+            name: Some(name.as_str().to_string()),
+            folder: Some(json!({}).into()),
+            ..Default::default()
+        };
 
-        #[derive(Serialize)]
-        struct Req<'a> {
-            name: &'a str,
-            folder: Folder,
-            // https://docs.microsoft.com/en-us/graph/api/resources/driveitem?view=graph-rest-1.0#instance-attributes
-            #[serde(rename = "@microsoft.graph.conflictBehavior")]
-            conflict_behavior: ConflictBehavior,
-        }
-
-        let conflict_behavior = option
-            .get_conflict_behavior()
-            .unwrap_or(ConflictBehavior::Fail);
-        self.client
-            .post(api_url![&self.drive, &parent_item.into(), "children"])
-            .bearer_auth(&self.token)
-            .apply(option)
-            .json(&Req {
-                name: name.as_str(),
-                folder: Folder {},
-                conflict_behavior,
-            })
-            .send()
-            .await?
-            .parse()
+        self.create_drive_item(parent_item, drive_item, option)
             .await
     }
 

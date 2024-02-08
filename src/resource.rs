@@ -210,6 +210,7 @@ define_resource_object! {
         // Drive item
 
         pub audio: Option<JsonValue>,
+        pub bundle: Option<JsonValue>,
         pub content: Option<JsonValue>,
         pub c_tag: Option<Tag>,
         pub deleted: Option<JsonValue>,
