@@ -9,6 +9,7 @@
 //!
 //! # See also
 //! [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters)
+#![allow(clippy::module_name_repetitions)] // Ambiguous if without sufficies.
 use crate::{
     resource::{ResourceField, Tag},
     util::RequestBuilderTransformer,
@@ -58,6 +59,7 @@ pub struct ObjectOption<Field> {
 
 impl<Field: ResourceField> ObjectOption<Field> {
     /// Create an empty (default) option.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             access_opt: AccessOption::default(),
@@ -116,7 +118,7 @@ impl<Field: ResourceField> ObjectOption<Field> {
 
     fn select_raw(mut self, fields: &[&str]) -> Self {
         for sel in fields {
-            write!(self.select_buf, ",{}", sel).unwrap();
+            write!(self.select_buf, ",{sel}").unwrap();
         }
         self
     }
@@ -133,17 +135,18 @@ impl<Field: ResourceField> ObjectOption<Field> {
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/query-parameters#expand-parameter)
     ///
     /// [resource]: ../resource/index.html#field-descriptors
+    #[must_use]
     pub fn expand(self, field: Field, select_children: Option<&[&str]>) -> Self {
         self.expand_raw(field.__raw_name(), select_children)
     }
 
     fn expand_raw(mut self, field: &str, select_children: Option<&[&str]>) -> Self {
         let buf = &mut self.expand_buf;
-        write!(buf, ",{}", field).unwrap();
+        write!(buf, ",{field}").unwrap();
         if let Some(children) = select_children {
             write!(buf, "($select=").unwrap();
             for sel in children {
-                write!(buf, "{},", sel).unwrap();
+                write!(buf, "{sel},").unwrap();
             }
             write!(buf, ")").unwrap();
         }
@@ -181,6 +184,7 @@ pub struct CollectionOption<Field> {
 
 impl<Field: ResourceField> CollectionOption<Field> {
     /// Create an empty (default) option.
+    #[must_use]
     pub fn new() -> Self {
         Self {
             obj_option: ObjectOption::default(),
@@ -341,6 +345,7 @@ pub struct DriveItemPutOption {
 
 impl DriveItemPutOption {
     /// Create an empty (default) option.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }

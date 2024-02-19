@@ -33,6 +33,7 @@ impl DriveLocation {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-current-users-onedrive)
+    #[must_use]
     pub fn me() -> Self {
         Self {
             inner: DriveLocationEnum::Me,
@@ -73,6 +74,7 @@ impl DriveLocation {
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/drive-get?view=graph-rest-1.0#get-a-drive-by-id)
+    #[must_use]
     pub fn from_id(drive_id: DriveId) -> Self {
         Self {
             inner: DriveLocationEnum::Id(drive_id),
@@ -128,6 +130,7 @@ impl<'a> ItemLocation<'a> {
     ///
     /// # See also
     /// [Microsoft Docs](https://support.office.com/en-us/article/Invalid-file-names-and-file-types-in-OneDrive-OneDrive-for-Business-and-SharePoint-64883a5d-228e-48f5-b3d2-eb39e07630fa#invalidcharacters)
+    #[must_use]
     pub fn from_path(path: &'a str) -> Option<Self> {
         if path == "/" {
             Some(Self::root())
@@ -145,6 +148,7 @@ impl<'a> ItemLocation<'a> {
     }
 
     /// Item id from other API.
+    #[must_use]
     pub fn from_id(item_id: &'a ItemId) -> Self {
         Self {
             inner: ItemLocationEnum::Id(item_id.as_str()),
@@ -152,6 +156,7 @@ impl<'a> ItemLocation<'a> {
     }
 
     /// The root directory item.
+    #[must_use]
     pub fn root() -> Self {
         Self {
             inner: ItemLocationEnum::Path("/"),
@@ -159,6 +164,7 @@ impl<'a> ItemLocation<'a> {
     }
 
     /// The child item in a directory.
+    #[must_use]
     pub fn child_of_id(parent_id: &'a ItemId, child_name: &'a FileName) -> Self {
         Self {
             inner: ItemLocationEnum::ChildOfId {

@@ -100,6 +100,7 @@ define_string_wrapper! {
 
 // Used for generalization over any resource field enums in `option`.
 #[doc(hidden)]
+#[allow(clippy::module_name_repetitions)] // Internal trait.
 pub trait ResourceField: Copy {
     fn __raw_name(self) -> &'static str;
 }

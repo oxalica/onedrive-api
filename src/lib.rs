@@ -199,9 +199,7 @@ mod tests {
             assert_eq!(
                 ret.as_ref().ok(),
                 expect.as_ref(),
-                "Failed: Got {:?} on {:?}",
-                ret,
-                s,
+                "Failed: Got {ret:?} on {s:?}",
             );
         }
     }

@@ -1,3 +1,4 @@
+#![allow(clippy::default_trait_access)] // Forwarding default options is allowed.
 use crate::{
     error::{Error, Result},
     option::{CollectionOption, DriveItemPutOption, ObjectOption},
@@ -696,7 +697,7 @@ impl OneDrive {
     /// Will result in error with HTTP `412 PRECONDITION_FAILED` if [`if_match`][if_match] is set but
     /// does not match the item.
     ///
-    /// # Panic
+    /// # Panics
     /// [`conflict_behavior`][conflict_behavior] is **NOT** supported. Set it will cause a panic.
     ///
     /// # See also
@@ -933,6 +934,7 @@ impl CopyProgressMonitor {
     }
 
     /// Get the monitor url.
+    #[must_use]
     pub fn monitor_url(&self) -> &str {
         &self.monitor_url
     }
@@ -1026,7 +1028,7 @@ impl DriveItemFetcher {
         while let Some(items) = self.fetch_next_page(onedrive).await? {
             buf.extend(items);
         }
-        Ok((buf, self.delta_url().map(|s| s.to_owned())))
+        Ok((buf, self.delta_url().map(Into::into)))
     }
 }
 
@@ -1399,11 +1401,11 @@ mod test {
 
         for s in &valid_names {
             assert!(check_name(s), "{}", s);
-            let path = format!("/{}", s);
+            let path = format!("/{s}");
             assert!(check_path(&path), "{}", path);
 
             for s2 in &valid_names {
-                let mut path = format!("/{}/{}", s, s2);
+                let mut path = format!("/{s}/{s2}");
                 assert!(check_path(&path), "{}", path);
                 path.push('/'); // Trailing
                 assert!(check_path(&path), "{}", path);
@@ -1418,11 +1420,11 @@ mod test {
                 continue;
             }
 
-            let path = format!("/{}", s);
+            let path = format!("/{s}");
             assert!(!check_path(&path), "{}", path);
 
             for s2 in &valid_names {
-                let path = format!("/{}/{}", s2, s);
+                let path = format!("/{s2}/{s}");
                 assert!(!check_path(&path), "{}", path);
             }
         }

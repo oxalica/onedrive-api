@@ -2,13 +2,22 @@
 name = "onedrive-api"
 version = "0.9.0"
 repository = "https://github.com/oxalica/onedrive-api"
-license = "MIT"
 categories = ["api-bindings"]
 keywords = ["onedrive", "http", "api"]
 description = "OneDrive HTTP REST API"
-edition = "2018"
-readme = "README.md"
 documentation = "https://docs.rs/onedrive-api"
+license.workspace = true
+edition.workspace = true
+
+[workspace]
+members = ["onedrive-api-test"]
+
+[workspace.package]
+license = "MIT"
+edition = "2021"
+
+[lints]
+workspace = true
 
 [features]
 default = ["reqwest/default"]
@@ -27,5 +36,6 @@ url = "2"
 [package.metadata.docs.rs]
 all-features = true
 
-[workspace]
-members = ["onedrive-api-test"]
+[workspace.lints.clippy]
+pedantic = "warn"
+missing-errors-doc = "allow" # Of course network requests can fail.

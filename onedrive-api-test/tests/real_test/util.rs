@@ -26,7 +26,7 @@ async fn login() -> String {
 }
 
 lazy_static! {
-    pub static ref TOKEN: tokio::sync::Mutex<Option<String>> = Default::default();
+    pub static ref TOKEN: tokio::sync::Mutex<Option<String>> = tokio::sync::Mutex::default();
 }
 
 pub async fn get_logined_onedrive() -> OneDrive {
@@ -55,7 +55,7 @@ pub fn gen_filename() -> &'static FileName {
     }
 
     let id = COUNTER.fetch_add(1, Ordering::SeqCst);
-    let s = Box::leak(format!("$onedrive_api_tests.{}", id).into_boxed_str());
+    let s = Box::leak(format!("$onedrive_api_tests.{id}").into_boxed_str());
     FileName::new(s).unwrap()
 }
 

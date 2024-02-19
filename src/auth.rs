@@ -21,6 +21,7 @@ impl Permission {
     /// Create a read-only permission.
     ///
     /// Note that the permission is at least to allow reading.
+    #[must_use]
     pub fn new_read() -> Self {
         Self::default()
     }
@@ -41,12 +42,10 @@ impl Permission {
 
     /// Set whether allows offline access.
     ///
-    /// This permission is required to get a [refresh_token][refresh_token] for long time access.
+    /// This permission is required to get a [`TokenResponse::refresh_token`] for long time access.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/permissions-reference#delegated-permissions-21)
-    ///
-    /// [refresh_token]: ./struct.TokenResponse.html#structfield.refresh_token
     #[must_use]
     pub fn offline_access(mut self, offline_access: bool) -> Self {
         self.offline_access = offline_access;
@@ -277,7 +276,7 @@ where
         where
             E: serde::de::Error,
         {
-            Ok(s.split(' ').map(|s| s.to_owned()).collect())
+            Ok(s.split(' ').map(Into::into).collect())
         }
     }
 

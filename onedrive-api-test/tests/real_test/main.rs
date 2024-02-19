@@ -1,5 +1,5 @@
 //! Test read and write APIs by sending real requests to Microsoft Onedrive
-//! with token and refresh_token provided. Requires network access.
+//! with token and `refresh_token` provided. Requires network access.
 //!
 //! **DANGER:**
 //! This may MODIFY YOUR FILES on OneDrive! Although the test is written
@@ -94,8 +94,6 @@ async fn test_get_item() {
 // 7 requests
 #[tokio::test]
 async fn test_folder_create_and_list_children() {
-    let onedrive = onedrive().await;
-
     fn to_names(v: Vec<DriveItem>) -> Vec<String> {
         let mut v = v
             .into_iter()
@@ -104,6 +102,8 @@ async fn test_folder_create_and_list_children() {
         v.sort();
         v
     }
+
+    let onedrive = onedrive().await;
 
     let container_name = gen_filename();
     let container_loc = rooted_location(container_name);
@@ -258,12 +258,7 @@ async fn test_folder_create_and_delete() {
 // 4 requests
 #[tokio::test]
 async fn test_folder_create_and_update() {
-    let onedrive = onedrive().await;
-
     const FAKE_TIME: &str = "2017-01-01T00:00:00Z";
-
-    let folder_name = gen_filename();
-    let folder_loc = rooted_location(folder_name);
 
     fn get_bmtime(item: &DriveItem) -> Option<(&str, &str)> {
         let fs_info = item.file_system_info.as_ref()?.as_object()?;
@@ -273,16 +268,21 @@ async fn test_folder_create_and_update() {
         ))
     }
 
+    let onedrive = onedrive().await;
+
+    let folder_name = gen_filename();
+    let folder_loc = rooted_location(folder_name);
+
     // #1
     let item_before = onedrive
         .create_folder(ItemLocation::root(), folder_name)
         .await
         .expect("Cannot create folder");
 
-    let (btime_before, mtime_before) =
+    let (birth_time_before, modified_time_before) =
         get_bmtime(&item_before).expect("Invalid file_system_info before update");
-    assert_ne!(btime_before, FAKE_TIME);
-    assert_ne!(mtime_before, FAKE_TIME);
+    assert_ne!(birth_time_before, FAKE_TIME);
+    assert_ne!(modified_time_before, FAKE_TIME);
 
     // #2
     let mut patch = DriveItem::default();
@@ -310,11 +310,11 @@ async fn test_folder_create_and_update() {
 // 6 requests
 #[tokio::test]
 async fn test_file_upload_small_and_move() {
-    let onedrive = onedrive().await;
-
     // Different length, since we use `size` to check if replacement is successful.
     const CONTENT1: &[u8] = b"aaa";
     const CONTENT2: &[u8] = b"bbbbbb";
+
+    let onedrive = onedrive().await;
 
     let file1_loc = rooted_location(gen_filename());
     let file2_name = gen_filename();
@@ -354,15 +354,16 @@ async fn test_file_upload_small_and_move() {
         .expect("Cannot move with overwrite");
 
     // #5
+    let size = onedrive
+        .get_item(file2_loc)
+        .await
+        .expect("Cannot get file2")
+        .size
+        .expect("Missing `size`");
     assert_eq!(
-        onedrive
-            .get_item(file2_loc)
-            .await
-            .expect("Cannot get file2")
-            .size
-            .expect("Missing `size`"),
+        usize::try_from(size).expect("value overflow"),
         // Content is replaced.
-        CONTENT1.len() as i64,
+        CONTENT1.len(),
     );
 
     // #6
@@ -373,11 +374,11 @@ async fn test_file_upload_small_and_move() {
 // 5 requests
 #[tokio::test]
 async fn test_file_upload_small_and_copy() {
-    let onedrive = onedrive().await;
-
     const CONTENT: &[u8] = b"hello, copy";
     const WAIT_TIME: std::time::Duration = std::time::Duration::from_millis(1000);
     const MAX_WAIT_COUNT: usize = 5;
+
+    let onedrive = onedrive().await;
 
     let name1 = gen_filename();
     let name2 = gen_filename();
@@ -407,12 +408,10 @@ async fn test_file_upload_small_and_copy() {
         {
             CopyStatus::NotStarted | CopyStatus::InProgress => {}
             CopyStatus::Completed => break,
-            status => panic!("Unexpected fail of `copy`: {:?}", status),
+            status => panic!("Unexpected fail of `copy`: {status:?}"),
         }
 
-        if i >= MAX_WAIT_COUNT {
-            panic!("Copy timeout");
-        }
+        assert!(i < MAX_WAIT_COUNT, "Copy timeout");
     }
 
     // #4, #5
@@ -423,8 +422,6 @@ async fn test_file_upload_small_and_copy() {
 // 8 requests
 #[tokio::test]
 async fn test_file_upload_session() {
-    let onedrive = onedrive().await;
-
     type Range = std::ops::Range<usize>;
     const CONTENT: &[u8] = b"12345678";
     const CONTENT_LEN: u64 = CONTENT.len() as u64;
@@ -436,6 +433,7 @@ async fn test_file_upload_session() {
         r.start as u64..r.end as u64
     }
 
+    let onedrive = onedrive().await;
     let item_loc = rooted_location(gen_filename());
 
     // #1
@@ -473,8 +471,7 @@ async fn test_file_upload_session() {
         next_ranges.len() == 1
             && next_ranges[0].start == RANGE2.start as u64
             && next_ranges[0].end.map_or(true, |x| x == RANGE2.end as u64),
-        "Invalid `next_expected_ranges`: {:?}",
-        next_ranges
+        "Invalid `next_expected_ranges`: {next_ranges:?}"
     );
 
     // #4
@@ -517,9 +514,9 @@ async fn test_file_upload_session() {
 #[tokio::test]
 #[ignore]
 async fn test_track_changes() {
-    let onedrive = onedrive().await;
-
     use std::collections::HashSet;
+
+    let onedrive = onedrive().await;
 
     let container_name = gen_filename();
     let container_loc = rooted_location(container_name);

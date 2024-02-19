@@ -57,7 +57,7 @@ USAGE: {} [-o <output_file>] [-r <redirect_uri>] [-s <client_secret>] <client_id
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = parse_args().unwrap_or_else(|err| {
-        eprintln!("{}", err);
+        eprintln!("{err}");
         exit_with_help();
     });
 
@@ -67,20 +67,21 @@ async fn main() -> Result<()> {
         args.redirect_uri.clone(),
     );
     let url = auth.code_auth_url();
-    eprintln!("Code auth url: {}", url);
+    eprintln!("Code auth url: {url}");
     if open::that(url).is_err() {
         eprintln!("Cannot open browser, please open the url above manually.");
     }
     eprintln!("Please login in browser, paste the redirected URL here and then press <Enter>");
 
     let code = loop {
+        const NEEDLE: &str = "nativeclient?code=";
+
         eprint!("Redirected URL: ");
         io::stdout().flush()?;
         let mut inp = String::new();
         io::stdin().read_line(&mut inp)?;
         let inp = inp.trim();
 
-        const NEEDLE: &str = "nativeclient?code=";
         match inp.find(NEEDLE) {
             Some(pos) => break inp[pos + NEEDLE.len()..].to_owned(),
             _ => eprintln!("Invalid!"),
@@ -97,9 +98,9 @@ async fn main() -> Result<()> {
         let mut f = File::create(&args.output_file)?;
         writeln!(f, "export ONEDRIVE_API_TEST_CLIENT_ID='{}'", args.client_id)?;
         writeln!(f, "export ONEDRIVE_API_TEST_REDIRECT_URI='{}'", args.redirect_uri)?;
-        writeln!(f, "export ONEDRIVE_API_TEST_REFRESH_TOKEN='{}'", refresh_token)?;
+        writeln!(f, "export ONEDRIVE_API_TEST_REFRESH_TOKEN='{refresh_token}'")?;
         if let Some(client_secret) = args.client_secret {
-            writeln!(f, "export ONEDRIVE_API_TEST_CLIENT_SECRET='{}'", client_secret)?;
+            writeln!(f, "export ONEDRIVE_API_TEST_CLIENT_SECRET='{client_secret}'")?;
         }
     }
 

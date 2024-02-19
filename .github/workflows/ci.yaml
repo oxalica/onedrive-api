@@ -30,9 +30,9 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
       - name: cargo clippy
-        run: cargo clippy --all-targets -- -Dwarnings
+        run: cargo clippy --workspace --all-targets -- -Dwarnings
       - name: cargo doc
-        run: cargo doc --all ${{ matrix.feature_flag }}
+        run: cargo doc --workspace ${{ matrix.feature_flag }}
         env:
           RUSTDOCFLAGS: -Dwarnings
 
