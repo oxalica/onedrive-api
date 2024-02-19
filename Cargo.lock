@@ -549,7 +549,6 @@ version = "0.0.0"
 dependencies = [
  "anyhow",
  "envy",
- "lazy_static",
  "onedrive-api",
  "open",
  "pico-args",
