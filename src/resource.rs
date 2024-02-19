@@ -140,7 +140,7 @@ macro_rules! define_resource_object {
             /// More details in [mod documentation][mod].
             ///
             /// [mod]: ./index.html
-            #[derive(Debug, Clone, Copy, Eq, PartialEq, strum::EnumVariantNames)]
+            #[derive(Debug, Clone, Copy, Eq, PartialEq, strum::VariantNames)]
             #[strum(serialize_all = "camelCase")]
             #[non_exhaustive]
             #[allow(missing_docs, non_camel_case_types)]

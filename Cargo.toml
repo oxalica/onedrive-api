@@ -16,13 +16,13 @@ beta = []
 
 [dependencies]
 # Compat with `reqwest`
-bytes = "1.0.1"
-reqwest = { version = "0.11.0", default-features = false, features = ["json", "gzip"] }
-serde = { version = "1.0.102", features = ["derive"] }
-serde_json = "1.0.41"
-strum = { version = "0.24", features = ["derive"] }
-thiserror = "1.0.15"
-url = "2.2.0"
+bytes = "1"
+reqwest = { version = "0.11", default-features = false, features = ["json", "gzip"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+strum = { version = "0.26", features = ["derive"] }
+thiserror = "1"
+url = "2"
 
 [package.metadata.docs.rs]
 all-features = true

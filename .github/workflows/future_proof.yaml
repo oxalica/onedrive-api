@@ -1,0 +1,26 @@
+name: Future proof tests
+on:
+  schedule:
+    - cron: '21 1 * * 0' # Sun *-*-* 01:21:00 UTC
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  RUST_BACKTRACE: full
+
+jobs:
+  outdated:
+    name: Outdated
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install cargo-outdated
+        uses: dtolnay/install@cargo-outdated
+      - name: cargo-outdated
+        run: |
+          rm Cargo.lock # Ignore trivially updatable compatible versions.
+          cargo outdated --workspace --exit-code 1
