@@ -1,23 +1,49 @@
-# v0.9.0
+# Change Log
 
-## API changes
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/)
+and this project adheres to [Semantic Versioning](https://semver.org/).
+
+## Unreleased
+
+### Added
+
+- Add `create_drive_item` for `driveItem` creation with custom attributes. [#6]
+
+[#6]: https://github.com/oxalica/onedrive-api/pull/6
+
+### Changed
+
+- Bump to edition 2021 and set MSRV as 1.64.
+- Many functions are marked with `#[must_use]`.
+
+### Internal
+
+- `Cargo.lock` is unignored and checked in Git.
+- Rewrite CI and replace archived dependencies.
+- Update dependencies and relax version specifications to only major digit.
+
+## v0.9.0
+
+### API changes
 - Accept `impl Into<String>` in parameters of `OneDrive::*`, which previously only accept `String`.
 - `resource::*Field::raw_name` takes `self` instead of `&self`, since they are now `Copy`.
 
-## Others
+### Others
 - Update dependencies.
 - Derive more std traits for resource and option types, including `Clone`, `Copy`, `PartialEq` and `Eq`.
 - More `#[must_use]` are added to warn incorrect usages.
 - Documentation fixes.
 
-# v0.8.1
+## v0.8.1
 
-## Features
+### Features
 - Support initial state of upload sessions (`OneDrive::new_upload_session_with_initial_option`)
 
-# v0.8.0
+## v0.8.0
 
-## Breaking Changes
+### Breaking Changes
 - Split metadata out from `UploadSession` and make it works without `OneDrive` instance since it doesn't
   require token.
 
@@ -26,16 +52,16 @@
     call.
   - `OneDrive::get_upload_session` is moved to `UploadSession::get_meta`.
 
-## Features
+### Features
 - Add method `OneDrive::client` to get the `Client` used to constuct the instance.
 - Expose constants `OneDrive::UPLOAD_SMALL_MAX_SIZE` and `UploadSession::MAX_PART_SIZE`.
 
-## Fixes
+### Fixes
 - Fix deserialization error of `OneDrive::upload_small` when uploading empty data.
 
-# v0.7.0
+## v0.7.0
 
-## Breaking Changes
+### Breaking Changes
 - Limit tracking API to root folders only since they are undocumented and doesn't work in some cases.
 
   These API are affected:
@@ -44,42 +70,42 @@
 
   The new API works only for root folders, and the previous `folder` parameter is removed.
 
-## Others
+### Others
 - Update dependencies to `tokio` 1.0 ecosystem.
 
 
-# v0.6.3
+## v0.6.3
 
-## Fixes
+### Fixes
 - Revert `track_changes_from_delta_url_with_option` since it will cause duplicated query parameters.
   Instead, we introduced `get_latest_delta_url_with_option` for setting options at beginning.
 
-# v0.6.2 (Yanked)
+## v0.6.2 (Yanked)
 
-## Features
+### Features
 - Add missing `track_changes_from_delta_url_with_option` for customizing `track_changes_from_delta_url`.
 - Add method `raw_name` for field descriptor enums to get raw camelCased name used in underlying requests.
 - Add getter `client_id/permission/redirect_uri` for `Auth`.
 
-## Others
+### Others
 - Bump dependencies.
 - Use new rustc features to simplify codes.
 
-# v0.6.1
+## v0.6.1
 
-## Features
+### Features
 - Default features of `reqwest` can be disabled by `default-features = false`
   to allow switching to non-default tls implementation.
 - Enable gzip by default.
 - New API: `get_item_download_url[_with_option]`
 - New variant of `ItemLocation`: locating an child by name under an `ItemId`.
 
-## Fixes
+### Fixes
 - `options::*` are now `Send + Sync`
 
-# v0.6.0
+## v0.6.0
 
-## Huge Breaking Changes
+### Huge Breaking Changes
 - Sweet `reqwest` again. Drop `api::*` indroduced in `0.5.*`.
 - Everything is `async` now.
 - Beta APIs are now under feature gate `beta`.
@@ -102,28 +128,28 @@
     This makes it easy to store them with `OneDrive` without worries about self-references.
   - Other tiny fix-ups and renames.
 
-## Features
+### Features
 - `async`!
 - Refactor tests and switch to GitHub Actions as CI.
 
-## Fixes
+### Fixes
 - Shrink dependencies.
 
-# v0.5.2
+## v0.5.2
 
-## Features
+### Features
 - Add new api `OneDrive::update_item[_with_option]`
 - Derive `Serialize` and `Default` for resource objects in `onedrive_api::resource`
 
-## Fixes
+### Fixes
 - Tests
 
-# v0.5.1
-## Fixes
+## v0.5.1
+### Fixes
 - Tests
 
-# v0.5.0
-## Huge Breaking Changes
+## v0.5.0
+### Huge Breaking Changes
 - Refactor all APIs with new `Api` and `Client` interfaces and strip dependency to `reqwest`.
   See docs for more details.
 - `Error::{should_retry,url}` are removed.
@@ -134,41 +160,41 @@
 - Rename `ListChildrenFetcher` and `TrackChangeFetcher` are no longer `Iterator`.
   See docs for more details.
 
-## Features
+### Features
 - Refactor and add more tests.
 - Support custom HTTP backend.
 
-## Fixes
+### Fixes
 - Request changes of beta api `CopyProgressMonitor::fetch_progress`
 - Documentations
 
-# v0.4.0
-## Breaking Changes
+## v0.4.0
+### Breaking Changes
 - Renane mod `query_option` to `option`.
 - Move `if-match` and `if-none-match` from parameter to `option`
   to simplify simple API (without `_with_option`).
 
-## Features
+### Features
 - Support `conflict_behavior` in related `with_option` API.
 - Support `expiration_date_time` field in `UploadSession`.
 - Support tracking asynchronous `copy` operation through `CopyProgressMonitor`.
 
-## Fixes
+### Fixes
 - Fix and add more documentations.
 - Maintain mod structure.
 
-# v0.3.0
-## Features
+## v0.3.0
+### Features
 - Add all fields available of `resource::{Drive, DriveItem}` in Microsoft Graph Documentation (See documentations of them).
 
-## Breaking Changes
+### Breaking Changes
 - Refact `query_option::{Object, Collection}Option` and change parameter types of relative `DriveClient::*_with_option` methods.
 - Remove `resource::{Deleted, ItemReference}`, which are not necessary for using this crate.
   If you need more detail from these fields, just manually destruct the `serde_json::Value` fields of `resource::{Drive, DriveItem}`.
 
-# v0.2.1
-## Fixes
+## v0.2.1
+### Fixes
 - Fix documentations and add examples.
 
-# v0.2.0
+## v0.2.0
 Initial release.
