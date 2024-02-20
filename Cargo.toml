@@ -6,6 +6,7 @@ categories = ["api-bindings"]
 keywords = ["onedrive", "http", "api"]
 description = "OneDrive HTTP REST API"
 documentation = "https://docs.rs/onedrive-api"
+exclude = ["/.github"]
 # Cargo workspace inheritance.
 # NB. Sync with CI.
 rust-version = "1.64"
