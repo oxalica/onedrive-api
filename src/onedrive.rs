@@ -419,16 +419,14 @@ impl OneDrive {
     /// and may not be accurate or stable.
     ///
     /// [`upload_small`]: #method.upload_small
-    pub const UPLOAD_SMALL_MAX_SIZE: usize = 4_000_000; // 4 MB
+    pub const UPLOAD_SMALL_MAX_SIZE: usize = 250_000_000; // 250MB
 
     /// Upload or replace the contents of a `DriveItem` file.
     ///
     /// The simple upload API allows you to provide the contents of a new file or
     /// update the contents of an existing file in a single API call. This method
-    /// only supports files up to 4MB in size.
-    ///
-    /// # Panics
-    /// Panic if `data` is larger than 4 MB (4,000,000 bytes).
+    /// only supports files up to [`Self::UPLOAD_SMALL_MAX_SIZE`]. The length is not checked
+    /// locally and request will still be sent for large data.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0)
@@ -440,13 +438,6 @@ impl OneDrive {
         data: impl Into<Bytes>,
     ) -> Result<DriveItem> {
         let data = data.into();
-        assert!(
-            data.len() <= Self::UPLOAD_SMALL_MAX_SIZE,
-            "Data too large for upload_small ({} B > {} B)",
-            data.len(),
-            Self::UPLOAD_SMALL_MAX_SIZE,
-        );
-
         self.client
             .put(api_url![&self.drive, &item.into(), "content"])
             .bearer_auth(&self.token)
