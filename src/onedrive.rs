@@ -13,6 +13,7 @@ use bytes::Bytes;
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::fmt;
 use url::Url;
 
 macro_rules! api_url {
@@ -38,11 +39,21 @@ macro_rules! api_path {
 }
 
 /// The authorized client to access OneDrive resources in a specified Drive.
-#[derive(Debug)]
+#[derive(Clone)]
 pub struct OneDrive {
     client: Client,
     token: String,
     drive: DriveLocation,
+}
+
+impl fmt::Debug for OneDrive {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OneDrive")
+            .field("client", &self.client)
+            // Skip `token`.
+            .field("drive", &self.drive)
+            .finish_non_exhaustive()
+    }
 }
 
 impl OneDrive {
