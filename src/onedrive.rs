@@ -1300,7 +1300,8 @@ impl UploadSession {
     /// If your app splits a file into multiple byte ranges, the size of each
     /// byte range MUST be a multiple of 320 KiB (327,680 bytes). Using a fragment
     /// size that does not divide evenly by 320 KiB will result in errors committing
-    /// some files.
+    /// some files. The 60 MiB limit and 320 KiB alignment are not checked locally since
+    /// they may change in the future.
     ///
     /// The `file_size` of all part upload requests should be identical.
     ///
@@ -1316,8 +1317,7 @@ impl UploadSession {
     /// HTTP `409 CONFLICT`.
     ///
     /// # Panics
-    /// Panic if `remote_range` is invalid, not match the length of `data`, or
-    /// `data` is larger than 60 MiB (62,914,560 bytes).
+    /// Panic if `remote_range` is invalid or not match the length of `data`.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#upload-bytes-to-the-upload-session)
@@ -1332,12 +1332,6 @@ impl UploadSession {
 
         let data = data.into();
         assert!(!data.is_empty(), "Empty data");
-        assert!(
-            data.len() <= Self::MAX_PART_SIZE,
-            "Data too large for a single part (got: {} B, limit: {} B)",
-            data.len(),
-            Self::MAX_PART_SIZE,
-        );
         assert!(
             remote_range.start < remote_range.end && remote_range.end <= file_size
             // `Range<u64>` has no method `len()`.
