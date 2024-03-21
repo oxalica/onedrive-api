@@ -18,7 +18,7 @@ pub struct Error {
 enum ErrorKind {
     // Errors about ser/de are included.
     #[error("Request error: {0}")]
-    RequestError(reqwest::Error),
+    RequestError(#[source] reqwest::Error),
     #[error("Unexpected response: {reason}")]
     UnexpectedResponse { reason: &'static str },
     #[error("Api error with {status}: ({}) {}", .response.code, .response.message)]
@@ -91,5 +91,20 @@ impl From<reqwest::Error> for Error {
         Self {
             inner: Box::new(ErrorKind::RequestError(source)),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error as _;
+
+    use super::*;
+
+    #[test]
+    fn error_source() {
+        let err = reqwest::blocking::get("urn:urn").unwrap_err();
+        let original_err_fmt = err.to_string();
+        let source_err_fmt = Error::from(err).source().unwrap().to_string();
+        assert_eq!(source_err_fmt, original_err_fmt);
     }
 }
