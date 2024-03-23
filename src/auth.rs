@@ -56,7 +56,7 @@ impl Permission {
 
     #[must_use]
     #[rustfmt::skip]
-    fn to_scope_string(&self) -> String {
+    fn to_scope_string(self) -> String {
         format!(
             "{}{}{}",
             if self.write { "files.readwrite" } else { "files.read" },

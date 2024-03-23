@@ -329,11 +329,6 @@ pub struct OAuth2ErrorResponse {
     pub correlation_id: Option<String>,
 }
 
-/// ```compile_fail
-/// let _ = onedrive_api::resource::DriveItemField::download_url;
-/// ```
-fn _download_url_is_not_selectable() {}
-
 #[cfg(test)]
 mod tests {
     use super::*;
