@@ -180,21 +180,16 @@ impl Auth {
         &self.tenant
     }
 
-    fn auth_url(&self, response_type: &str) -> String {
-        Url::parse_with_params(
-            &format!(
-                "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize",
-                self.tenant.to_issuer()
-            ),
-            &[
-                ("client_id", &*self.client_id),
-                ("scope", &self.permission.to_scope_string()),
-                ("redirect_uri", &self.redirect_uri),
-                ("response_type", response_type),
-            ],
-        )
-        .unwrap()
-        .into()
+    #[must_use]
+    fn endpoint_url(&self, endpoint: &str) -> Url {
+        let mut url = Url::parse("https://login.microsoftonline.com").unwrap();
+        url.path_segments_mut().unwrap().extend([
+            self.tenant.to_issuer(),
+            "oauth2",
+            "v2.0",
+            endpoint,
+        ]);
+        url
     }
 
     /// Get the URL for web browser for code flow.
@@ -202,24 +197,23 @@ impl Auth {
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request)
     #[must_use]
-    pub fn code_auth_url(&self) -> String {
-        self.auth_url("code")
+    pub fn code_auth_url(&self) -> Url {
+        let mut url = self.endpoint_url("authorize");
+        url.query_pairs_mut()
+            .append_pair("client_id", &self.client_id)
+            .append_pair("scope", &self.permission.to_scope_string())
+            .append_pair("redirect_uri", &self.redirect_uri)
+            .append_pair("response_type", "code");
+        url
     }
 
-    async fn request_authorize(
+    async fn request_token(
         &self,
         require_refresh: bool,
         params: &[(&str, &str)],
     ) -> Result<TokenResponse> {
-        let resp = self
-            .client
-            .post(format!(
-                "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
-                self.tenant.to_issuer(),
-            ))
-            .form(params)
-            .send()
-            .await?;
+        let url = self.endpoint_url("token");
+        let resp = self.client.post(url).form(params).send().await?;
 
         // Handle special error response.
         let token_resp: TokenResponse = handle_oauth2_error_response(resp).await?.json().await?;
@@ -240,7 +234,7 @@ impl Auth {
         code: &str,
         client_secret: Option<&str>,
     ) -> Result<TokenResponse> {
-        self.request_authorize(
+        self.request_token(
             self.permission.offline_access,
             &[
                 ("client_id", &self.client_id as &str),
@@ -278,7 +272,7 @@ impl Auth {
             "Refresh token requires offline_access permission."
         );
 
-        self.request_authorize(
+        self.request_token(
             true,
             &[
                 ("client_id", &self.client_id as &str),
@@ -355,4 +349,24 @@ where
     }
 
     deserializer.deserialize_str(Visitor)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn auth_url() {
+        let perm = Permission::new_read().write(true).offline_access(true);
+        let auth = Auth::new(
+            "some-client-id",
+            perm,
+            "http://example.com",
+            Tenant::Consumers,
+        );
+        assert_eq!(
+            auth.code_auth_url().as_str(),
+            "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?client_id=some-client-id&scope=files.readwrite+offline_access&redirect_uri=http%3A%2F%2Fexample.com&response_type=code",
+        );
+    }
 }

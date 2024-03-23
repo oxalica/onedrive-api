@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `Debug` impls of `OneDrive` and `TokenResponse` now hide tokens.
 - Update to reqwest 0.12.
 - `Error::source` now correctly returns its inner `reqwest::Error`.
+- `Auth::code_auth_url` now returns a `url::Url` instead of a `String`.
 
 ### Removed
 
