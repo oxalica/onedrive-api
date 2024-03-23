@@ -426,11 +426,14 @@ impl OneDrive {
     /// The upload size limit of [`upload_small`].
     ///
     /// The value is from
-    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0)
-    /// and may not be accurate or stable.
+    /// [OneDrive Developer documentation](https://learn.microsoft.com/en-us/onedrive/developer/rest-api/api/driveitem_put_content?view=odsp-graph-online)
+    /// (4MB) which is smaller than
+    /// [Microsoft Graph documentation](https://docs.microsoft.com/en-us/graph/api/driveitem-put-content?view=graph-rest-1.0)
+    /// (250MB).
+    /// The exact limit is unknown. Here we chose the smaller one as a reference.
     ///
     /// [`upload_small`]: #method.upload_small
-    pub const UPLOAD_SMALL_MAX_SIZE: usize = 250_000_000; // 250MB
+    pub const UPLOAD_SMALL_MAX_SIZE: usize = 4_000_000; // 4 MB
 
     /// Upload or replace the contents of a `DriveItem` file.
     ///
