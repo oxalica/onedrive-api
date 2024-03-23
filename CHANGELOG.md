@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Expose `Auth::client`.
 - `Retry-After` response header on rate limited or service unavailability is
   now parsed and returned via `Error::retry_after`.
+- `DriveItem::download_url` (`@microsoft.graph.downloadUrl`) can now be
+  selected in `$select=`.
 
 ### Changed
 
