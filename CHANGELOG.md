@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+### Added
+
+- `impl Clone for OneDrive`.
+
+### Changed
+
+- `Debug` impl of `OneDrive` now hides access tokens.
+- Update to reqwest 0.12.
+- `Error::source` now correctly returns its inner `reqwest::Error`.
+
+### Removed
+
+- Local assertions for session upload length limit, small upload length limit.
+  They are only enforced by the server.
+
 ## v0.9.1
 
 ### Added
