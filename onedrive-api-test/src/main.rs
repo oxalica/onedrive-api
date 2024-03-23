@@ -1,5 +1,5 @@
 use anyhow::{ensure, Context as _, Result};
-use onedrive_api::{Auth, Permission};
+use onedrive_api::{Auth, Permission, Tenant};
 use std::{
     env,
     fs::File,
@@ -65,6 +65,7 @@ async fn main() -> Result<()> {
         args.client_id.clone(),
         Permission::new_read().write(true).offline_access(true),
         args.redirect_uri.clone(),
+        Tenant::Consumers,
     );
     let url = auth.code_auth_url();
     eprintln!("Code auth url: {url}");

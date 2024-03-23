@@ -19,6 +19,7 @@ pub async fn get_logined_onedrive() -> OneDrive {
                 env.client_id,
                 Permission::new_read().write(true).offline_access(true),
                 env.redirect_uri,
+                Tenant::Consumers,
             );
             auth.login_with_refresh_token(&env.refresh_token, env.client_secret.as_deref())
                 .await

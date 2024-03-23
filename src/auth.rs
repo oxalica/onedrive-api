@@ -64,6 +64,46 @@ impl Permission {
     }
 }
 
+/// Control who can sign into the application.
+///
+/// It must match the target audience configuration of registered application.
+///
+/// See: <https://learn.microsoft.com/en-us/graph/auth-v2-user?tabs=http#parameters>
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Tenant {
+    /// For both Microsoft accounts and work or school accounts.
+    ///
+    /// # Notes
+    ///
+    /// This is only allowed for application with type `AzureADandPersonalMicrosoftAccount`
+    /// (Accounts in any organizational directory (Any Microsoft Entra directory - Multitenant) and
+    /// personal Microsoft accounts (e.g. Skype, Xbox)). If the coresponding application by
+    /// Client ID does not have this type, authentications will fail unconditionally.
+    ///
+    /// See:
+    /// <https://learn.microsoft.com/en-us/entra/identity-platform/supported-accounts-validation>
+    Common,
+    /// For work or school accounts only.
+    Organizations,
+    /// For Microsoft accounts only.
+    Consumers,
+    /// Tenant identifiers such as the tenant ID or domain name.
+    ///
+    /// See: <https://learn.microsoft.com/en-us/entra/identity-platform/v2-protocols#endpoints>
+    Issuer(String),
+}
+
+impl Tenant {
+    fn to_issuer(&self) -> &str {
+        match self {
+            Tenant::Common => "common",
+            Tenant::Organizations => "organizations",
+            Tenant::Consumers => "consumers",
+            Tenant::Issuer(s) => s,
+        }
+    }
+}
+
 /// OAuth2 authentication and authorization basics for Microsoft Graph.
 ///
 /// # See also
@@ -74,6 +114,7 @@ pub struct Auth {
     client_id: String,
     permission: Permission,
     redirect_uri: String,
+    tenant: Tenant,
 }
 
 impl Auth {
@@ -83,8 +124,9 @@ impl Auth {
         client_id: impl Into<String>,
         permission: Permission,
         redirect_uri: impl Into<String>,
+        tenant: Tenant,
     ) -> Self {
-        Self::new_with_client(Client::new(), client_id, permission, redirect_uri)
+        Self::new_with_client(Client::new(), client_id, permission, redirect_uri, tenant)
     }
 
     /// Same as [`Auth::new`][auth_new] but with custom `reqwest::Client`.
@@ -95,12 +137,14 @@ impl Auth {
         client_id: impl Into<String>,
         permission: Permission,
         redirect_uri: impl Into<String>,
+        tenant: Tenant,
     ) -> Self {
         Self {
             client,
             client_id: client_id.into(),
             permission,
             redirect_uri: redirect_uri.into(),
+            tenant,
         }
     }
 
@@ -122,9 +166,18 @@ impl Auth {
         &self.redirect_uri
     }
 
+    /// Get the `tenant` used to create this instance.
+    #[must_use]
+    pub fn tenant(&self) -> &Tenant {
+        &self.tenant
+    }
+
     fn auth_url(&self, response_type: &str) -> String {
         Url::parse_with_params(
-            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+            &format!(
+                "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize",
+                self.tenant.to_issuer()
+            ),
             &[
                 ("client_id", &*self.client_id),
                 ("scope", &self.permission.to_scope_string()),
@@ -152,7 +205,10 @@ impl Auth {
     ) -> Result<TokenResponse> {
         let resp = self
             .client
-            .post("https://login.microsoftonline.com/common/oauth2/v2.0/token")
+            .post(format!(
+                "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
+                self.tenant.to_issuer(),
+            ))
             .form(params)
             .send()
             .await?;

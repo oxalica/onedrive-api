@@ -620,6 +620,7 @@ async fn test_auth_error() {
         "11111111-2222-3333-4444-555555555555",
         Permission::new_read().offline_access(true),
         "https://login.microsoftonline.com/common/oauth2/nativeclient",
+        Tenant::Consumers,
     );
 
     {
