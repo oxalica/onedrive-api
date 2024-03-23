@@ -565,7 +565,7 @@ checksum = "3fdb12b2476b595f9358c5161aa467c2438859caa136dec86c26fdd2efe17b92"
 
 [[package]]
 name = "onedrive-api"
-version = "0.9.1"
+version = "0.10.0"
 dependencies = [
  "bytes",
  "reqwest",
