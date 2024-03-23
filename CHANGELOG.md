@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
-- `Debug` impl of `OneDrive` now hides access tokens.
+- `Debug` impls of `OneDrive` and `TokenResponse` now hide tokens.
 - Update to reqwest 0.12.
 - `Error::source` now correctly returns its inner `reqwest::Error`.
 

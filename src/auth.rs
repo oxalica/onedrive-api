@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{
     error::{Error, Result},
     util::handle_oauth2_error_response,
@@ -294,7 +296,7 @@ impl Auth {
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#token-response)
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[non_exhaustive]
 pub struct TokenResponse {
     /// Indicates the token type value. The only type that Azure AD supports is Bearer.
@@ -319,6 +321,16 @@ pub struct TokenResponse {
     ///
     /// [offline_access]: ./struct.Permission.html#method.offline_access
     pub refresh_token: Option<String>,
+}
+
+impl fmt::Debug for TokenResponse {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TokenResponse")
+            .field("token_type", &self.token_type)
+            .field("scope", &self.scope)
+            .field("expires_in_secs", &self.expires_in_secs)
+            .finish_non_exhaustive()
+    }
 }
 
 fn space_separated_strings<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
