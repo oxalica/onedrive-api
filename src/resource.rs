@@ -111,11 +111,8 @@ macro_rules! define_resource_object {
         $vis:vis struct $struct_name:ident #$field_enum_name:ident {
             $(
                 $(#[$field_meta:meta])*
-                $([unselectable]
-                    pub $unsel_field_name:ident
+                pub $field_name:ident
                     $(@$field_rename:literal)?
-                )?
-                $(pub $sel_field_name:ident)?
                     : Option<$field_ty:ty>,
             )*
         }
@@ -130,9 +127,8 @@ macro_rules! define_resource_object {
                     #[allow(missing_docs)]
                     #[serde(skip_serializing_if="Option::is_none")]
                     $(#[$field_meta])*
-                    $($(#[serde(rename = $field_rename)])? pub $unsel_field_name)?
-                    $(pub $sel_field_name)?
-                        : Option<$field_ty>,
+                    $(#[serde(rename = $field_rename)])?
+                    pub $field_name: Option<$field_ty>,
                 )*
             }
 
@@ -147,9 +143,8 @@ macro_rules! define_resource_object {
             #[allow(missing_docs, non_camel_case_types)]
             $vis enum $field_enum_name {
                 $(
-                    $( // Only place selectable fields.
-                        $sel_field_name,
-                    )?
+                    $(#[strum(serialize = $field_rename)])?
+                    $field_name,
                 )*
             }
 
@@ -268,7 +263,6 @@ define_resource_object! {
         /// [select]: ../option/struct.ObjectOption.html#method.select
         /// [get_item]: ../struct.OneDrive.html#method.get_item
         /// [get_item_with_opt]: ../struct.OneDrive.html#method.get_item_with_option
-        [unselectable]
         pub download_url @"@microsoft.graph.downloadUrl": Option<Url>,
 
         // `@microsoft.graph.sourceUrl` is write-only
@@ -359,5 +353,10 @@ mod tests {
         assert_eq!(DriveItemField::size.raw_name(), "size");
         assert_eq!(DriveItemField::web_dav_url.raw_name(), "webDavUrl");
         assert_eq!(DriveItemField::web_url.raw_name(), "webUrl");
+
+        assert_eq!(
+            DriveItemField::download_url.raw_name(),
+            "@microsoft.graph.downloadUrl",
+        );
     }
 }
