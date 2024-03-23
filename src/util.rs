@@ -2,7 +2,7 @@ use crate::{
     error::{Error, Result},
     resource::{DriveId, ErrorResponse, ItemId, OAuth2ErrorResponse},
 };
-use reqwest::{RequestBuilder, Response, StatusCode};
+use reqwest::{header, RequestBuilder, Response, StatusCode};
 use serde::{de, Deserialize};
 use url::PathSegmentsMut;
 
@@ -310,8 +310,9 @@ pub(crate) async fn handle_error_response(resp: Response) -> Result<Response> {
     if status.is_success() || status.is_redirection() {
         Ok(resp)
     } else {
+        let retry_after = parse_retry_after_sec(&resp);
         let resp: Resp = resp.json().await?;
-        Err(Error::from_error_response(status, resp.error))
+        Err(Error::from_error_response(status, resp.error, retry_after))
     }
 }
 
@@ -320,7 +321,21 @@ pub(crate) async fn handle_oauth2_error_response(resp: Response) -> Result<Respo
     if status.is_success() {
         Ok(resp)
     } else {
+        let retry_after = parse_retry_after_sec(&resp);
         let resp: OAuth2ErrorResponse = resp.json().await?;
-        Err(Error::from_oauth2_error_response(status, resp))
+        Err(Error::from_oauth2_error_response(status, resp, retry_after))
     }
+}
+
+/// The documentation said it is in seconds:
+/// <https://learn.microsoft.com/en-us/graph/throttling#best-practices-to-handle-throttling>.
+/// And HTTP requires it to be a non-negative integer:
+/// <https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Retry-After>.
+fn parse_retry_after_sec(resp: &Response) -> Option<u32> {
+    resp.headers()
+        .get(header::RETRY_AFTER)?
+        .to_str()
+        .ok()?
+        .parse()
+        .ok()
 }

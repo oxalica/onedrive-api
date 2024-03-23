@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Configurable `Tenant` for `Auth`, this allows login into applications that
   accept only personal accounts.
 - Expose `Auth::client`.
+- `Retry-After` response header on rate limited or service unavailability is
+  now parsed and returned via `Error::retry_after`.
 
 ### Changed
 

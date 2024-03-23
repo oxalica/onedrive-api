@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::resource::{ErrorResponse, OAuth2ErrorResponse};
 use reqwest::StatusCode;
 use thiserror::Error;
@@ -25,18 +27,28 @@ enum ErrorKind {
     ErrorResponse {
         status: StatusCode,
         response: ErrorResponse,
+        retry_after: Option<u32>,
     },
     #[error("OAuth2 error with {status}: ({}) {}", .response.error, .response.error_description)]
     OAuth2Error {
         status: StatusCode,
         response: OAuth2ErrorResponse,
+        retry_after: Option<u32>,
     },
 }
 
 impl Error {
-    pub(crate) fn from_error_response(status: StatusCode, response: ErrorResponse) -> Self {
+    pub(crate) fn from_error_response(
+        status: StatusCode,
+        response: ErrorResponse,
+        retry_after: Option<u32>,
+    ) -> Self {
         Self {
-            inner: Box::new(ErrorKind::ErrorResponse { status, response }),
+            inner: Box::new(ErrorKind::ErrorResponse {
+                status,
+                response,
+                retry_after,
+            }),
         }
     }
 
@@ -49,9 +61,14 @@ impl Error {
     pub(crate) fn from_oauth2_error_response(
         status: StatusCode,
         response: OAuth2ErrorResponse,
+        retry_after: Option<u32>,
     ) -> Self {
         Self {
-            inner: Box::new(ErrorKind::OAuth2Error { status, response }),
+            inner: Box::new(ErrorKind::OAuth2Error {
+                status,
+                response,
+                retry_after,
+            }),
         }
     }
 
@@ -82,6 +99,21 @@ impl Error {
             ErrorKind::ErrorResponse { status, .. } | ErrorKind::OAuth2Error { status, .. } => {
                 Some(*status)
             }
+        }
+    }
+
+    /// Get the retry delay hint on rate limited (HTTP 429) or server unavailability, if any.
+    ///
+    /// This is parsed from response header `Retry-After`.
+    /// See: <https://learn.microsoft.com/en-us/graph/throttling>
+    #[must_use]
+    pub fn retry_after(&self) -> Option<Duration> {
+        match &*self.inner {
+            ErrorKind::ErrorResponse { retry_after, .. }
+            | ErrorKind::OAuth2Error { retry_after, .. } => {
+                Some(Duration::from_secs((*retry_after)?.into()))
+            }
+            _ => None,
         }
     }
 }
