@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `impl Clone for OneDrive`.
 - Configurable `Tenant` for `Auth`, this allows login into applications that
   accept only personal accounts.
+- Expose `Auth::client`.
 
 ### Changed
 

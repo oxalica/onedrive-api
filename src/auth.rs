@@ -148,6 +148,12 @@ impl Auth {
         }
     }
 
+    /// Get the `client` used to create this instance.
+    #[must_use]
+    pub fn client(&self) -> &Client {
+        &self.client
+    }
+
     /// Get the `client_id` used to create this instance.
     #[must_use]
     pub fn client_id(&self) -> &str {
