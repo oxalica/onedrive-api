@@ -883,7 +883,7 @@ impl OneDrive {
 /// [Microsoft docs](https://docs.microsoft.com/en-us/graph/long-running-actions-overview)
 ///
 /// [copy]: ./struct.OneDrive.html#method.copy
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CopyProgressMonitor {
     monitor_url: String,
 }
@@ -894,7 +894,7 @@ pub struct CopyProgressMonitor {
 /// [Microsoft Docs Beta](https://docs.microsoft.com/en-us/graph/api/resources/asyncjobstatus?view=graph-rest-beta)
 #[cfg(feature = "beta")]
 #[allow(missing_docs)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 #[non_exhaustive]
 #[serde(rename_all = "camelCase")]
 pub struct CopyProgress {

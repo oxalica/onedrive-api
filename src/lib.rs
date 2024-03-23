@@ -99,7 +99,7 @@ pub enum ConflictBehavior {
 }
 
 /// A half-open byte range `start..end` or `start..`.
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ExpectRange {
     /// The lower bound of the range (inclusive).
     pub start: u64,

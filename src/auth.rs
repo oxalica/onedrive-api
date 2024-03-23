@@ -12,7 +12,7 @@ use url::Url;
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/permissions-reference#files-permissions)
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Permission {
     write: bool,
     access_shared: bool,
@@ -110,7 +110,7 @@ impl Tenant {
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth/auth-concepts?view=graph-rest-1.0)
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Auth {
     client: Client,
     client_id: String,
@@ -296,7 +296,7 @@ impl Auth {
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#token-response)
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[non_exhaustive]
 pub struct TokenResponse {
     /// Indicates the token type value. The only type that Azure AD supports is Bearer.
