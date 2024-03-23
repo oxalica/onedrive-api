@@ -625,7 +625,10 @@ async fn test_auth_error() {
 
     {
         let err = auth
-            .login_with_code("M11111111-2222-3333-4444-555555555555", None)
+            .login_with_code(
+                "M11111111-2222-3333-4444-555555555555",
+                &ClientCredential::None,
+            )
             .await
             .unwrap_err();
         // Don't know why, but it just replies HTTP `400 Bad Request`.
@@ -635,7 +638,10 @@ async fn test_auth_error() {
     }
 
     {
-        let err = auth.login_with_refresh_token("42", None).await.unwrap_err();
+        let err = auth
+            .login_with_refresh_token("42", &ClientCredential::None)
+            .await
+            .unwrap_err();
         // Don't know why, but it just replies HTTP `400 Bad Request`.
         assert_eq!(err.status_code(), Some(StatusCode::BAD_REQUEST));
         let err_resp = err.oauth2_error_response().unwrap();

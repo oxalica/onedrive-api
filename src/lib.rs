@@ -68,7 +68,7 @@ pub mod resource;
 mod util;
 
 pub use self::{
-    auth::{Auth, Permission, Tenant, TokenResponse},
+    auth::{Auth, ClientCredential, Permission, Tenant, TokenResponse},
     error::{Error, Result},
     onedrive::{
         CopyProgressMonitor, ListChildrenFetcher, OneDrive, TrackChangeFetcher, UploadSession,

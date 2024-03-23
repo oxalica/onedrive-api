@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Update to reqwest 0.12.
 - `Error::source` now correctly returns its inner `reqwest::Error`.
 - `Auth::code_auth_url` now returns a `url::Url` instead of a `String`.
+- `Auth::login_with_{code,refresh_token}` now accepts `ClientCredential` which
+  supports no credential, client secret and certificate assertion.
 
 ### Removed
 

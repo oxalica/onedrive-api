@@ -4,7 +4,6 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize)]
 struct Env {
     client_id: String,
-    client_secret: Option<String>,
     redirect_uri: String,
     refresh_token: String,
 }
@@ -21,7 +20,7 @@ pub async fn get_logined_onedrive() -> OneDrive {
                 env.redirect_uri,
                 Tenant::Consumers,
             );
-            auth.login_with_refresh_token(&env.refresh_token, env.client_secret.as_deref())
+            auth.login_with_refresh_token(&env.refresh_token, &ClientCredential::None)
                 .await
                 .expect("Login failed")
                 .access_token

@@ -207,13 +207,14 @@ impl Auth {
         url
     }
 
-    async fn request_token(
+    async fn request_token<'a>(
         &self,
         require_refresh: bool,
-        params: &[(&str, &str)],
+        params: impl Iterator<Item = (&'a str, &'a str)>,
     ) -> Result<TokenResponse> {
         let url = self.endpoint_url("token");
-        let resp = self.client.post(url).form(params).send().await?;
+        let params = params.collect::<Vec<_>>();
+        let resp = self.client.post(url).form(&params).send().await?;
 
         // Handle special error response.
         let token_resp: TokenResponse = handle_oauth2_error_response(resp).await?.json().await?;
@@ -232,17 +233,18 @@ impl Auth {
     pub async fn login_with_code(
         &self,
         code: &str,
-        client_secret: Option<&str>,
+        client_credential: &ClientCredential,
     ) -> Result<TokenResponse> {
         self.request_token(
             self.permission.offline_access,
-            &[
+            [
                 ("client_id", &self.client_id as &str),
-                ("client_secret", client_secret.unwrap_or("")),
                 ("code", code),
                 ("grant_type", "authorization_code"),
                 ("redirect_uri", &self.redirect_uri),
-            ],
+            ]
+            .into_iter()
+            .chain(client_credential.params()),
         )
         .await
     }
@@ -265,7 +267,7 @@ impl Auth {
     pub async fn login_with_refresh_token(
         &self,
         refresh_token: &str,
-        client_secret: Option<&str>,
+        client_credential: &ClientCredential,
     ) -> Result<TokenResponse> {
         assert!(
             self.permission.offline_access,
@@ -274,15 +276,71 @@ impl Auth {
 
         self.request_token(
             true,
-            &[
+            [
                 ("client_id", &self.client_id as &str),
-                ("client_secret", client_secret.unwrap_or("")),
                 ("grant_type", "refresh_token"),
                 ("redirect_uri", &self.redirect_uri),
                 ("refresh_token", refresh_token),
-            ],
+            ]
+            .into_iter()
+            .chain(client_credential.params()),
         )
         .await
+    }
+}
+
+/// Credential of client for code redeemption.
+///
+/// See:
+/// <https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow#redeem-a-code-for-an-access-token>
+#[derive(Default, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ClientCredential {
+    /// Nothing.
+    ///
+    /// This is the usual case for non-confidential native apps.
+    #[default]
+    None,
+    /// The application secret that you created in the app registration portal for your app.
+    ///
+    /// Don't use the application secret in a native app or single page app because a
+    /// `client_secret` can't be reliably stored on devices or web pages.
+    ///
+    /// See:
+    /// <https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow#request-an-access-token-with-a-client_secret>
+    Secret(String),
+    /// An assertion, which is a JSON web token (JWT), that you need to create and sign with the
+    /// certificate you registered as credentials for your application.
+    ///
+    /// See:
+    /// <https://learn.microsoft.com/en-us/entra/identity-platform/v2-oauth2-auth-code-flow#request-an-access-token-with-a-certificate-credential>
+    Assertion(String),
+}
+
+impl fmt::Debug for ClientCredential {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::None => write!(f, "None"),
+            Self::Secret(_) => f.debug_struct("Secret").finish_non_exhaustive(),
+            Self::Assertion(_) => f.debug_struct("Assertion").finish_non_exhaustive(),
+        }
+    }
+}
+
+impl ClientCredential {
+    fn params(&self) -> impl Iterator<Item = (&str, &str)> {
+        let (a, b) = match self {
+            ClientCredential::None => (None, None),
+            ClientCredential::Secret(s) => (Some(("client_secret", &**s)), None),
+            ClientCredential::Assertion(s) => (
+                Some((
+                    "client_assertion_type",
+                    "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+                )),
+                Some(("client_assertion", &**s)),
+            ),
+        };
+        a.into_iter().chain(b)
     }
 }
 
