@@ -5,7 +5,7 @@ use crate::{
     util::handle_oauth2_error_response,
 };
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 
 /// A list of the Microsoft Graph permissions that you want the user to consent to.
@@ -348,7 +348,7 @@ impl ClientCredential {
 ///
 /// # See also
 /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#token-response)
-#[derive(Clone, Deserialize)]
+#[derive(Clone, Deserialize, Serialize)]
 #[non_exhaustive]
 pub struct TokenResponse {
     /// Indicates the token type value. The only type that Azure AD supports is Bearer.
