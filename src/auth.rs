@@ -354,7 +354,8 @@ pub struct TokenResponse {
     /// Indicates the token type value. The only type that Azure AD supports is Bearer.
     pub token_type: String,
     /// A list of the Microsoft Graph permissions that the access_token is valid for.
-    #[serde(deserialize_with = "space_separated_strings")]
+    #[serde(deserialize_with = "deserialize_space_separated_strings")]
+    #[serde(serialize_with = "serialize_space_separated_strings")]
     pub scope: Vec<String>,
     /// How long the access token is valid (in seconds).
     #[serde(rename = "expires_in")]
@@ -385,7 +386,9 @@ impl fmt::Debug for TokenResponse {
     }
 }
 
-fn space_separated_strings<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+fn deserialize_space_separated_strings<'de, D>(
+    deserializer: D,
+) -> std::result::Result<Vec<String>, D::Error>
 where
     D: serde::de::Deserializer<'de>,
 {
@@ -407,6 +410,17 @@ where
     }
 
     deserializer.deserialize_str(Visitor)
+}
+
+fn serialize_space_separated_strings<S>(
+    value: &[String],
+    serializer: S,
+) -> std::result::Result<S::Ok, S::Error>
+where
+    S: serde::ser::Serializer,
+{
+    let space_separated = value.join(" ");
+    serializer.serialize_str(&space_separated)
 }
 
 #[cfg(test)]
