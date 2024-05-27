@@ -3,7 +3,7 @@
 //! # Field descriptors
 //!
 //! Resource object `struct`s have field descriper `enum`s representing
-//! all controlable fields of it, which may be used
+//! all controllable fields of it, which may be used
 //! in [`onedrive_api::option`][option] to [`select`][select] or [`expand`][expand] it using
 //! `with_option` version API of [`OneDrive`][one_drive].
 //!

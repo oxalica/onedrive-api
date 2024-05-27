@@ -79,7 +79,7 @@ pub enum Tenant {
     ///
     /// This is only allowed for application with type `AzureADandPersonalMicrosoftAccount`
     /// (Accounts in any organizational directory (Any Microsoft Entra directory - Multitenant) and
-    /// personal Microsoft accounts (e.g. Skype, Xbox)). If the coresponding application by
+    /// personal Microsoft accounts (e.g. Skype, Xbox)). If the corresponding application by
     /// Client ID does not have this type, authentications will fail unconditionally.
     ///
     /// See:

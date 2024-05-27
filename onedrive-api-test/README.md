@@ -27,8 +27,8 @@ Here are the steps:
 3. Check and login the **test-only account** in browser, and it will redirect you
    to an blank page with url containing query string `code=...`.
 
-4. Copy **the whole** URL to the console in step 2 and press enter. It will retrive
-   an token for test and save it to `.env` in current directory.
+4. Copy **the whole** URL to the console in step 2 and press enter. It will
+   retrieve an token for test and save it to `.env` in current directory.
 
 5. `source .env && cargo test`
    It will run tests in OneDrive of your test-only account.

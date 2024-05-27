@@ -248,7 +248,7 @@ impl<Field: ResourceField> CollectionOption<Field> {
         self
     }
 
-    /// Specify the sort order of the items responsed.
+    /// Specify the sort order of the items in response.
     ///
     /// # Note
     /// If called more than once, only the last call make sense.

@@ -94,7 +94,7 @@ pub enum ConflictBehavior {
     Replace,
     /// Rename the newly created item to another name.
     ///
-    /// The new name is not specified and usually can be retrived from the response.
+    /// The new name is not specified and usually can be retrieved from the response.
     Rename,
 }
 

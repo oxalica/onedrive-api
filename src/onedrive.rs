@@ -573,7 +573,7 @@ impl OneDrive {
     /// The conflict behavior is not mentioned in Microsoft Docs, and cannot be specified.
     ///
     /// But it seems to behave as [`Rename`][conflict_rename] if the destination folder is just the current
-    /// parent folder, and [`Fail`][conflict_fail] overwise.
+    /// parent folder, and [`Fail`][conflict_fail] otherwise.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-copy?view=graph-rest-1.0)
@@ -1071,7 +1071,7 @@ impl ListChildrenFetcher {
     /// Used for resuming the fetching progress.
     ///
     /// # Error
-    /// Will success only if there are more pages and the first page is already readed.
+    /// Will success only if there are more pages and the first page is already read.
     ///
     /// # Note
     /// The first page data from [`OneDrive::list_children_with_option`][list_children_with_opt]
@@ -1140,7 +1140,7 @@ impl TrackChangeFetcher {
     /// Used for resuming the fetching progress.
     ///
     /// # Error
-    /// Will success only if there are more pages and the first page is already readed.
+    /// Will success only if there are more pages and the first page is already read.
     ///
     /// # Note
     /// The first page data from
@@ -1278,7 +1278,7 @@ impl UploadSession {
     ///
     /// Temporary files and their accompanying upload session are automatically
     /// cleaned up after the `expirationDateTime` has passed. Temporary files may
-    /// not be deleted immedately after the expiration time has elapsed.
+    /// not be deleted immediately after the expiration time has elapsed.
     ///
     /// # See also
     /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/api/driveitem-createuploadsession?view=graph-rest-1.0#cancel-the-upload-session)

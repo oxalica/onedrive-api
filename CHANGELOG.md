@@ -82,7 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   - `OneDrive::get_upload_session` is moved to `UploadSession::get_meta`.
 
 ### Features
-- Add method `OneDrive::client` to get the `Client` used to constuct the instance.
+- Add method `OneDrive::client` to get the `Client` used to construct the instance.
 - Expose constants `OneDrive::UPLOAD_SMALL_MAX_SIZE` and `UploadSession::MAX_PART_SIZE`.
 
 ### Fixes
