@@ -353,7 +353,7 @@ impl ClientCredential {
 pub struct TokenResponse {
     /// Indicates the token type value. The only type that Azure AD supports is Bearer.
     pub token_type: String,
-    /// A list of the Microsoft Graph permissions that the access_token is valid for.
+    /// A list of the Microsoft Graph permissions that the `access_token` is valid for.
     #[serde(deserialize_with = "space_separated_strings")]
     pub scope: Vec<String>,
     /// How long the access token is valid (in seconds).
