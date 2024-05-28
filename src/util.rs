@@ -268,27 +268,34 @@ impl RequestBuilderExt for RequestBuilder {
     }
 }
 
+type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'static>>;
+
+// TODO: Avoid boxing?
 pub(crate) trait ResponseExt: Sized {
-    async fn parse<T: de::DeserializeOwned>(self) -> Result<T>;
-    async fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>>;
-    async fn parse_no_content(self) -> Result<()>;
+    fn parse<T: de::DeserializeOwned>(self) -> BoxFuture<Result<T>>;
+    fn parse_optional<T: de::DeserializeOwned>(self) -> BoxFuture<Result<Option<T>>>;
+    fn parse_no_content(self) -> BoxFuture<Result<()>>;
 }
 
 impl ResponseExt for Response {
-    async fn parse<T: de::DeserializeOwned>(self) -> Result<T> {
-        Ok(handle_error_response(self).await?.json().await?)
+    fn parse<T: de::DeserializeOwned>(self) -> BoxFuture<Result<T>> {
+        Box::pin(async move { Ok(handle_error_response(self).await?.json().await?) })
     }
 
-    async fn parse_optional<T: de::DeserializeOwned>(self) -> Result<Option<T>> {
-        match self.status() {
-            StatusCode::NOT_MODIFIED | StatusCode::ACCEPTED => Ok(None),
-            _ => Ok(Some(handle_error_response(self).await?.json().await?)),
-        }
+    fn parse_optional<T: de::DeserializeOwned>(self) -> BoxFuture<Result<Option<T>>> {
+        Box::pin(async move {
+            match self.status() {
+                StatusCode::NOT_MODIFIED | StatusCode::ACCEPTED => Ok(None),
+                _ => Ok(Some(handle_error_response(self).await?.json().await?)),
+            }
+        })
     }
 
-    async fn parse_no_content(self) -> Result<()> {
-        handle_error_response(self).await?;
-        Ok(())
+    fn parse_no_content(self) -> BoxFuture<Result<()>> {
+        Box::pin(async move {
+            handle_error_response(self).await?;
+            Ok(())
+        })
     }
 }
 

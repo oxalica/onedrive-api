@@ -20,6 +20,17 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - name: cargo fmt
         run: cargo fmt --all -- --check
+  
+  wasm:
+    name: wasm32 build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: wasm32 build
+        run: cargo build --target=wasm32-unknown-unknown
 
   clippy:
     name: Clippy
