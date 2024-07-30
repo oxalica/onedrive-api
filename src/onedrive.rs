@@ -289,7 +289,7 @@ impl OneDrive {
     ///
     /// # Errors
     /// * Will result in `Err` with HTTP `409 CONFLICT` if [`conflict_behavior`][conflict_behavior]
-    /// is set to [`Fail`][conflict_fail] and the target already exists.
+    ///   is set to [`Fail`][conflict_fail] and the target already exists.
     /// * Will result in `Err` with HTTP `400 BAD REQUEST` if facets are not properly set.
     ///
     /// # See also

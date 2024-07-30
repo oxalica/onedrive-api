@@ -160,8 +160,8 @@ mod tests {
 
     #[test]
     fn test_range_parsing() {
-        let max = format!("0-{}", u64::max_value() - 1);
-        let overflow = format!("0-{}", u64::max_value());
+        let max = format!("0-{}", u64::MAX - 1);
+        let overflow = format!("0-{}", u64::MAX);
         let cases = [
             (
                 "42-196",
@@ -188,7 +188,7 @@ mod tests {
                 &max,
                 Some(ExpectRange {
                     start: 0,
-                    end: Some(u64::max_value()),
+                    end: Some(u64::MAX),
                 }),
             ),
             (&overflow, None),
