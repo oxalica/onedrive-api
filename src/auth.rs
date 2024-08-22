@@ -207,6 +207,23 @@ impl Auth {
         url
     }
 
+    /// Get the URL for web browser for code flow with a return state.
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://docs.microsoft.com/en-us/graph/auth-v2-user?view=graph-rest-1.0#authorization-request)
+    #[must_use]
+    pub fn code_auth_url_with_state(&self,state: &str) -> Url {
+        let mut url = self.endpoint_url("authorize");
+        url.query_pairs_mut()
+            .append_pair("client_id", &self.client_id)
+            .append_pair("scope", &self.permission.to_scope_string())
+            .append_pair("redirect_uri", &self.redirect_uri)
+            .append_pair("response_type", "code")
+            .append_pair("state", state);
+
+        url
+    }
+
     async fn request_token<'a>(
         &self,
         require_refresh: bool,
