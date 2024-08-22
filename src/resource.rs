@@ -168,6 +168,27 @@ macro_rules! define_resource_object {
 }
 
 define_resource_object! {
+
+    /// User resource type
+    ///
+    /// The User resource type represents a Microsoft Entra user account. 
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://learn.microsoft.com/en-us/graph/api/resources/user?view=graph-rest-1.0)
+    pub struct User #UserItemField {
+        pub business_phones: Option<Vec<String>>,
+        pub display_name: Option<String>,
+        pub given_name: Option<String>,
+        pub job_title: Option<String>,
+        pub mail: Option<String>,
+        pub mobile_phone: Option<String>,
+        pub office_location: Option<String>,
+        pub preferred_language: Option<String>,
+        pub surname: Option<String>,
+        pub user_principal_name: Option<String>,
+        pub id: Option<String>,
+     }
+ 
     /// Drive resource type
     ///
     /// The drive resource is the top level object representing a user's OneDrive

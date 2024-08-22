@@ -2,12 +2,12 @@
 use crate::{
     error::{Error, Result},
     option::{CollectionOption, DriveItemPutOption, ObjectOption},
-    resource::{Drive, DriveField, DriveItem, DriveItemField, TimestampString},
+    resource::{Drive, DriveField, DriveItem, DriveItemField, TimestampString, User},
     util::{
         handle_error_response, ApiPathComponent, DriveLocation, FileName, ItemLocation,
         RequestBuilderExt as _, ResponseExt as _,
     },
-    {ConflictBehavior, ExpectRange},
+    ConflictBehavior, ExpectRange,
 };
 use bytes::Bytes;
 use reqwest::{header, Client};
@@ -101,6 +101,22 @@ impl OneDrive {
     #[must_use]
     pub fn access_token(&self) -> &str {
         &self.token
+    }
+
+    /// Get current `UserInfo`.
+    ///
+    /// 
+    ///
+    /// # See also
+    /// [Microsoft Docs](https://learn.microsoft.com/en-us/graph/api/user-get?view=graph-rest-1.0)
+    pub async fn get_user_info(&self) -> Result<User> {
+        self.client
+            .get(api_url!["me"])
+            .bearer_auth(&self.token)
+            .send()
+            .await?
+            .parse()
+            .await
     }
 
     /// Get current `Drive`.
