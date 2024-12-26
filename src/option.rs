@@ -389,7 +389,8 @@ impl RequestBuilderTransformer for DriveItemPutOption {
 }
 
 #[cfg(test)]
-#[expect(dead_code, reason = "only test typecheck")]
+// `#[expect()]` is incompatible with our MSRV.
+#[allow(dead_code)]
 mod tests {
     use super::*;
     use crate::resource;

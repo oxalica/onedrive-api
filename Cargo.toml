@@ -34,7 +34,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "gzi
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 strum = { version = "0.26", features = ["derive"] }
-thiserror = "1"
+thiserror = "2"
 url = "2"
 
 [dev-dependencies]
