@@ -764,7 +764,7 @@ impl OneDrive {
     /// [fetcher]: ./struct.TrackChangeFetcher.html
     /// [dollar_count]: https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
     /// [opt_get_count]: ./option/struct.CollectionOption.html#method.get_count
-    pub async fn track_root_changes_from_initial_with_option<'a>(
+    pub async fn track_root_changes_from_initial_with_option(
         &self,
         option: CollectionOption<DriveItemField>,
     ) -> Result<TrackChangeFetcher> {
@@ -790,7 +790,7 @@ impl OneDrive {
     /// [`track_root_changes_from_initial_with_option`][with_opt]
     ///
     /// [with_opt]: #method.track_root_changes_from_initial_with_option
-    pub async fn track_root_changes_from_initial<'a>(&self) -> Result<TrackChangeFetcher> {
+    pub async fn track_root_changes_from_initial(&self) -> Result<TrackChangeFetcher> {
         self.track_root_changes_from_initial_with_option(Default::default())
             .await
     }
@@ -834,7 +834,7 @@ impl OneDrive {
     /// [track_from_delta]: #method.track_root_changes_from_delta_url
     /// [dollar_count]: https://docs.microsoft.com/en-us/graph/query-parameters#count-parameter
     /// [opt_get_count]: ./option/struct.CollectionOption.html#method.get_count
-    pub async fn get_root_latest_delta_url_with_option<'a>(
+    pub async fn get_root_latest_delta_url_with_option(
         &self,
         option: CollectionOption<DriveItemField>,
     ) -> Result<String> {
@@ -865,7 +865,7 @@ impl OneDrive {
     /// [`get_root_latest_delta_url_with_option`][with_opt]
     ///
     /// [with_opt]: #method.get_root_latest_delta_url_with_option
-    pub async fn get_root_latest_delta_url<'a>(&self) -> Result<String> {
+    pub async fn get_root_latest_delta_url(&self) -> Result<String> {
         self.get_root_latest_delta_url_with_option(Default::default())
             .await
     }

@@ -113,7 +113,7 @@ impl<'de> de::Deserialize<'de> for ExpectRange {
     ) -> std::result::Result<Self, D::Error> {
         struct Visitor;
 
-        impl<'de> de::Visitor<'de> for Visitor {
+        impl de::Visitor<'_> for Visitor {
             type Value = ExpectRange;
 
             fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {

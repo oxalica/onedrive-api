@@ -389,23 +389,24 @@ impl RequestBuilderTransformer for DriveItemPutOption {
 }
 
 #[cfg(test)]
+#[expect(dead_code, reason = "only test typecheck")]
 mod tests {
     use super::*;
     use crate::resource;
 
-    fn _assert_send_sync<T: Send + Sync>() {}
+    fn assert_send_sync<T: Send + Sync>() {}
 
-    fn _assert_object_option_is_send_sync() {
-        _assert_send_sync::<ObjectOption<resource::DriveField>>();
-        _assert_send_sync::<ObjectOption<resource::DriveItemField>>();
+    fn assert_object_option_is_send_sync() {
+        assert_send_sync::<ObjectOption<resource::DriveField>>();
+        assert_send_sync::<ObjectOption<resource::DriveItemField>>();
     }
 
-    fn _assert_collection_option_is_send_sync() {
-        _assert_send_sync::<CollectionOption<resource::DriveField>>();
-        _assert_send_sync::<CollectionOption<resource::DriveItemField>>();
+    fn assert_collection_option_is_send_sync() {
+        assert_send_sync::<CollectionOption<resource::DriveField>>();
+        assert_send_sync::<CollectionOption<resource::DriveItemField>>();
     }
 
-    fn _assert_drive_item_put_option_is_send_sync() {
-        _assert_send_sync::<DriveItemPutOption>();
+    fn assert_drive_item_put_option_is_send_sync() {
+        assert_send_sync::<DriveItemPutOption>();
     }
 }
