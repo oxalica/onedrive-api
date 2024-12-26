@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## v0.10.1
+
+### Changed
+
+- Fixed typos.
+
+### Others
+
+- Update `thiserror` to 2 and various other dependencies.
+
 ## v0.10.0
 
 ### Added

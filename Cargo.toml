@@ -1,6 +1,6 @@
 [package]
 name = "onedrive-api"
-version = "0.10.0"
+version = "0.10.1"
 repository = "https://github.com/oxalica/onedrive-api"
 categories = ["api-bindings"]
 keywords = ["onedrive", "http", "api"]
