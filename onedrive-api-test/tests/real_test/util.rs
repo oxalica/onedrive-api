@@ -33,13 +33,11 @@ pub fn gen_filename() -> &'static FileName {
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::OnceLock;
 
-    use rand::{rngs::StdRng, Rng, SeedableRng};
-
     // Randomly initialized counter.
     static COUNTER: OnceLock<AtomicU64> = OnceLock::new();
     let id = COUNTER
         // Avoid overflow to keep it monotonic.
-        .get_or_init(|| AtomicU64::new(u64::from(StdRng::from_entropy().gen::<u32>())))
+        .get_or_init(|| AtomicU64::new(rand::random::<u32>().into()))
         .fetch_add(1, Ordering::Relaxed);
     let s = Box::leak(format!("$onedrive_api_tests.{id}").into_boxed_str());
     FileName::new(s).unwrap()
