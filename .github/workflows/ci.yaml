@@ -40,7 +40,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
-        rust: [stable, beta, '1.64'] # NB. Sync with Cargo.toml.
+        rust: [stable, beta, '1.66.1'] # NB. Sync with Cargo.toml.
         include:
           - os: ubuntu-latest
             feature_flag: --features=beta
@@ -56,5 +56,5 @@ jobs:
       - name: Build
         run: cargo build ${{ matrix.feature_flag }}
       - name: Test
-        if: ${{ matrix.rust != '1.64' }}
+        if: ${{ matrix.rust != '1.66.1' }}
         run: cargo test ${{ matrix.feature_flag }}
