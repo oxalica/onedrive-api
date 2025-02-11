@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
+## v0.10.2
+
+### Changed
+
+- MSRV is bumped to 1.66.1.
+
+### Others
+
+- Update to `strum` 0.27 and `rand` 0.9 (dev-dependency).
+
 ## v0.10.1
 
 ### Changed
