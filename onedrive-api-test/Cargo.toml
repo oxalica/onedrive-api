@@ -4,8 +4,8 @@ version = "0.0.0"
 publish = false
 edition.workspace = true
 license.workspace = true
-# `std::sync::OnceLock`.
-rust-version = "1.70"
+# Keep in sync.
+rust-version = "1.74"
 
 [lints]
 workspace = true

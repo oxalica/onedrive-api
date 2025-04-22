@@ -7,9 +7,8 @@ keywords = ["onedrive", "http", "api"]
 description = "OneDrive HTTP REST API"
 documentation = "https://docs.rs/onedrive-api"
 exclude = ["/.github"]
-# Cargo workspace inheritance.
 # NB. Sync with CI.
-rust-version = "1.66.1" # strum 0.27
+rust-version = "1.74" # Transitive dependency windows-*
 license.workspace = true
 edition.workspace = true
 
