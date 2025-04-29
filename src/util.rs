@@ -268,7 +268,7 @@ impl RequestBuilderExt for RequestBuilder {
     }
 }
 
-type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'static>>;
+type BoxFuture<T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + 'static>>;
 
 // TODO: Avoid boxing?
 pub(crate) trait ResponseExt: Sized {

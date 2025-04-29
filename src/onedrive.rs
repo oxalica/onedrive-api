@@ -62,11 +62,15 @@ impl OneDrive {
     /// # Panics
     /// It panics if the underlying `reqwest::Client` cannot be created.
     pub fn new(access_token: impl Into<String>, drive: impl Into<DriveLocation>) -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
         let client = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .gzip(true)
             .build()
             .unwrap();
+        #[cfg(target_arch = "wasm32")]
+        let client = Client::builder().build().unwrap();
+
         Self::new_with_client(client, access_token, drive.into())
     }
 
