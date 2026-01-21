@@ -5,7 +5,7 @@ publish = false
 edition.workspace = true
 license.workspace = true
 # Keep in sync.
-rust-version = "1.74"
+rust-version = "1.83"
 
 [lints]
 workspace = true

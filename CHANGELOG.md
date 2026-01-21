@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## Unreleased
 
-## v0.10.3
+## v0.11.0
 
-### Internal
+### Changed
 
 - Update `reqwest` to 0.13.
+- MSRV is bumped to 1.83 due to requirement of transitive dependency
+  `compression-codecs`.
 
 ## v0.10.2
 
