@@ -1,1 +1,7 @@
-doc-valid-idents = ["OAuth2", "OData", "OneDrive", ".."]
+doc-valid-idents = [
+    "OAuth2",
+    "OData",
+    "OneDrive",
+    "SharePoint",
+    "..",
+]

@@ -470,7 +470,7 @@ async fn test_file_upload_session() {
     assert!(
         next_ranges.len() == 1
             && next_ranges[0].start == RANGE2.start as u64
-            && next_ranges[0].end.map_or(true, |x| x == RANGE2.end as u64),
+            && next_ranges[0].end.is_none_or(|x| x == RANGE2.end as u64),
         "Invalid `next_expected_ranges`: {next_ranges:?}"
     );
 
@@ -510,9 +510,8 @@ async fn test_file_upload_session() {
 }
 
 // 8 requests
-// This test fetch all changes from root folder, which may contains lots of files and take lots of time.
 #[tokio::test]
-#[ignore]
+#[ignore = "requires fetching full directory tree, which can be slow"]
 async fn test_track_changes() {
     use std::collections::HashSet;
 

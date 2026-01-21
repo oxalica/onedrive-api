@@ -199,7 +199,7 @@ impl FileName {
 
         let name = name.as_ref();
         if !name.is_empty() && !name.contains(|c| INVALID_CHARS.contains(c)) {
-            Some(unsafe { &*(name as *const str as *const Self) })
+            Some(unsafe { &*(std::ptr::from_ref::<str>(name) as *const Self) })
         } else {
             None
         }

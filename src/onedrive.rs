@@ -1013,9 +1013,8 @@ impl DriveItemFetcher {
         if let Some(items) = self.last_response.value.take() {
             return Ok(Some(items));
         }
-        let url = match self.last_response.next_url.as_ref() {
-            None => return Ok(None),
-            Some(url) => url,
+        let Some(url) = self.last_response.next_url.as_ref() else {
+            return Ok(None);
         };
         self.last_response = onedrive
             .client

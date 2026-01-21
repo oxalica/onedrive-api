@@ -194,7 +194,7 @@ define_resource_object! {
         pub web_url: Option<Url>,
     }
 
-    /// DriveItem resource type
+    /// `DriveItem` resource type
     ///
     /// The `DriveItem` resource represents a file, folder, or other item stored in a drive.
     /// All file system objects in OneDrive and SharePoint are returned as `DriveItem` resources.
